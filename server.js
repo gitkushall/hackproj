@@ -1,4 +1,5 @@
 const express = require("express");
+const fs = require("fs");
 const path = require("path");
 
 const app = express();
@@ -7,6 +8,13 @@ const HOST = process.env.HOST || "127.0.0.1";
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
+
+const dataDirectory = path.join(__dirname, "data");
+const clientAccountsFilePath = path.join(dataDirectory, "client-accounts.json");
+const clientsFilePath = path.join(dataDirectory, "clients.json");
+const workersFilePath = path.join(dataDirectory, "workers.json");
+const notificationsFilePath = path.join(dataDirectory, "notifications.json");
+const transportRequestsFilePath = path.join(dataDirectory, "transport-requests.json");
 
 const systemData = {
   total_users: 284,
@@ -17,7 +25,7 @@ const systemData = {
   transport_needed: 37
 };
 
-const clients = [
+const defaultClients = [
   {
     id: "CL-1001",
     name: "Maria Lopez",
@@ -80,14 +88,14 @@ const clients = [
   }
 ];
 
-const workers = [
+const defaultWorkers = [
   { id: "WK-01", name: "Sarah Ahmed", active_cases: 1 },
   { id: "WK-02", name: "Daniel Kim", active_cases: 1 },
   { id: "WK-03", name: "Priya Shah", active_cases: 2 },
   { id: "WK-04", name: "Marcus Hill", active_cases: 1 }
 ];
 
-const notifications = [
+const defaultNotifications = [
   {
     id: "NT-01",
     message: "Priya Shah assigned to Robert Green",
@@ -102,7 +110,7 @@ const notifications = [
   }
 ];
 
-const transportRequests = [
+const defaultTransportRequests = [
   {
     id: "TR-01",
     client_id: "CL-1003",
@@ -111,6 +119,63 @@ const transportRequests = [
     timestamp: new Date(Date.now() - 1000 * 60 * 28).toISOString()
   }
 ];
+
+const defaultClientAccounts = [
+  { clientId: "CL-1001", name: "Maria Lopez", phone: "(973) 210-1101", username: "maria.lopez", password: "Maria@1234" },
+  { clientId: "CL-1002", name: "James Carter", phone: "(973) 210-1102", username: "james.carter", password: "James@1234" },
+  { clientId: "CL-1003", name: "Aisha Brown", phone: "(973) 210-1103", username: "aisha.brown", password: "Aisha@1234" },
+  { clientId: "CL-1004", name: "Luis Rivera", phone: "(973) 210-1104", username: "luis.rivera", password: "Luis@1234" }
+];
+
+function ensureDataDirectory() {
+  fs.mkdirSync(dataDirectory, { recursive: true });
+}
+
+function saveJsonFile(filePath, value) {
+  ensureDataDirectory();
+  fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
+}
+
+function loadJsonFile(filePath, fallbackValue) {
+  ensureDataDirectory();
+
+  if (!fs.existsSync(filePath)) {
+    saveJsonFile(filePath, fallbackValue);
+    return fallbackValue.slice();
+  }
+
+  try {
+    const raw = fs.readFileSync(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) {
+      throw new Error("Storage file must contain an array.");
+    }
+
+    return parsed;
+  } catch (error) {
+    console.error(`Failed to load storage file ${path.basename(filePath)}. Recreating defaults.`, error);
+    saveJsonFile(filePath, fallbackValue);
+    return fallbackValue.slice();
+  }
+}
+
+function saveClientAccounts(accounts) {
+  saveJsonFile(clientAccountsFilePath, accounts);
+}
+
+function saveCountyState() {
+  saveJsonFile(clientsFilePath, clients);
+  saveJsonFile(workersFilePath, workers);
+  saveJsonFile(notificationsFilePath, notifications);
+  saveJsonFile(transportRequestsFilePath, transportRequests);
+}
+
+const clients = loadJsonFile(clientsFilePath, defaultClients);
+const workers = loadJsonFile(workersFilePath, defaultWorkers);
+const notifications = loadJsonFile(notificationsFilePath, defaultNotifications);
+const transportRequests = loadJsonFile(transportRequestsFilePath, defaultTransportRequests);
+const clientAccounts = loadJsonFile(clientAccountsFilePath, defaultClientAccounts);
 
 const messages = [
   {
@@ -159,6 +224,22 @@ function getRecommendedWorker() {
   return workers.reduce((lowest, worker) => (
     worker.active_cases < lowest.active_cases ? worker : lowest
   ), workers[0]);
+}
+
+function normalizePhone(phone) {
+  return String(phone || "").replace(/\D/g, "");
+}
+
+function getNextClientIdNumber() {
+  const allIds = [
+    ...clientAccounts.map((account) => account.clientId),
+    ...clients.map((client) => client.id)
+  ];
+
+  return allIds.reduce((maxId, rawId) => {
+    const numericId = Number.parseInt(String(rawId).replace("CL-", ""), 10);
+    return Number.isNaN(numericId) ? maxId : Math.max(maxId, numericId);
+  }, 1000) + 1;
 }
 
 function createInsightResponse(questionRaw) {
@@ -210,6 +291,51 @@ app.get("/api/transport-requests", (_req, res) => {
   });
 });
 
+app.get("/api/client-accounts", (_req, res) => {
+  res.json({
+    accounts: clientAccounts
+  });
+});
+
+app.get("/api/worker-notifications", (req, res) => {
+  const workerId = String(req.query.worker_id || "").trim();
+
+  if (!workerId) {
+    res.status(400).json({ error: "worker_id is required." });
+    return;
+  }
+
+  const workerClients = clients.filter((client) => client.assigned_worker === workerId);
+  const workerClientIds = new Set(workerClients.map((client) => client.id));
+
+  const countyAlerts = notifications
+    .filter((item) => item.worker_id === workerId)
+    .map((item) => ({
+      id: item.id,
+      message: item.message,
+      source: "county",
+      timestamp: item.timestamp
+    }));
+
+  const clientAlerts = messages
+    .filter((message) => message.sender === "client" && workerClientIds.has(message.client_id) && message.worker_id === workerId)
+    .map((message) => {
+      const client = clients.find((item) => item.id === message.client_id);
+
+      return {
+        id: message.id,
+        message: `${client ? client.name : message.client_id}: ${message.text}`,
+        source: "client",
+        timestamp: message.timestamp
+      };
+    });
+
+  res.json({
+    notifications: [...countyAlerts, ...clientAlerts]
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+  });
+});
+
 app.post("/api/assign", (req, res) => {
   const { client_id: clientId, worker_id: workerId } = req.body || {};
   const client = clients.find((item) => item.id === clientId);
@@ -248,6 +374,7 @@ app.post("/api/assign", (req, res) => {
     worker_id: worker.id,
     timestamp: new Date().toISOString()
   });
+  saveCountyState();
 
   res.json({
     success: true,
@@ -302,6 +429,7 @@ app.post("/api/case-status", (req, res) => {
     res.status(400).json({ error: "Invalid action." });
     return;
   }
+  saveCountyState();
 
   res.json({
     success: true,
@@ -405,6 +533,7 @@ app.post("/api/transport-request", (req, res) => {
     worker_id: worker.id,
     timestamp: request.timestamp
   });
+  saveCountyState();
 
   res.json({
     success: true,
@@ -416,6 +545,81 @@ app.post("/api/admin-chat", (req, res) => {
   const { question = "" } = req.body || {};
   res.json({
     response: createInsightResponse(question)
+  });
+});
+
+app.post("/api/client-accounts", (req, res) => {
+  const {
+    name = "",
+    phone = "",
+    username = "",
+    password = "",
+    request_case_worker: requestCaseWorker = false
+  } = req.body || {};
+
+  const trimmedName = String(name).trim();
+  const trimmedPhone = String(phone).trim();
+  const trimmedUsername = String(username).trim();
+  const trimmedPassword = String(password).trim();
+
+  if (!trimmedName || !trimmedPhone || !trimmedUsername || !trimmedPassword) {
+    res.status(400).json({ error: "Enter your name, phone number, username, and password." });
+    return;
+  }
+
+  const duplicateAccount = clientAccounts.some((account) => (
+    account.username.toLowerCase() === trimmedUsername.toLowerCase() ||
+    normalizePhone(account.phone) === normalizePhone(trimmedPhone)
+  ));
+
+  if (duplicateAccount) {
+    res.status(400).json({ error: "That username or phone number is already in use." });
+    return;
+  }
+
+  const account = {
+    clientId: `CL-${String(getNextClientIdNumber())}`,
+    name: trimmedName,
+    phone: trimmedPhone,
+    username: trimmedUsername,
+    password: trimmedPassword
+  };
+
+  clientAccounts.push(account);
+  saveClientAccounts(clientAccounts);
+
+  const notificationPrefix = requestCaseWorker
+    ? `Client ${account.name} created an account and requested a case worker`
+    : `New account created in Passaic County: client ${account.name}, username ${account.username}`;
+
+  notifications.unshift({
+    id: `NT-${Date.now()}`,
+    message: notificationPrefix,
+    worker_id: "system",
+    timestamp: new Date().toISOString()
+  });
+
+  if (requestCaseWorker) {
+    const existingCountyClient = clients.find((client) => client.id === account.clientId);
+
+    if (!existingCountyClient) {
+      clients.unshift({
+        id: account.clientId,
+        name: account.name,
+        city: "Passaic",
+        missing_documents: [],
+        transportation_needed: false,
+        status: "pending",
+        assigned_worker: null,
+        worker_status: null
+      });
+    }
+  }
+  saveCountyState();
+
+  res.json({
+    success: true,
+    account
   });
 });
 

@@ -1,0 +1,23 @@
+[
+  {
+    "clientId": "CL-1007",
+    "name": "Jordan",
+    "phone": "9891234567",
+    "username": "jordy",
+    "password": "Jordan@1234"
+  },
+  {
+    "clientId": "CL-1008",
+    "name": "jordannn",
+    "phone": "7891234675",
+    "username": "lee.j",
+    "password": "Jordann@1234"
+  },
+  {
+    "clientId": "CL-1009",
+    "name": "namej",
+    "phone": "1234567890",
+    "username": "name.j",
+    "password": "namej@1234"
+  }
+]

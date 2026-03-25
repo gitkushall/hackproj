@@ -12,13 +12,14 @@
 }
 
 .login-intro {
-  max-width: 34ch;
-  font-size: 1.06rem;
+  max-width: 40ch;
+  font-size: 1.08rem;
+  line-height: 1.7;
 }
 
 label {
   display: block;
-  margin: 16px 0 8px;
+  margin: 18px 0 8px;
   font-size: 0.96rem;
   font-weight: 800;
 }
@@ -27,10 +28,10 @@ input,
 select,
 textarea {
   width: 100%;
-  min-height: 54px;
+  min-height: 56px;
   border: 1px solid rgba(104, 120, 104, 0.22);
-  border-radius: 16px;
-  padding: 12px 14px;
+  border-radius: 18px;
+  padding: 14px 16px;
   font-size: 1rem;
   color: var(--text);
   background: rgba(255, 255, 255, 0.92);
@@ -51,7 +52,7 @@ textarea:focus {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .lang-btn,
@@ -66,7 +67,7 @@ textarea:focus {
   background: rgba(255, 255, 255, 0.82);
   font-size: 0.96rem;
   font-weight: 800;
-  padding: 10px 16px;
+  padding: 10px 18px;
   color: var(--text);
   cursor: pointer;
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease, color 0.2s ease;
@@ -88,13 +89,22 @@ textarea:focus {
   color: var(--accent-dark);
 }
 
+.choice-btn {
+  flex: 1 1 0;
+  justify-content: center;
+}
+
+.user-login-main {
+  min-width: 0;
+}
+
 .big-btn {
   width: 100%;
-  min-height: 58px;
+  min-height: 60px;
   border: none;
-  border-radius: 18px;
-  margin-top: 16px;
-  padding: 14px 18px;
+  border-radius: 20px;
+  margin-top: 18px;
+  padding: 15px 18px;
   background: linear-gradient(135deg, var(--accent) 0%, #4f8c5f 100%);
   color: #fff;
   font-size: 1rem;
@@ -156,6 +166,97 @@ textarea:focus {
   margin-top: 14px;
 }
 
+.create-account-panel {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid rgba(47, 108, 79, 0.16);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(240, 248, 241, 0.9), rgba(255, 251, 246, 0.98));
+}
+
+.create-account-copy {
+  margin-bottom: 2px;
+}
+
+.create-account-submit-btn {
+  margin-top: 18px;
+}
+
+.create-account-check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(47, 108, 79, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.74);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.create-account-check-row input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.create-account-screen-shell {
+  display: grid;
+  gap: 20px;
+}
+
+.create-account-page-panel {
+  margin-top: 0;
+}
+
+.login-demo-card {
+  padding: 18px;
+  border: 1px solid rgba(47, 108, 79, 0.16);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(240, 248, 241, 0.9), rgba(255, 251, 246, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.login-demo-eyebrow {
+  margin-bottom: 8px;
+}
+
+.login-demo-title {
+  margin: 0 0 14px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.login-demo-list {
+  display: grid;
+  gap: 12px;
+}
+
+.login-demo-section {
+  display: grid;
+  gap: 8px;
+}
+
+.login-demo-label {
+  color: var(--accent-dark);
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.login-demo-item {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(103, 125, 105, 0.14);
+  color: var(--text);
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
 .admin-note {
   margin-top: 14px;
   padding: 12px 14px;
@@ -168,17 +269,17 @@ textarea:focus {
 }
 
 .login-language-row {
-  margin-top: 20px;
-  padding-top: 18px;
+  margin-top: 24px;
+  padding-top: 20px;
   border-top: 1px solid rgba(103, 125, 105, 0.16);
   justify-content: center;
 }
 
 .demo-note {
   margin: 10px 0 0;
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: rgba(222, 234, 223, 0.55);
+  padding: 11px 13px;
+  border-radius: 16px;
+  background: rgba(222, 234, 223, 0.42);
   color: var(--accent-dark);
   font-size: 0.93rem;
   font-weight: 700;
@@ -214,6 +315,12 @@ textarea:focus {
   flex-direction: column;
   gap: 4px;
   padding: 18px;
+}
+
+#admin-dashboard-screen.caseworker-mode .admin-summary-card {
+  border-color: rgba(72, 111, 181, 0.22);
+  background: linear-gradient(180deg, rgba(246, 251, 255, 0.96), rgba(228, 238, 250, 0.98));
+  box-shadow: 0 18px 34px rgba(34, 57, 94, 0.12);
 }
 
 .case-card {
@@ -582,6 +689,24 @@ textarea:focus {
   padding: 16px 18px;
 }
 
+.notification-card-new {
+  border-color: rgba(245, 145, 41, 0.46);
+  box-shadow: 0 0 0 2px rgba(245, 145, 41, 0.15), 0 10px 24px rgba(60, 69, 64, 0.08);
+  animation: countyNotificationPulse 1.2s ease;
+}
+
+@keyframes countyNotificationPulse {
+  0% {
+    transform: translateY(6px);
+    opacity: 0.35;
+  }
+
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
 .county-empty-state {
   padding: 24px;
   border-radius: 20px;
@@ -601,6 +726,13 @@ textarea:focus {
   box-shadow: 0 16px 30px rgba(60, 69, 64, 0.08);
 }
 
+#admin-dashboard-screen.caseworker-mode .caseworker-panel {
+  border-color: rgba(70, 109, 176, 0.2);
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgba(251, 253, 255, 0.94), rgba(235, 242, 252, 0.98));
+  box-shadow: 0 18px 38px rgba(31, 53, 89, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
 .caseworker-panel::before {
   content: "";
   position: absolute;
@@ -611,9 +743,22 @@ textarea:focus {
     radial-gradient(circle at bottom left, rgba(38, 165, 92, 0.05), transparent 28%);
 }
 
+#admin-dashboard-screen.caseworker-mode .caseworker-panel::before {
+  background:
+    radial-gradient(circle at top right, rgba(76, 126, 255, 0.11), transparent 34%),
+    radial-gradient(circle at bottom left, rgba(45, 208, 194, 0.08), transparent 30%),
+    linear-gradient(90deg, rgba(68, 106, 173, 0.05) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(rgba(68, 106, 173, 0.045) 1px, transparent 1px) 0 0 / 28px 28px;
+}
+
 .worker-active-pill {
   background: rgba(38, 165, 92, 0.14);
   color: #16794a;
+}
+
+#admin-dashboard-screen.caseworker-mode .worker-active-pill {
+  background: rgba(58, 122, 255, 0.14);
+  color: #255fd4;
 }
 
 .housing-pill {
@@ -641,9 +786,20 @@ textarea:focus {
   padding: 18px;
 }
 
+#admin-dashboard-screen.caseworker-mode .worker-client-card {
+  border-color: rgba(72, 111, 181, 0.18);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(240, 246, 255, 0.92));
+  box-shadow: 0 14px 30px rgba(32, 53, 87, 0.08);
+}
+
 .worker-client-card.selected {
   border-color: rgba(52, 115, 255, 0.2);
   box-shadow: 0 14px 28px rgba(52, 115, 255, 0.1);
+}
+
+#admin-dashboard-screen.caseworker-mode .worker-client-card.selected {
+  border-color: rgba(73, 130, 255, 0.34);
+  box-shadow: 0 0 0 1px rgba(73, 130, 255, 0.18), 0 18px 32px rgba(39, 78, 150, 0.14);
 }
 
 .worker-client-head,
@@ -676,6 +832,13 @@ textarea:focus {
   border-color: rgba(52, 115, 255, 0.18);
 }
 
+#admin-dashboard-screen.caseworker-mode .worker-select-btn {
+  color: #ffffff;
+  background: linear-gradient(135deg, #3572ff 0%, #2457cf 100%);
+  border-color: transparent;
+  box-shadow: 0 10px 22px rgba(41, 84, 180, 0.22);
+}
+
 .worker-approve-btn {
   width: auto;
   min-width: 122px;
@@ -695,6 +858,10 @@ textarea:focus {
 }
 
 .client-detail-panel {
+  min-height: 520px;
+}
+
+#worker-notification-panel {
   min-height: 520px;
 }
 
@@ -811,6 +978,13 @@ textarea:focus {
   padding: 12px 14px;
   border-radius: 16px;
   background: rgba(247, 243, 235, 0.92);
+}
+
+.caseworker-workspace-placeholder-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
 }
 
 .worker-chat-message.worker {
@@ -1280,6 +1454,44 @@ textarea:focus {
 
 #help-chat-panel.hidden {
   display: none;
+}
+
+.county-ai-toggle {
+  top: calc(50% + 86px);
+  background: linear-gradient(135deg, #3157b7 0%, #233e86 100%);
+  box-shadow: 0 16px 30px rgba(35, 62, 134, 0.24);
+}
+
+.county-ai-toggle:hover {
+  box-shadow: 0 20px 34px rgba(35, 62, 134, 0.28);
+}
+
+.county-ai-panel {
+  right: 24px;
+  border-color: rgba(59, 91, 173, 0.18);
+  background: linear-gradient(180deg, rgba(250, 252, 255, 0.98), rgba(241, 245, 255, 0.98));
+}
+
+#county-ai-panel.hidden {
+  display: none;
+}
+
+.county-ai-head {
+  align-items: flex-start;
+}
+
+.county-ai-head p {
+  margin: 6px 0 0;
+}
+
+.county-ai-body {
+  display: grid;
+  gap: 14px;
+}
+
+.county-ai-input-row {
+  border-top: 1px solid rgba(59, 91, 173, 0.14);
+  background: rgba(255, 255, 255, 0.76);
 }
 
 .chat-head {

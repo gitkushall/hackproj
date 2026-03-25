@@ -43,38 +43,37 @@
           </div>
 
           <div class="login-panel">
-            <div id="user-login-panel">
-              <div class="choice-row" id="login-option-row">
-                <button class="choice-btn active" type="button" id="phone-option-btn">Phone Login</button>
-                <button class="choice-btn" type="button" id="worker-option-btn">Case Worker Login</button>
-              </div>
-
-              <form id="phone-login-form" novalidate>
-                <label for="phone-input" id="phone-label">Enter your phone number</label>
-                <input id="phone-input" type="tel" inputmode="tel" autocomplete="tel" placeholder="(000) 000-0000" />
-                <p class="demo-note" id="phone-demo-note">Demo phone:</p>
-
-                <button class="big-btn" type="button" id="send-code-btn">Send Code</button>
-
-                <div class="hidden" id="code-entry-block">
-                  <label for="code-input" id="code-label">Enter code</label>
-                  <input id="code-input" type="text" inputmode="numeric" maxlength="4" placeholder="1234" />
-                  <p class="demo-note" id="code-demo-note">Demo code:</p>
-                  <button class="big-btn" type="button" id="verify-code-btn">Verify Code</button>
+            <div id="user-login-panel" class="user-login-main">
+                <div class="choice-row" id="login-option-row">
+                  <button class="choice-btn active" type="button" id="phone-option-btn">Phone Login</button>
+                  <button class="choice-btn" type="button" id="worker-option-btn">Case Worker Login</button>
                 </div>
-              </form>
 
-              <form id="worker-login-form" class="hidden" novalidate>
-                <label for="worker-username-input" id="worker-username-label">Username</label>
-                <input id="worker-username-input" type="text" autocomplete="username" placeholder="user123" />
-                <p class="demo-note" id="worker-demo-note">Demo username:</p>
+                <form id="phone-login-form" novalidate>
+                  <label for="phone-input" id="phone-label">Enter your phone number</label>
+                  <input id="phone-input" type="tel" inputmode="tel" autocomplete="tel" placeholder="(000) 000-0000" />
 
-                <label for="worker-password-input" id="worker-password-label">Password</label>
-                <input id="worker-password-input" type="password" autocomplete="current-password" placeholder="1234" />
-                <p class="demo-note" id="worker-password-demo-note">Demo password:</p>
+                  <button class="big-btn" type="button" id="send-code-btn">Send Code</button>
 
-                <button class="big-btn" type="submit" id="worker-login-btn">Login</button>
-              </form>
+                  <div class="hidden" id="code-entry-block">
+                    <label for="code-input" id="code-label">Enter code</label>
+                    <input id="code-input" type="text" inputmode="numeric" maxlength="4" placeholder="1234" />
+                    <p class="demo-note" id="code-demo-note">Demo code:</p>
+                    <button class="big-btn" type="button" id="verify-code-btn">Verify Code</button>
+                  </div>
+                </form>
+
+                <form id="worker-login-form" class="hidden" novalidate>
+                  <label for="worker-username-input" id="worker-username-label">Username</label>
+                  <input id="worker-username-input" type="text" autocomplete="username" placeholder="user123" />
+
+                  <label for="worker-password-input" id="worker-password-label">Password</label>
+                  <input id="worker-password-input" type="password" autocomplete="current-password" placeholder="1234" />
+
+                  <button class="big-btn" type="submit" id="worker-login-btn">Login</button>
+                </form>
+
+                <button class="secondary-btn create-account-btn" type="button" id="create-account-toggle-btn">Create your account</button>
             </div>
 
             <div class="hidden" id="admin-login-panel">
@@ -106,6 +105,50 @@
               <button class="lang-btn" type="button" data-lang="es">Español</button>
             </div>
           </div>
+
+          <aside class="login-demo-card" id="login-demo-card">
+            <p class="eyebrow login-demo-eyebrow" id="login-demo-eyebrow">Demo access</p>
+            <h2 class="login-demo-title" id="login-demo-title">Phone demo</h2>
+            <div class="login-demo-list" id="login-demo-list"></div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="card hidden" id="create-account-screen">
+        <div class="screen-top-row">
+          <button class="back-link-btn screen-back-btn" type="button" id="create-account-back-btn">Go Back</button>
+        </div>
+
+        <div class="create-account-screen-shell">
+          <div>
+            <p class="eyebrow" id="create-account-screen-eyebrow">Create account</p>
+            <h1 id="create-account-screen-title">Set up your housing portal account</h1>
+            <p class="small-text" id="create-account-screen-subtitle">
+              Enter your name, phone number, username, and password to create your account.
+            </p>
+          </div>
+
+          <div class="create-account-panel create-account-page-panel">
+            <label for="create-account-name-input" id="create-account-name-label">Full name</label>
+            <input id="create-account-name-input" type="text" autocomplete="name" placeholder="Jordan Lee" />
+
+            <label for="create-account-phone-input" id="create-account-phone-label">Phone number</label>
+            <input id="create-account-phone-input" type="tel" inputmode="tel" autocomplete="tel" placeholder="(973) 555-0100" />
+
+            <label for="create-account-username-input" id="create-account-username-label">Create username</label>
+            <input id="create-account-username-input" type="text" autocomplete="username" placeholder="jordan.lee" />
+
+            <label for="create-account-password-input" id="create-account-password-label">Create password</label>
+            <input id="create-account-password-input" type="password" autocomplete="new-password" placeholder="Create password" />
+
+            <label class="create-account-check-row" for="create-account-request-worker-input">
+              <input id="create-account-request-worker-input" type="checkbox" />
+              <span id="create-account-request-worker-label">Request a case worker</span>
+            </label>
+
+            <button class="big-btn create-account-submit-btn" type="button" id="create-account-submit-btn">Create Account</button>
+            <p class="error-text" id="create-account-error" aria-live="polite"></p>
+          </div>
         </div>
       </section>
 
@@ -133,19 +176,8 @@
               <div class="caseworker-panel">
                 <div class="county-section-head">
                   <div>
-                    <strong>📥 Requests From Passaic County</strong>
-                    <p class="small-text">Review new county assignments first and accept or reject each request.</p>
-                  </div>
-                  <span class="county-count-pill" id="worker-pending-count">0 requests</span>
-                </div>
-                <div class="worker-client-list" id="worker-pending-list"></div>
-              </div>
-
-              <div class="caseworker-panel">
-                <div class="county-section-head">
-                  <div>
-                    <strong>👤 My Cases</strong>
-                    <p class="small-text">These are the clients you are already handling. Open one to see the full case page.</p>
+                    <strong>👤 My Current Cases</strong>
+                    <p class="small-text">These are the clients this case worker is actively handling right now.</p>
                   </div>
                   <span class="county-count-pill worker-active-pill" id="worker-case-count">0 cases</span>
                 </div>
@@ -154,30 +186,18 @@
             </div>
 
             <aside class="caseworker-right-column">
-              <div class="caseworker-panel client-detail-panel" id="worker-detail-panel">
+              <div class="caseworker-panel client-detail-panel" id="worker-notification-panel">
                 <div class="county-section-head">
                   <div>
-                    <strong>📋 Case Preview</strong>
-                    <p class="small-text">Accept a request or select a current case. Full client details open on the next page.</p>
+                    <strong>🔔 Notifications</strong>
+                    <p class="small-text">Updates from clients and Passaic County appear here for this worker.</p>
                   </div>
+                  <span class="county-count-pill" id="worker-notification-count">0 alerts</span>
                 </div>
-                <div id="worker-client-detail"></div>
-              </div>
-
-              <div class="caseworker-panel housing-panel">
-                <div class="county-section-head">
-                  <div>
-                    <strong>🏠 Housing Opportunities</strong>
-                    <p class="small-text">Current units and clients ready for housing placement.</p>
-                  </div>
-                  <span class="county-count-pill housing-pill" id="eligible-clients-count">0 eligible</span>
-                </div>
-                <div class="housing-opportunity-list" id="housing-opportunity-list"></div>
+                <div class="notification-list" id="worker-notification-list"></div>
               </div>
             </aside>
           </div>
-
-          <div class="caseworker-full-view hidden" id="caseworker-full-view"></div>
         </div>
 
         <div class="hidden" id="admin-county-view">
@@ -243,32 +263,6 @@
             </div>
 
             <aside class="county-right-column">
-              <div class="county-panel county-workers-panel">
-                <div class="county-section-head">
-                  <div>
-                    <strong>👥 Case Workers</strong>
-                    <p class="small-text">Track workload and see the recommended worker for the next assignment.</p>
-                  </div>
-                </div>
-                <div class="worker-load-list" id="worker-load-list"></div>
-              </div>
-
-              <div class="county-panel admin-ai-panel">
-                <strong>🤖 AI Insight Assistant</strong>
-                <div class="admin-ai-response" id="ai-response">
-                  Most delays are happening at the State ID step due to appointments and transportation issues.
-                </div>
-                <label class="admin-ai-label" for="ai-input">Ask about system</label>
-                <div class="admin-ai-form">
-                  <input id="ai-input" type="text" placeholder="Ask about system..." />
-                  <button class="secondary-btn admin-ai-btn" type="button" id="ai-ask-btn">Ask</button>
-                </div>
-                <p class="small-text admin-ai-note">
-                  This assistant currently uses simple logic. It can be upgraded to a real AI
-                  (like ChatGPT) to provide deeper insights if the system is approved.
-                </p>
-              </div>
-
               <div class="county-panel county-notifications-panel">
                 <div class="county-section-head">
                   <div>
@@ -277,6 +271,16 @@
                   </div>
                 </div>
                 <div class="notification-list" id="county-notification-list"></div>
+              </div>
+
+              <div class="county-panel county-workers-panel">
+                <div class="county-section-head">
+                  <div>
+                    <strong>👥 Case Workers</strong>
+                    <p class="small-text">Track workload and see the recommended worker for the next assignment.</p>
+                  </div>
+                </div>
+                <div class="worker-load-list" id="worker-load-list"></div>
               </div>
 
               <div class="county-panel county-transport-requests-panel">
@@ -291,6 +295,10 @@
             </aside>
           </div>
         </div>
+      </section>
+
+      <section class="card hidden" id="caseworker-client-screen">
+        <div id="caseworker-full-view"></div>
       </section>
 
       <section class="card hidden" id="dashboard-screen">
@@ -410,6 +418,7 @@
     </main>
 
     <button class="help-side-btn hidden" id="help-float-btn" type="button" hidden>Need Help?</button>
+    <button class="help-side-btn county-ai-toggle hidden" id="county-ai-float-btn" type="button" hidden>AI Chat Bot</button>
 
     <aside class="help-chat-panel hidden" id="help-chat-panel" aria-live="polite" hidden>
       <div class="chat-head">
@@ -420,6 +429,29 @@
       <div class="chat-input-row">
         <input id="chat-input" type="text" placeholder="Ask a basic question" />
         <button id="chat-send-btn" type="button">Send</button>
+      </div>
+    </aside>
+
+    <aside class="help-chat-panel county-ai-panel hidden" id="county-ai-panel" aria-live="polite" hidden>
+      <div class="chat-head county-ai-head">
+        <div>
+          <h2 id="county-ai-title">AI Chat Bot</h2>
+          <p class="small-text" id="county-ai-subtitle">Ask about county workload, delays, assignments, or trends.</p>
+        </div>
+        <button class="chat-close-btn" id="county-ai-close-btn" type="button">X</button>
+      </div>
+      <div class="chat-body county-ai-body">
+        <div class="admin-ai-response" id="ai-response">
+          Most delays are happening at the State ID step due to appointments and transportation issues.
+        </div>
+        <p class="small-text admin-ai-note">
+          This assistant currently uses simple logic. It can be upgraded to a real AI
+          (like ChatGPT) to provide deeper insights if the system is approved.
+        </p>
+      </div>
+      <div class="chat-input-row county-ai-input-row">
+        <input id="ai-input" type="text" placeholder="Ask about system..." />
+        <button id="ai-ask-btn" type="button">Ask</button>
       </div>
     </aside>
 

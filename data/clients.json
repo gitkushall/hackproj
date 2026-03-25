@@ -1,0 +1,98 @@
+[
+  {
+    "id": "CL-1009",
+    "name": "namej",
+    "city": "Passaic",
+    "missing_documents": [],
+    "transportation_needed": false,
+    "status": "active",
+    "assigned_worker": "WK-01",
+    "worker_status": "active"
+  },
+  {
+    "id": "CL-1008",
+    "name": "jordannn",
+    "city": "Passaic",
+    "missing_documents": [],
+    "transportation_needed": false,
+    "status": "active",
+    "assigned_worker": "WK-02",
+    "worker_status": "active"
+  },
+  {
+    "id": "CL-1001",
+    "name": "Maria Lopez",
+    "city": "Paterson",
+    "missing_documents": [
+      "birth_certificate",
+      "state_id"
+    ],
+    "transportation_needed": true,
+    "status": "active",
+    "assigned_worker": "WK-01",
+    "worker_status": "active"
+  },
+  {
+    "id": "CL-1002",
+    "name": "James Carter",
+    "city": "Passaic",
+    "missing_documents": [
+      "ssn"
+    ],
+    "transportation_needed": false,
+    "status": "active",
+    "assigned_worker": "WK-02",
+    "worker_status": "active"
+  },
+  {
+    "id": "CL-1003",
+    "name": "Aisha Brown",
+    "city": "Clifton",
+    "missing_documents": [
+      "state_id"
+    ],
+    "transportation_needed": true,
+    "status": "active",
+    "assigned_worker": "WK-03",
+    "worker_status": "active"
+  },
+  {
+    "id": "CL-1004",
+    "name": "Luis Rivera",
+    "city": "Wayne",
+    "missing_documents": [
+      "birth_certificate",
+      "ssn",
+      "state_id"
+    ],
+    "transportation_needed": true,
+    "status": "active",
+    "assigned_worker": "WK-04",
+    "worker_status": "active"
+  },
+  {
+    "id": "CL-1005",
+    "name": "Nina Patel",
+    "city": "Totowa",
+    "missing_documents": [
+      "birth_certificate"
+    ],
+    "transportation_needed": false,
+    "status": "pending",
+    "assigned_worker": null,
+    "worker_status": null
+  },
+  {
+    "id": "CL-1006",
+    "name": "Robert Green",
+    "city": "Paterson",
+    "missing_documents": [
+      "ssn",
+      "state_id"
+    ],
+    "transportation_needed": false,
+    "status": "active",
+    "assigned_worker": "WK-03",
+    "worker_status": "active"
+  }
+]
