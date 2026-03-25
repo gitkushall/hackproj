@@ -128,15 +128,15 @@
         </div>
 
         <div id="admin-case-view">
-          <div class="caseworker-system-grid">
+          <div class="caseworker-system-grid" id="caseworker-system-grid">
             <div class="caseworker-left-column">
               <div class="caseworker-panel">
                 <div class="county-section-head">
                   <div>
-                    <strong>📥 Pending Requests</strong>
-                    <p class="small-text">Review newly assigned cases waiting for your approval.</p>
+                    <strong>📥 Requests From Passaic County</strong>
+                    <p class="small-text">Review new county assignments first and accept or reject each request.</p>
                   </div>
-                  <span class="county-count-pill" id="worker-pending-count">0 pending</span>
+                  <span class="county-count-pill" id="worker-pending-count">0 requests</span>
                 </div>
                 <div class="worker-client-list" id="worker-pending-list"></div>
               </div>
@@ -144,12 +144,12 @@
               <div class="caseworker-panel">
                 <div class="county-section-head">
                   <div>
-                    <strong>🗂️ My Clients</strong>
-                    <p class="small-text">Active clients you are currently helping.</p>
+                    <strong>👤 My Cases</strong>
+                    <p class="small-text">These are the clients you are already handling. Open one to see the full case page.</p>
                   </div>
-                  <span class="county-count-pill worker-active-pill" id="worker-active-count">0 active</span>
+                  <span class="county-count-pill worker-active-pill" id="worker-case-count">0 cases</span>
                 </div>
-                <div class="worker-client-list" id="worker-active-list"></div>
+                <div class="worker-client-list" id="worker-case-list"></div>
               </div>
             </div>
 
@@ -157,8 +157,8 @@
               <div class="caseworker-panel client-detail-panel" id="worker-detail-panel">
                 <div class="county-section-head">
                   <div>
-                    <strong>📋 Client Details</strong>
-                    <p class="small-text">Select a client to review documents, transportation, notes, and housing options.</p>
+                    <strong>📋 Case Preview</strong>
+                    <p class="small-text">Accept a request or select a current case. Full client details open on the next page.</p>
                   </div>
                 </div>
                 <div id="worker-client-detail"></div>
@@ -176,6 +176,8 @@
               </div>
             </aside>
           </div>
+
+          <div class="caseworker-full-view hidden" id="caseworker-full-view"></div>
         </div>
 
         <div class="hidden" id="admin-county-view">
@@ -276,6 +278,16 @@
                 </div>
                 <div class="notification-list" id="county-notification-list"></div>
               </div>
+
+              <div class="county-panel county-transport-requests-panel">
+                <div class="county-section-head">
+                  <div>
+                    <strong>🚗 Transport Requests</strong>
+                    <p class="small-text">Uber or transportation requests sent by case workers.</p>
+                  </div>
+                </div>
+                <div class="notification-list" id="county-transport-request-list"></div>
+              </div>
             </aside>
           </div>
         </div>
@@ -321,6 +333,18 @@
         </div>
 
         <p class="small-text dashboard-note" id="dashboard-note">You can also continue to answer a few questions for a full plan.</p>
+        <div class="caseworker-panel client-portal-chat-panel">
+          <div class="worker-chat-head">
+            <strong>💬 Message Your Case Worker</strong>
+            <span class="worker-chat-status active" id="client-chat-status">🟢 Case Active</span>
+          </div>
+          <div class="worker-chat-history" id="client-chat-history"></div>
+          <div class="worker-chat-compose">
+            <input id="client-chat-input" type="text" placeholder="Type a message" />
+            <button class="secondary-btn worker-chat-send-btn" type="button" id="client-chat-send-btn">Send</button>
+          </div>
+          <p class="small-text worker-inline-message" id="client-chat-note"></p>
+        </div>
         <button class="big-btn" type="button" id="dashboard-continue-btn">Continue</button>
       </section>
 

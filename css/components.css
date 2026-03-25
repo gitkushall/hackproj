@@ -184,6 +184,14 @@ textarea:focus {
   font-weight: 700;
 }
 
+.demo-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  font-weight: 600;
+}
+
 .admin-google-mark {
   margin: 4px 0 14px;
   color: var(--accent-dark);
@@ -447,6 +455,11 @@ textarea:focus {
   color: #16794a;
 }
 
+.client-status-pill.completed {
+  background: rgba(103, 125, 105, 0.14);
+  color: #4f5b4b;
+}
+
 .client-tag-row {
   display: flex;
   flex-wrap: wrap;
@@ -685,6 +698,10 @@ textarea:focus {
   min-height: 520px;
 }
 
+.client-portal-chat-panel {
+  margin-top: 18px;
+}
+
 .worker-detail-header {
   padding-bottom: 14px;
   margin-bottom: 16px;
@@ -754,6 +771,109 @@ textarea:focus {
 .worker-inline-message {
   margin: 12px 0 0;
   font-weight: 700;
+}
+
+.worker-chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.worker-chat-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.worker-chat-status.active {
+  background: rgba(38, 165, 92, 0.12);
+  color: #16794a;
+}
+
+.worker-chat-status.locked {
+  background: rgba(103, 125, 105, 0.14);
+  color: #4f5b4b;
+}
+
+.worker-chat-history {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.worker-chat-message {
+  width: min(88%, 420px);
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(247, 243, 235, 0.92);
+}
+
+.worker-chat-message.worker {
+  justify-self: start;
+  background: rgba(234, 244, 255, 0.92);
+}
+
+.worker-chat-message.client {
+  justify-self: end;
+  background: rgba(255, 244, 230, 0.92);
+}
+
+.worker-chat-message p {
+  margin: 6px 0 0;
+}
+
+.worker-chat-sender {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.worker-chat-compose {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.worker-chat-send-btn,
+.worker-complete-btn,
+.worker-archive-btn,
+.worker-reopen-chat-btn {
+  width: auto;
+  min-width: 132px;
+  margin-top: 0;
+}
+
+.worker-chat-send-btn {
+  color: #1b4fd6;
+  background: rgba(234, 244, 255, 0.96);
+  border-color: rgba(52, 115, 255, 0.18);
+}
+
+.worker-complete-btn {
+  margin-top: 14px;
+  color: #16794a;
+  background: rgba(233, 250, 239, 0.96);
+  border-color: rgba(38, 165, 92, 0.18);
+}
+
+.worker-archive-btn {
+  margin-top: 14px;
+  color: #7149d0;
+  background: rgba(244, 236, 255, 0.96);
+  border-color: rgba(125, 82, 221, 0.18);
+}
+
+.worker-reopen-chat-btn {
+  margin-top: 14px;
+  color: #1b4fd6;
+  background: rgba(234, 244, 255, 0.96);
+  border-color: rgba(52, 115, 255, 0.18);
 }
 
 #worker-notes-input {
