@@ -19,5 +19,12 @@
     "phone": "1234567890",
     "username": "name.j",
     "password": "namej@1234"
+  },
+  {
+    "clientId": "CL-1010",
+    "name": "Adarsha",
+    "phone": "9891235678",
+    "username": "mishro.a",
+    "password": "Adarsha@1234"
   }
 ]

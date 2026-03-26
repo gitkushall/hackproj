@@ -28,6 +28,7 @@ input,
 select,
 textarea {
   width: 100%;
+  min-width: 0;
   min-height: 56px;
   border: 1px solid rgba(104, 120, 104, 0.22);
   border-radius: 18px;
@@ -98,11 +99,131 @@ textarea:focus {
   min-width: 0;
 }
 
+#user-login-panel,
+#admin-login-panel {
+  width: 100%;
+  min-width: 0;
+}
+
+#admin-role-row,
+#login-option-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex-wrap: nowrap;
+}
+
+#admin-role-row .choice-btn,
+#login-option-row .choice-btn {
+  width: 100%;
+  min-width: 0;
+}
+
+#admin-demo-note,
+#admin-password-demo-note {
+  min-height: 0;
+}
+
+.admin-login-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 16px;
+}
+
+.admin-demo-sidecard {
+  width: 100%;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(247, 250, 255, 0.96), rgba(236, 243, 252, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
+#admin-login-form {
+  width: 100%;
+  min-width: 0;
+}
+
+#admin-login-form input {
+  width: 100%;
+  min-width: 0;
+  height: 52px;
+  min-height: 52px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  font-size: 16px;
+  border-radius: 12px;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+#admin-login-form label {
+  margin-top: 14px;
+}
+
+.login-right,
+.form-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+#admin-login-panel .admin-demo-sidecard {
+  display: none;
+}
+
+.admin-demo-side-eyebrow {
+  margin-bottom: 10px;
+}
+
+.admin-demo-sidecard .demo-note {
+  margin-top: 0;
+  padding: 14px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(37, 99, 235, 0.1);
+  overflow: visible;
+  max-height: none;
+}
+
+.demo-note + .demo-note {
+  margin-top: 12px;
+}
+
+.demo-note-title {
+  margin-bottom: 10px;
+  color: #1e3a5f;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.demo-note-list {
+  display: grid;
+  gap: 8px;
+}
+
+.demo-note-item {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(239, 246, 255, 0.92);
+  color: #1f2937;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .big-btn {
   width: 100%;
-  min-height: 60px;
+  height: 52px;
+  min-height: 52px;
   border: none;
-  border-radius: 20px;
+  border-radius: 12px;
   margin-top: 18px;
   padding: 15px 18px;
   background: linear-gradient(135deg, var(--accent) 0%, #4f8c5f 100%);
@@ -148,6 +269,20 @@ textarea:focus {
 
 .admin-link-btn.hidden {
   display: none;
+}
+
+.login-copy-admin-btn {
+  width: auto;
+  min-width: 156px;
+  border-color: rgba(147, 197, 253, 0.18);
+  background: rgba(255, 255, 255, 0.14);
+  color: #f8fbff;
+  box-shadow: 0 10px 22px rgba(8, 15, 31, 0.18);
+  backdrop-filter: blur(8px);
+}
+
+.login-copy-admin-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .back-link-btn {
@@ -212,10 +347,10 @@ textarea:focus {
 
 .login-demo-card {
   padding: 18px;
-  border: 1px solid rgba(47, 108, 79, 0.16);
+  border: 1px solid rgba(111, 175, 231, 0.16);
   border-radius: 22px;
-  background: linear-gradient(180deg, rgba(240, 248, 241, 0.9), rgba(255, 251, 246, 0.98));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  background: linear-gradient(180deg, rgba(248, 252, 255, 0.94), rgba(235, 244, 252, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .login-demo-eyebrow {
@@ -255,6 +390,134 @@ textarea:focus {
   color: var(--text);
   font-size: 0.94rem;
   font-weight: 700;
+}
+
+#login-screen .eyebrow {
+  color: #60a5fa;
+}
+
+#login-screen h1 {
+  color: #f8fbff;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  font-size: clamp(2.4rem, 4vw, 3.8rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+#login-screen .login-intro {
+  color: rgba(226, 232, 240, 0.88);
+  max-width: 34ch;
+}
+
+#login-screen .login-panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 255, 0.98));
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-radius: 26px;
+  padding: 28px;
+  min-height: 100%;
+  box-shadow: 0 22px 44px rgba(15, 23, 42, 0.12);
+}
+
+#login-screen .login-demo-card {
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(250, 253, 255, 0.98), rgba(235, 244, 252, 0.98));
+  box-shadow: 0 18px 36px rgba(75, 113, 160, 0.08);
+}
+
+#login-screen .login-demo-title,
+#login-screen .login-demo-label {
+  color: #1e3a5f;
+}
+
+#login-screen .login-demo-item {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(37, 99, 235, 0.1);
+  color: #1f2937;
+}
+
+#login-screen .user-login-main,
+#login-screen #admin-login-panel {
+  min-height: 420px;
+}
+
+#login-screen input,
+#login-screen select {
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+#login-screen input:focus,
+#login-screen select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+#login-screen .choice-btn,
+#login-screen .lang-btn,
+#login-screen .secondary-btn,
+#login-screen .back-link-btn,
+#login-screen .admin-link-btn {
+  border-color: rgba(37, 99, 235, 0.14);
+  background: rgba(255, 255, 255, 0.98);
+  color: #1f3d66;
+}
+
+#login-screen .choice-btn.active,
+#login-screen .lang-btn.active {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: linear-gradient(180deg, #eff6ff, #dbeafe);
+  color: #1d4ed8;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+#login-screen .big-btn {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 16px 32px rgba(37, 99, 235, 0.24);
+}
+
+#login-screen .big-btn:hover {
+  box-shadow: 0 18px 34px rgba(37, 99, 235, 0.28);
+}
+
+#login-screen .create-account-btn,
+#login-screen #admin-login-back-btn {
+  background: #ffffff;
+  color: #2563eb;
+}
+
+#login-screen label,
+#login-screen .admin-google-mark,
+#login-screen .demo-note {
+  color: #334155;
+}
+
+#login-screen .admin-google-mark {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+#login-screen .secondary-btn,
+#login-screen .back-link-btn,
+#login-screen .admin-link-btn {
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
+#login-screen .login-copy,
+#login-screen .login-panel,
+#login-screen .login-demo-card {
+  backdrop-filter: none;
+}
+
+#login-screen .login-copy::after {
+  color: rgba(147, 197, 253, 0.06);
+}
+
+#login-screen .error-text {
+  color: #b91c1c;
 }
 
 .admin-note {
@@ -441,6 +704,85 @@ textarea:focus {
   color: #1b4fd6;
 }
 
+#admin-dashboard-screen.county-mode .county-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 28px 30px;
+  border-radius: 24px;
+  border: 1px solid rgba(94, 114, 145, 0.18);
+  border-top: 5px solid #2d5c9a;
+  background: linear-gradient(180deg, rgba(251, 253, 255, 0.98), rgba(241, 246, 252, 0.98));
+  box-shadow: 0 18px 40px rgba(47, 64, 89, 0.12);
+}
+
+#admin-dashboard-screen.county-mode .county-title {
+  max-width: 14ch;
+  font-family: "Georgia", "Times New Roman", serif;
+  letter-spacing: -0.04em;
+}
+
+#admin-dashboard-screen.county-mode .county-subtitle {
+  color: #516172;
+}
+
+#admin-dashboard-screen.county-mode .county-refresh-btn {
+  width: auto;
+  margin-top: 0;
+  border-radius: 14px;
+  border-color: rgba(70, 93, 129, 0.2);
+  background: rgba(255, 255, 255, 0.96);
+  color: #204d88;
+  box-shadow: 0 10px 22px rgba(47, 64, 89, 0.1);
+}
+
+.county-hero-copy,
+.county-hero-actions {
+  position: relative;
+  z-index: 1;
+}
+
+.county-hero-copy {
+  min-width: 0;
+}
+
+.county-hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.county-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(92, 114, 144, 0.18);
+  background: linear-gradient(180deg, rgba(253, 255, 255, 0.98), rgba(239, 246, 255, 0.98));
+  color: #24518c;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.county-hero-actions {
+  display: grid;
+  justify-items: end;
+  gap: 14px;
+}
+.panel-kicker,
+.metric-kicker {
+  display: inline-block;
+  margin-bottom: 8px;
+  color: #2c62a3;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 .county-panel {
   position: relative;
   overflow: hidden;
@@ -459,6 +801,80 @@ textarea:focus {
   background:
     radial-gradient(circle at top right, rgba(52, 115, 255, 0.06), transparent 34%),
     radial-gradient(circle at bottom left, rgba(125, 82, 221, 0.05), transparent 30%);
+}
+
+#admin-dashboard-screen.county-mode .metric-card,
+#admin-dashboard-screen.county-mode .county-panel,
+#admin-dashboard-screen.county-mode .client-request-card,
+#admin-dashboard-screen.county-mode .worker-load-card,
+#admin-dashboard-screen.county-mode .notification-card {
+  transition: transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease;
+  transform-origin: center;
+}
+
+#admin-dashboard-screen.county-mode .metric-card:hover,
+#admin-dashboard-screen.county-mode .county-panel:hover,
+#admin-dashboard-screen.county-mode .client-request-card:hover,
+#admin-dashboard-screen.county-mode .worker-load-card:hover,
+#admin-dashboard-screen.county-mode .notification-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 34px rgba(47, 64, 89, 0.12);
+}
+
+#admin-dashboard-screen.county-mode .metric-card {
+  border-radius: 18px;
+  border-color: rgba(94, 114, 145, 0.16);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 14px 28px rgba(47, 64, 89, 0.09);
+}
+
+#admin-dashboard-screen.county-mode .metric-card strong {
+  font-size: clamp(2rem, 3vw, 2.6rem);
+  letter-spacing: -0.04em;
+  color: #203449;
+}
+
+#admin-dashboard-screen.county-mode .metric-kicker {
+  margin-bottom: 4px;
+}
+
+#admin-dashboard-screen.county-mode .metric-note {
+  margin: auto 0 0;
+  color: #5f6f81;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+#admin-dashboard-screen.county-mode .metric-blue {
+  border-top: 4px solid #2d5c9a;
+}
+
+#admin-dashboard-screen.county-mode .metric-green {
+  border-top: 4px solid #3c7d63;
+}
+
+#admin-dashboard-screen.county-mode .metric-orange {
+  border-top: 4px solid #b97a3b;
+}
+
+#admin-dashboard-screen.county-mode .metric-purple {
+  border-top: 4px solid #6a6798;
+}
+
+#admin-dashboard-screen.county-mode .metric-highlight {
+  border-color: rgba(103, 105, 152, 0.22);
+}
+
+#admin-dashboard-screen.county-mode .county-panel {
+  border-radius: 20px;
+  padding: 24px;
+  border-color: rgba(94, 114, 145, 0.16);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 16px 30px rgba(47, 64, 89, 0.1);
+}
+
+#admin-dashboard-screen.county-mode .county-panel::before {
+  background: linear-gradient(180deg, rgba(243, 248, 253, 0.7), transparent 34%);
 }
 
 .county-clients-panel {
@@ -481,6 +897,30 @@ textarea:focus {
   background: linear-gradient(180deg, rgba(235, 243, 255, 0.98), rgba(225, 236, 255, 0.98));
 }
 
+#admin-dashboard-screen.county-mode .county-clients-panel {
+  min-height: 620px;
+}
+
+#admin-dashboard-screen.county-mode .county-workers-panel {
+  border-top: 4px solid #59779f;
+}
+
+#admin-dashboard-screen.county-mode .county-notifications-panel {
+  border-top: 4px solid #7b8797;
+}
+
+#admin-dashboard-screen.county-mode .county-transport-requests-panel {
+  border-top: 4px solid #5e7b97;
+}
+
+#admin-dashboard-screen.county-mode .insight-summary-panel {
+  border-top: 4px solid #b97a3b;
+}
+
+#admin-dashboard-screen.county-mode .transport-summary-panel {
+  border-top: 4px solid #4c6f9f;
+}
+
 .county-section-head {
   display: flex;
   align-items: flex-start;
@@ -489,8 +929,33 @@ textarea:focus {
   margin-bottom: 16px;
 }
 
+.county-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .county-section-head p {
   margin: 6px 0 0;
+}
+
+.county-clear-btn {
+  width: auto;
+  min-height: 34px;
+  margin-top: 0;
+  padding: 6px 12px;
+  border-radius: 10px;
+}
+
+.panel-kicker {
+  margin: 0 0 6px;
+}
+
+#admin-dashboard-screen.county-mode .panel-kicker {
+  color: #2d66ad;
+  font-weight: 900;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .county-count-pill {
@@ -503,6 +968,27 @@ textarea:focus {
   color: #be6a05;
   font-size: 0.84rem;
   font-weight: 800;
+}
+
+#admin-dashboard-screen.county-mode .county-section-head strong {
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  color: #102a46;
+}
+
+#admin-dashboard-screen.county-mode .county-section-head .small-text,
+#admin-dashboard-screen.county-mode .county-section-head p.small-text {
+  color: #344454;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+#admin-dashboard-screen.county-mode .county-count-pill {
+  background: linear-gradient(180deg, rgba(231, 242, 255, 0.96), rgba(215, 232, 252, 0.98));
+  color: #1f5ba0;
+  border: 1px solid rgba(76, 119, 178, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
 }
 
 .client-request-list,
@@ -521,6 +1007,15 @@ textarea:focus {
   border: 1px solid rgba(103, 125, 105, 0.14);
   background: rgba(255, 255, 255, 0.88);
   box-shadow: 0 10px 24px rgba(60, 69, 64, 0.06);
+}
+
+#admin-dashboard-screen.county-mode .client-request-card,
+#admin-dashboard-screen.county-mode .worker-load-card,
+#admin-dashboard-screen.county-mode .notification-card {
+  border-radius: 16px;
+  border-color: rgba(94, 114, 145, 0.16);
+  background: rgba(252, 253, 255, 0.98);
+  box-shadow: 0 10px 22px rgba(47, 64, 89, 0.08);
 }
 
 .client-request-card {
@@ -635,8 +1130,27 @@ textarea:focus {
   border-color: rgba(52, 115, 255, 0.18);
 }
 
+#admin-dashboard-screen.county-mode .assign-worker-select {
+  border-radius: 14px;
+  border-color: rgba(93, 114, 144, 0.2);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+#admin-dashboard-screen.county-mode .assign-worker-btn {
+  color: #ffffff;
+  background: linear-gradient(180deg, #35639d 0%, #274e7f 100%);
+  border-color: transparent;
+  box-shadow: 0 8px 18px rgba(39, 78, 127, 0.16);
+}
+
 .worker-load-card {
   padding: 16px 18px;
+}
+
+.county-worker-trigger {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
 }
 
 .worker-load-card.recommended {
@@ -689,6 +1203,10 @@ textarea:focus {
   padding: 16px 18px;
 }
 
+#admin-dashboard-screen.county-mode .notification-card {
+  gap: 8px;
+}
+
 .notification-card-new {
   border-color: rgba(245, 145, 41, 0.46);
   box-shadow: 0 0 0 2px rgba(245, 145, 41, 0.15), 0 10px 24px rgba(60, 69, 64, 0.08);
@@ -707,6 +1225,193 @@ textarea:focus {
   }
 }
 
+/* Passaic County admin dashboard visual refresh */
+#admin-dashboard-screen.county-mode .county-hero,
+#admin-dashboard-screen.county-mode .metric-card,
+#admin-dashboard-screen.county-mode .county-panel,
+#admin-dashboard-screen.county-mode .client-request-card,
+#admin-dashboard-screen.county-mode .worker-load-card,
+#admin-dashboard-screen.county-mode .notification-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+#admin-dashboard-screen.county-mode .county-hero {
+  border-top: 5px solid #2563eb;
+}
+
+#admin-dashboard-screen.county-mode .county-title,
+#admin-dashboard-screen.county-mode .metric-card strong,
+#admin-dashboard-screen.county-mode .county-section-head strong,
+#admin-dashboard-screen.county-mode .client-request-head strong,
+#admin-dashboard-screen.county-mode .worker-load-card strong,
+#admin-dashboard-screen.county-mode .notification-card strong,
+#admin-dashboard-screen.county-mode .info-big-number {
+  color: #1f2937;
+}
+
+#admin-dashboard-screen.county-mode .county-subtitle,
+#admin-dashboard-screen.county-mode .metric-note,
+#admin-dashboard-screen.county-mode .county-section-head .small-text,
+#admin-dashboard-screen.county-mode .county-section-head p.small-text,
+#admin-dashboard-screen.county-mode .client-request-head p,
+#admin-dashboard-screen.county-mode .worker-load-card p,
+#admin-dashboard-screen.county-mode .notification-card .small-text,
+#admin-dashboard-screen.county-mode .small-text {
+  color: #6b7280;
+}
+
+#admin-dashboard-screen.county-mode .county-panel,
+#admin-dashboard-screen.county-mode .county-bottom-grid > .county-panel,
+#admin-dashboard-screen.county-mode .county-right-column > .county-panel {
+  margin-bottom: 20px;
+}
+
+#admin-dashboard-screen.county-mode .county-panel::before,
+#admin-dashboard-screen.county-mode .county-hero::before {
+  background: none;
+}
+
+#admin-dashboard-screen.county-mode .panel-kicker,
+#admin-dashboard-screen.county-mode .metric-kicker {
+  color: #2563eb;
+}
+
+#admin-dashboard-screen.county-mode .county-section-head strong {
+  display: inline-block;
+  padding-left: 10px;
+  border-left: 4px solid #2563eb;
+  font-weight: 700;
+}
+
+#admin-dashboard-screen.county-mode .county-section-head .small-text,
+#admin-dashboard-screen.county-mode .county-section-head p.small-text {
+  font-weight: 500;
+}
+
+#admin-dashboard-screen.county-mode .metric-blue {
+  border-top: 4px solid #2563eb;
+}
+
+#admin-dashboard-screen.county-mode .metric-green {
+  border-top: 4px solid #16a34a;
+}
+
+#admin-dashboard-screen.county-mode .metric-orange {
+  border-top: 4px solid #f59e0b;
+}
+
+#admin-dashboard-screen.county-mode .metric-purple,
+#admin-dashboard-screen.county-mode .metric-highlight,
+#admin-dashboard-screen.county-mode .county-workers-panel,
+#admin-dashboard-screen.county-mode .county-notifications-panel,
+#admin-dashboard-screen.county-mode .transport-summary-panel {
+  border-top: 4px solid #2563eb;
+}
+
+#admin-dashboard-screen.county-mode .county-transport-requests-panel {
+  border-top: 4px solid #dc2626;
+}
+
+#admin-dashboard-screen.county-mode .insight-summary-panel {
+  border-top: 4px solid #f59e0b;
+}
+
+#admin-dashboard-screen.county-mode .county-refresh-btn,
+#admin-dashboard-screen.county-mode .assign-worker-btn {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: transparent;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.22);
+}
+
+#admin-dashboard-screen.county-mode .county-refresh-btn:hover,
+#admin-dashboard-screen.county-mode .assign-worker-btn:hover {
+  background: #1d4ed8;
+}
+
+#admin-dashboard-screen.county-mode .assign-worker-select {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+#admin-dashboard-screen.county-mode .county-count-pill,
+#admin-dashboard-screen.county-mode .worker-recommended-flag {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  box-shadow: none;
+}
+
+#admin-dashboard-screen.county-mode .county-clear-btn {
+  background: #ffffff;
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  box-shadow: none;
+}
+
+#admin-dashboard-screen.county-mode .county-clear-btn:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+#admin-dashboard-screen.county-mode .client-request-card:hover,
+#admin-dashboard-screen.county-mode .worker-load-card:hover,
+#admin-dashboard-screen.county-mode .notification-card:hover,
+#admin-dashboard-screen.county-mode .metric-card:hover,
+#admin-dashboard-screen.county-mode .county-panel:hover {
+  transform: translateY(-2px);
+  transition: 0.2s;
+}
+
+#admin-dashboard-screen.county-mode .client-status-pill.pending,
+#admin-dashboard-screen.county-mode .worker-load-badge.medium {
+  background: #fff3cd;
+  color: #b45309;
+}
+
+#admin-dashboard-screen.county-mode .client-status-pill.assigned,
+#admin-dashboard-screen.county-mode .transport-flag.clear,
+#admin-dashboard-screen.county-mode .worker-load-badge.low {
+  background: #dcfce7;
+  color: #166534;
+}
+
+#admin-dashboard-screen.county-mode .transport-flag.needed,
+#admin-dashboard-screen.county-mode .worker-load-badge.high {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+#admin-dashboard-screen.county-mode .notification-card {
+  border-radius: 12px;
+  margin-bottom: 10px;
+}
+
+#admin-dashboard-screen.county-mode .notification-card-new {
+  background: #eef6ff;
+  border-color: rgba(37, 99, 235, 0.14);
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.1);
+}
+
+#admin-dashboard-screen.county-mode #county-notification-list {
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+#admin-dashboard-screen.county-mode #county-notification-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+#admin-dashboard-screen.county-mode #county-notification-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.22);
+}
+
 .county-empty-state {
   padding: 24px;
   border-radius: 20px;
@@ -714,6 +1419,145 @@ textarea:focus {
   background: rgba(255, 255, 255, 0.82);
   color: var(--muted);
   text-align: center;
+}
+
+.county-worker-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.county-worker-modal.hidden {
+  display: none;
+}
+
+.county-worker-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(28, 39, 54, 0.42);
+  backdrop-filter: blur(3px);
+}
+
+.county-worker-modal-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(840px, 100%);
+  max-height: min(88vh, 920px);
+  overflow: auto;
+  border-radius: 22px;
+  border: 1px solid rgba(94, 114, 145, 0.18);
+  border-top: 5px solid #2d5c9a;
+  background: linear-gradient(180deg, rgba(252, 253, 255, 0.99), rgba(242, 247, 252, 0.99));
+  box-shadow: 0 30px 72px rgba(28, 39, 54, 0.24);
+}
+
+.county-worker-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 24px 18px;
+  border-bottom: 1px solid rgba(94, 114, 145, 0.14);
+}
+
+.county-worker-modal-head h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.7rem, 3vw, 2.2rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+
+.county-worker-modal-body {
+  padding: 22px 24px 24px;
+}
+
+.county-worker-profile-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.county-worker-profile-head h3 {
+  margin: 0 0 6px;
+  font-size: 1.45rem;
+  line-height: 1.15;
+  color: #203449;
+}
+
+.county-worker-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.county-worker-profile-card {
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(94, 114, 145, 0.16);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 24px rgba(47, 64, 89, 0.08);
+}
+
+.county-worker-profile-card strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 1.35rem;
+  line-height: 1.1;
+  color: #203449;
+}
+
+.county-worker-profile-card p {
+  margin: 0;
+}
+
+.county-worker-profile-section {
+  margin-top: 24px;
+}
+
+.county-worker-client-list {
+  display: grid;
+  gap: 14px;
+}
+
+.county-worker-client-card {
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(94, 114, 145, 0.16);
+  background: rgba(252, 253, 255, 0.98);
+  box-shadow: 0 10px 22px rgba(47, 64, 89, 0.08);
+}
+
+.county-worker-client-top,
+.county-worker-progress-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.county-worker-progress-row {
+  margin-top: 12px;
+}
+
+.county-worker-progress-bar {
+  height: 10px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: rgba(86, 112, 148, 0.12);
+  overflow: hidden;
+}
+
+.county-worker-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(180deg, #4f739f 0%, #355a88 100%);
 }
 
 .caseworker-panel {
@@ -891,6 +1735,20 @@ textarea:focus {
   background: rgba(255, 255, 255, 0.82);
 }
 
+.workspace-launch-card {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.workspace-launch-card:hover,
+.workspace-launch-card:focus-visible {
+  transform: translateY(-4px);
+  border-color: rgba(73, 130, 255, 0.32);
+  box-shadow: 0 18px 30px rgba(39, 78, 150, 0.14);
+}
+
 .document-status-list {
   display: grid;
   gap: 10px;
@@ -971,6 +1829,8 @@ textarea:focus {
   display: grid;
   gap: 10px;
   margin-top: 16px;
+  max-height: 340px;
+  overflow-y: auto;
 }
 
 .worker-chat-message {
@@ -1001,9 +1861,21 @@ textarea:focus {
   margin: 6px 0 0;
 }
 
+.worker-chat-message-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .worker-chat-sender {
   font-size: 0.8rem;
   font-weight: 800;
+  color: var(--muted);
+}
+
+.worker-chat-time {
+  font-size: 0.76rem;
   color: var(--muted);
 }
 
@@ -1012,6 +1884,11 @@ textarea:focus {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   margin-top: 16px;
+}
+
+.worker-chat-compose-rich {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
 }
 
 .worker-chat-send-btn,
@@ -1048,6 +1925,282 @@ textarea:focus {
   color: #1b4fd6;
   background: rgba(234, 244, 255, 0.96);
   border-color: rgba(52, 115, 255, 0.18);
+}
+
+.chat-upload-input {
+  display: none;
+}
+
+.chat-upload-btn,
+.workspace-action-btn,
+.chat-image-remove-btn {
+  width: auto;
+  min-width: 126px;
+  margin-top: 0;
+}
+
+.chat-upload-btn.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.chat-image-preview-card {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(234, 244, 255, 0.72);
+  border: 1px solid rgba(73, 130, 255, 0.16);
+}
+
+.chat-image-preview-card img,
+.worker-chat-image {
+  width: 100%;
+  max-width: 220px;
+  border-radius: 14px;
+  display: block;
+}
+
+.worker-chat-image-link {
+  display: inline-block;
+  margin-top: 10px;
+}
+
+.worker-chat-download {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #2457cf;
+  text-decoration: none;
+}
+
+.workspace-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(17, 30, 53, 0.42);
+  backdrop-filter: blur(6px);
+}
+
+.workspace-modal {
+  width: min(980px, 100%);
+  max-height: min(88vh, 940px);
+  overflow: auto;
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(250, 252, 255, 0.98), rgba(235, 242, 252, 0.98));
+  box-shadow: 0 28px 60px rgba(18, 35, 64, 0.26);
+}
+
+.workspace-modal.chat {
+  width: min(1040px, 100%);
+}
+
+.workspace-panel-body {
+  padding: 26px;
+}
+
+.workspace-panel-head,
+.workspace-chat-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workspace-chat-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.workspace-close-btn {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  margin-top: 0;
+}
+
+.workspace-doc-grid,
+.workspace-activity-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.workspace-doc-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workspace-doc-card,
+.workspace-activity-card {
+  margin-top: 0;
+}
+
+.workspace-file-input {
+  margin-top: 14px;
+}
+
+.workspace-upload-btn {
+  margin-top: 12px;
+}
+
+.workspace-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.workspace-chat-panel .workspace-panel-head {
+  align-items: center;
+}
+
+.workspace-chat-history {
+  max-height: 52vh;
+}
+
+.document-page-shell {
+  display: grid;
+  gap: 20px;
+}
+
+.document-page-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.4fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.document-page-card-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.client-document-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.client-document-card-panel {
+  margin-bottom: 20px;
+}
+
+.document-page-card {
+  width: 100%;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(72, 111, 181, 0.18);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(240, 246, 255, 0.92));
+  text-align: left;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease, opacity 160ms ease;
+}
+
+.document-page-visual {
+  display: block;
+  margin-bottom: 14px;
+  transition: filter 160ms ease, opacity 160ms ease, transform 160ms ease;
+}
+
+.document-page-card.selected,
+.document-page-card:hover,
+.document-page-card:focus-visible {
+  opacity: 1;
+  transform: translateY(-3px);
+  box-shadow: 0 16px 28px rgba(39, 78, 150, 0.14);
+}
+
+.document-page-card:hover .document-page-visual,
+.document-page-card:focus-visible .document-page-visual,
+.document-page-card.selected .document-page-visual {
+  transform: scale(1.02);
+}
+
+.document-page-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.document-page-empty {
+  display: grid;
+  place-items: center;
+  min-height: 340px;
+  border-radius: 22px;
+  border: 1px dashed rgba(72, 111, 181, 0.22);
+  background: rgba(247, 251, 255, 0.7);
+  text-align: center;
+  padding: 24px;
+}
+
+.document-modal {
+  width: min(920px, 100%);
+}
+
+.document-upload-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.document-file-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.document-file-card {
+  border: 1px solid rgba(72, 111, 181, 0.16);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  overflow: hidden;
+  box-shadow: 0 12px 24px rgba(32, 53, 87, 0.08);
+}
+
+.document-file-image-link {
+  display: block;
+  background: rgba(225, 236, 255, 0.42);
+}
+
+.document-file-image {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+}
+
+.document-file-meta {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.document-file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.document-remove-btn {
+  width: auto;
+  min-width: 110px;
+  margin-top: 0;
+  color: #b42318;
+  background: rgba(254, 242, 242, 0.96);
+  border-color: rgba(220, 38, 38, 0.16);
 }
 
 #worker-notes-input {
@@ -1155,6 +2308,65 @@ textarea:focus {
 
 .stuck-chip {
   color: #ff4d4f;
+}
+
+.county-housing-availability-list {
+  display: grid;
+  gap: 14px;
+}
+
+.county-housing-city-card {
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(37, 99, 235, 0.08);
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.county-housing-city-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.county-housing-city-head strong {
+  color: #1f2937;
+  font-size: 1.05rem;
+}
+
+.county-housing-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.county-housing-stat {
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: #ffffff;
+}
+
+.county-housing-stat strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #1f2937;
+  font-size: 1.55rem;
+  line-height: 1.05;
+}
+
+.county-housing-stat p {
+  margin: 0;
+}
+
+.county-housing-stat.available {
+  border-top: 4px solid #16a34a;
+}
+
+.county-housing-stat.soon {
+  border-top: 4px solid #f59e0b;
 }
 
 .info-card {
@@ -1283,6 +2495,10 @@ textarea:focus {
   transform: translateY(-2px);
   border-color: rgba(47, 108, 79, 0.34);
   box-shadow: 0 18px 34px rgba(67, 78, 61, 0.12);
+}
+
+.doc-card-empty {
+  opacity: 0.74;
 }
 
 .doc-card strong {

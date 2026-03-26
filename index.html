@@ -28,13 +28,19 @@
     <main class="app-wrap">
       <div class="top-row">
         <div class="top-actions-row">
-          <button class="admin-link-btn" type="button" id="admin-portal-btn">Admin Portal</button>
+          <div class="language-row top-language-row" aria-label="Language switcher">
+            <button class="lang-btn active" type="button" data-lang="en">English</button>
+            <button class="lang-btn" type="button" data-lang="es">Español</button>
+          </div>
         </div>
       </div>
 
       <section class="card" id="login-screen">
         <div class="login-shell">
           <div class="login-copy">
+            <div class="login-copy-topbar">
+              <button class="admin-link-btn login-copy-admin-btn" type="button" id="admin-portal-btn">Admin Portal</button>
+            </div>
             <p class="eyebrow" id="login-eyebrow">Housing support access</p>
             <h1 id="login-title">Log in to your housing portal</h1>
             <p class="small-text login-intro" id="login-subtitle">
@@ -85,25 +91,26 @@
                 <button class="choice-btn" type="button" id="passaic-role-btn">Passaic County</button>
               </div>
 
-              <form id="admin-login-form" novalidate>
-                <label for="admin-email-input" id="admin-email-label">Gmail</label>
-                <input id="admin-email-input" type="email" autocomplete="email" placeholder="admin@gmail.com" />
-                <p class="demo-note" id="admin-demo-note">Admin demo:</p>
+              <div class="admin-login-grid login-right">
+                <form id="admin-login-form" class="form-section" novalidate>
+                  <label for="admin-email-input" id="admin-email-label">Gmail</label>
+                  <input id="admin-email-input" type="email" autocomplete="email" placeholder="admin@gmail.com" />
 
-                <label for="admin-password-input" id="admin-password-label">Password</label>
-                <input id="admin-password-input" type="password" autocomplete="current-password" placeholder="Enter password" />
-                <p class="demo-note" id="admin-password-demo-note">Demo password:</p>
+                  <label for="admin-password-input" id="admin-password-label">Password</label>
+                  <input id="admin-password-input" type="password" autocomplete="current-password" placeholder="Enter password" />
 
-                <button class="big-btn" type="submit" id="admin-login-btn">Login with Gmail</button>
-              </form>
+                  <button class="big-btn" type="submit" id="admin-login-btn">Login with Gmail</button>
+                </form>
+
+                <aside class="admin-demo-sidecard demo-box">
+                  <p class="eyebrow admin-demo-side-eyebrow" id="admin-demo-side-eyebrow">Demo access</p>
+                  <div class="demo-note" id="admin-demo-note">Admin demo:</div>
+                  <div class="demo-note" id="admin-password-demo-note">Demo password:</div>
+                </aside>
+              </div>
             </div>
 
             <p class="error-text" id="login-error" aria-live="polite"></p>
-
-            <div class="language-row login-language-row">
-              <button class="lang-btn active" type="button" data-lang="en">English</button>
-              <button class="lang-btn" type="button" data-lang="es">Español</button>
-            </div>
           </div>
 
           <aside class="login-demo-card" id="login-demo-card">
@@ -202,32 +209,47 @@
 
         <div class="hidden" id="admin-county-view">
           <div class="county-hero">
-            <div>
-              <p class="eyebrow county-eyebrow">Passaic County Housing Coordination</p>
-              <h2 class="county-title">Manage requests, assignments, and system performance</h2>
-              <p class="small-text county-subtitle">
+              <div class="county-hero-copy">
+              <p class="eyebrow county-eyebrow" id="county-hero-eyebrow">Passaic County Housing Coordination</p>
+              <h2 class="county-title" id="county-hero-title">Manage requests, assignments, and system performance</h2>
+              <p class="small-text county-subtitle" id="county-hero-subtitle">
                 Review incoming client requests, assign the best worker, and monitor county-wide activity.
               </p>
+              <div class="county-hero-badges" aria-label="County dashboard highlights">
+                <span class="county-hero-badge" id="county-hero-badge-queue">Live intake queue</span>
+                <span class="county-hero-badge" id="county-hero-badge-balance">Worker balancing</span>
+                <span class="county-hero-badge" id="county-hero-badge-transport">Transportation watch</span>
+              </div>
             </div>
-            <button class="secondary-btn county-refresh-btn" type="button" id="county-refresh-btn">Refresh Data</button>
+            <div class="county-hero-actions">
+              <button class="secondary-btn county-refresh-btn" type="button" id="county-refresh-btn">Refresh Data</button>
+            </div>
           </div>
 
           <div class="county-metric-grid">
             <div class="metric-card metric-blue">
+              <span class="metric-kicker" id="county-system-reach-kicker">System reach</span>
               <strong id="county-users-number">0</strong>
               <span class="small-text" id="county-users-label">Active Users (This Week)</span>
+              <p class="metric-note" id="county-users-note">County-wide activity across open housing support cases.</p>
             </div>
             <div class="metric-card metric-green">
+              <span class="metric-kicker" id="county-placement-kicker">Placement progress</span>
               <strong id="county-housed-number">0</strong>
               <span class="small-text" id="county-housed-label">People housed</span>
+              <p class="metric-note" id="county-housed-note">Clients who moved from request to housing placement.</p>
             </div>
             <div class="metric-card metric-orange">
+              <span class="metric-kicker" id="county-open-workload-kicker">Open workload</span>
               <strong id="county-apps-number">0</strong>
               <span class="small-text" id="county-apps-label">Active applications</span>
+              <p class="metric-note" id="county-apps-note">Requests still moving through review, documents, and assignment.</p>
             </div>
-            <div class="metric-card metric-purple">
+            <div class="metric-card metric-purple metric-highlight">
+              <span class="metric-kicker" id="county-ai-kicker">AI recommendation</span>
               <strong id="county-recommended-worker">-</strong>
-              <span class="small-text">Best Worker Match</span>
+              <span class="small-text" id="county-recommended-worker-label">Best Worker Match</span>
+              <p class="metric-note" id="county-recommended-worker-note">Suggested next assignment based on workload and queue balance.</p>
             </div>
           </div>
 
@@ -236,8 +258,9 @@
               <div class="county-panel county-clients-panel">
                 <div class="county-section-head">
                   <div>
-                    <strong>🏠 Client Requests</strong>
-                    <p class="small-text">Assign clients to the lowest-workload case worker or choose a different worker.</p>
+                    <p class="panel-kicker" id="county-queue-kicker">Queue management</p>
+                    <strong id="county-client-requests-title">🏠 Client Requests</strong>
+                    <p class="small-text" id="county-client-requests-subtitle">Assign clients to the lowest-workload case worker or choose a different worker.</p>
                   </div>
                   <span class="county-count-pill" id="county-client-count">0 open</span>
                 </div>
@@ -246,18 +269,20 @@
 
               <div class="county-bottom-grid">
                 <div class="county-panel insight-summary-panel">
-                  <strong>⚠️ Bottlenecks</strong>
+                  <p class="panel-kicker" id="county-bottleneck-kicker">System friction</p>
+                  <strong id="county-bottleneck-title">⚠️ Bottlenecks</strong>
                   <ul class="insight-list">
-                    <li>52% stuck at State ID</li>
-                    <li>28% stuck at SSN</li>
-                    <li>20% stuck at Birth Certificate</li>
+                    <li id="county-bottleneck-id">52% stuck at State ID</li>
+                    <li id="county-bottleneck-ssn">28% stuck at SSN</li>
+                    <li id="county-bottleneck-birth">20% stuck at Birth Certificate</li>
                   </ul>
                 </div>
 
                 <div class="county-panel transport-summary-panel">
-                  <strong>🚗 Transport Impact</strong>
+                  <p class="panel-kicker" id="county-transport-impact-kicker">Mobility risk</p>
+                  <strong id="county-transport-impact-title">🚗 Transport Impact</strong>
                   <p class="info-big-number">37%</p>
-                  <p class="small-text">of users need transportation support and are more likely to miss appointments.</p>
+                  <p class="small-text" id="county-transport-impact-note">of users need transportation support and are more likely to miss appointments.</p>
                 </div>
               </div>
             </div>
@@ -266,8 +291,13 @@
               <div class="county-panel county-notifications-panel">
                 <div class="county-section-head">
                   <div>
-                    <strong>🔔 Notifications</strong>
-                    <p class="small-text">Recent assignment and system activity.</p>
+                    <p class="panel-kicker" id="county-activity-kicker">Activity feed</p>
+                    <strong id="county-notifications-title">🔔 Notifications</strong>
+                    <p class="small-text" id="county-notifications-subtitle">Recent assignment and system activity.</p>
+                  </div>
+                  <div class="county-section-actions">
+                    <span class="county-count-pill" id="county-notifications-live-pill">Live</span>
+                    <button class="secondary-btn county-clear-btn" type="button" id="county-clear-notifications-btn">Clear</button>
                   </div>
                 </div>
                 <div class="notification-list" id="county-notification-list"></div>
@@ -276,9 +306,11 @@
               <div class="county-panel county-workers-panel">
                 <div class="county-section-head">
                   <div>
-                    <strong>👥 Case Workers</strong>
-                    <p class="small-text">Track workload and see the recommended worker for the next assignment.</p>
+                    <p class="panel-kicker" id="county-staffing-kicker">Staffing view</p>
+                    <strong id="county-workers-title">👥 Case Workers</strong>
+                    <p class="small-text" id="county-workers-subtitle">Track workload and see the recommended worker for the next assignment.</p>
                   </div>
+                  <span class="county-count-pill" id="county-workers-pill">Balanced queue</span>
                 </div>
                 <div class="worker-load-list" id="worker-load-list"></div>
               </div>
@@ -286,11 +318,25 @@
               <div class="county-panel county-transport-requests-panel">
                 <div class="county-section-head">
                   <div>
-                    <strong>🚗 Transport Requests</strong>
-                    <p class="small-text">Uber or transportation requests sent by case workers.</p>
+                    <p class="panel-kicker" id="county-field-support-kicker">Field support</p>
+                    <strong id="county-transport-requests-title">🚗 Transport Requests</strong>
+                    <p class="small-text" id="county-transport-requests-subtitle">Uber or transportation requests sent by case workers.</p>
                   </div>
+                  <span class="county-count-pill" id="county-transport-pill">Priority</span>
                 </div>
                 <div class="notification-list" id="county-transport-request-list"></div>
+              </div>
+
+              <div class="county-panel county-housing-availability-panel">
+                <div class="county-section-head">
+                  <div>
+                    <p class="panel-kicker" id="county-housing-kicker">Housing availability</p>
+                    <strong id="county-housing-title">🛏️ County Housing Availability</strong>
+                    <p class="small-text" id="county-housing-subtitle">Beds available now and upcoming housing openings across Passaic County cities.</p>
+                  </div>
+                  <span class="county-count-pill" id="county-housing-pill">Live housing</span>
+                </div>
+                <div id="county-housing-availability"></div>
               </div>
             </aside>
           </div>
@@ -299,6 +345,14 @@
 
       <section class="card hidden" id="caseworker-client-screen">
         <div id="caseworker-full-view"></div>
+      </section>
+
+      <section class="card hidden" id="caseworker-documents-screen">
+        <div id="caseworker-documents-view"></div>
+      </section>
+
+      <section class="card hidden" id="client-documents-screen">
+        <div id="client-documents-view"></div>
       </section>
 
       <section class="card hidden" id="dashboard-screen">
@@ -317,38 +371,41 @@
         <div class="dashboard-grid">
           <button class="doc-card" type="button" data-doc="id">
             <span class="doc-art id-art" aria-hidden="true"></span>
-            <strong id="doc-id-title">Your ID</strong>
-            <span class="small-text" id="doc-id-text">State ID help</span>
+            <strong id="doc-id-title">View Your ID</strong>
+            <span class="small-text" id="doc-id-text">Open your document page</span>
           </button>
 
-          <button class="doc-card" type="button" data-doc="birth">
-            <span class="doc-art birth-art" aria-hidden="true"></span>
-            <strong id="doc-birth-title">Birth Certificate</strong>
-            <span class="small-text" id="doc-birth-text">Birth record help</span>
-          </button>
-
-          <button class="doc-card" type="button" data-doc="passport">
+          <button class="doc-card" type="button" data-doc="chat">
             <span class="doc-art passport-art" aria-hidden="true"></span>
-            <strong id="doc-passport-title">Passport</strong>
-            <span class="small-text" id="doc-passport-text">Passport support</span>
+            <strong id="doc-birth-title">Chat with Your Case Worker</strong>
+            <span class="small-text" id="doc-birth-text">Open your conversation</span>
           </button>
 
-          <button class="doc-card" type="button" data-doc="ssn">
+          <button class="doc-card" type="button" data-doc="notifications">
             <span class="doc-art ssn-art" aria-hidden="true"></span>
-            <strong id="doc-ssn-title">SSN</strong>
-            <span class="small-text" id="doc-ssn-text">Social Security help</span>
+            <strong id="doc-passport-title">Notifications</strong>
+            <span class="small-text" id="doc-passport-text">Updates will appear here</span>
+          </button>
+
+          <button class="doc-card doc-card-empty" type="button" data-doc="empty">
+            <span class="doc-art birth-art" aria-hidden="true"></span>
+            <strong id="doc-ssn-title">Coming Soon</strong>
+            <span class="small-text" id="doc-ssn-text">Empty for now</span>
           </button>
         </div>
 
         <p class="small-text dashboard-note" id="dashboard-note">You can also continue to answer a few questions for a full plan.</p>
-        <div class="caseworker-panel client-portal-chat-panel">
+        <div class="caseworker-panel client-portal-chat-panel hidden" id="client-chat-panel">
           <div class="worker-chat-head">
-            <strong>💬 Message Your Case Worker</strong>
+            <strong id="client-chat-title">💬 Message Your Case Worker</strong>
             <span class="worker-chat-status active" id="client-chat-status">🟢 Case Active</span>
           </div>
           <div class="worker-chat-history" id="client-chat-history"></div>
-          <div class="worker-chat-compose">
+          <div id="client-chat-image-preview"></div>
+          <div class="worker-chat-compose worker-chat-compose-rich">
             <input id="client-chat-input" type="text" placeholder="Type a message" />
+            <label class="secondary-btn chat-upload-btn" for="client-chat-image-input" id="client-chat-upload-label">Upload Image</label>
+            <input id="client-chat-image-input" class="chat-upload-input" type="file" accept="image/*" />
             <button class="secondary-btn worker-chat-send-btn" type="button" id="client-chat-send-btn">Send</button>
           </div>
           <p class="small-text worker-inline-message" id="client-chat-note"></p>
@@ -440,11 +497,11 @@
         </div>
         <button class="chat-close-btn" id="county-ai-close-btn" type="button">X</button>
       </div>
-      <div class="chat-body county-ai-body">
+        <div class="chat-body county-ai-body">
         <div class="admin-ai-response" id="ai-response">
           Most delays are happening at the State ID step due to appointments and transportation issues.
         </div>
-        <p class="small-text admin-ai-note">
+        <p class="small-text admin-ai-note" id="county-ai-note">
           This assistant currently uses simple logic. It can be upgraded to a real AI
           (like ChatGPT) to provide deeper insights if the system is approved.
         </p>
@@ -454,6 +511,20 @@
         <button id="ai-ask-btn" type="button">Ask</button>
       </div>
     </aside>
+
+    <div class="county-worker-modal hidden" id="county-worker-modal" hidden>
+      <div class="county-worker-modal-backdrop" data-worker-modal-close="true"></div>
+      <aside class="county-worker-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="county-worker-modal-title">
+        <div class="county-worker-modal-head">
+          <div>
+            <p class="eyebrow county-eyebrow" id="county-worker-modal-eyebrow">Passaic County Staffing View</p>
+            <h2 id="county-worker-modal-title">Case Worker Profile</h2>
+          </div>
+          <button class="chat-close-btn county-worker-modal-close" id="county-worker-modal-close-btn" type="button">X</button>
+        </div>
+        <div class="county-worker-modal-body" id="county-worker-modal-body"></div>
+      </aside>
+    </div>
 
     <script src="script.js"></script>
   </body>

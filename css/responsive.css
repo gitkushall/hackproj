@@ -54,6 +54,30 @@
   .worker-client-actions {
     flex-direction: column;
   }
+
+  .workspace-doc-grid,
+  .document-page-grid,
+  .document-file-grid,
+  .client-document-card-grid,
+  .worker-chat-compose-rich {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-panel-head,
+  .workspace-chat-actions,
+  .worker-chat-message-top,
+  .document-page-card-top {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .admin-login-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-overlay {
+    padding: 12px;
+  }
 }
 
 @media (max-width: 640px) {
@@ -132,6 +156,21 @@
 
   .county-metric-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .workspace-modal,
+  .workspace-modal.chat {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+    border-radius: 22px;
+  }
+
+  .workspace-panel-body {
+    padding: 18px;
+  }
+
+  .chat-image-preview-card {
+    grid-template-columns: 1fr;
   }
 
   .app-wrap.county-expanded {
