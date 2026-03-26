@@ -345,6 +345,10 @@ const passaicCountyCities = [
   "Prospect Park"
 ];
 
+const NJ_BIRTH_CERTIFICATE_URL = "https://www.nj.gov/health/vital/";
+const SSA_CARD_URL = "https://www.ssa.gov/number-card";
+const NJ_MVC_URL = "https://www.nj.gov/mvc/index.html";
+
 async function translateText(text, targetLang) {
   if (targetLang === "en") return text;
 
@@ -372,23 +376,51 @@ function generatePlan(answers, birthPlace, currentCity) {
   const steps = [];
 
   if (!answers.hasBirth) {
-    steps.push("You need a birth certificate.");
-    steps.push(`Go to the Vital Records Office in ${birthPlace}.`);
-    steps.push("Ask for a copy.");
+    steps.push({
+      text: "You need a birth certificate.",
+      description: "Use the official New Jersey Vital Statistics page to request a birth certificate online or find next steps.",
+      actionLabel: "Request Birth Certificate",
+      actionLink: NJ_BIRTH_CERTIFICATE_URL,
+      actionExternal: true
+    });
+    steps.push({
+      text: `Go to the Vital Records Office in ${birthPlace}.`
+    });
+    steps.push({
+      text: "Ask for a copy."
+    });
   }
 
   if (!answers.hasSSN) {
-    steps.push("You need a Social Security card.");
-    steps.push(`Go to SSA office in ${currentCity}.`);
+    steps.push({
+      text: "You need a Social Security card.",
+      description: "Visit the official Social Security website to apply for or replace your SSN card.",
+      actionLabel: "Get Social Security Card",
+      actionLink: SSA_CARD_URL,
+      actionExternal: true
+    });
+    steps.push({
+      text: `Go to SSA office in ${currentCity}.`
+    });
   }
 
   if (!answers.hasID) {
-    steps.push("You need a State ID.");
-    steps.push(`Go to DMV/MVC in ${currentCity}.`);
+    steps.push({
+      text: "You need a State ID.",
+      description: "Visit the official New Jersey MVC website to apply for a State ID or schedule an appointment.",
+      actionLabel: "Apply for State ID",
+      actionLink: NJ_MVC_URL,
+      actionExternal: true
+    });
+    steps.push({
+      text: `Go to DMV/MVC in ${currentCity}.`
+    });
   }
 
   if (steps.length === 0) {
-    steps.push("You have all documents.");
+    steps.push({
+      text: "You have all documents."
+    });
   }
 
   return {
@@ -1831,7 +1863,13 @@ async function showPlan() {
   const translatedSteps = [];
 
   for (const step of plan.steps) {
-    translatedSteps.push(await translateText(step, state.lang));
+    translatedSteps.push({
+      text: await translateText(step.text, state.lang),
+      description: step.description ? await translateText(step.description, state.lang) : "",
+      actionLabel: step.actionLabel ? await translateText(step.actionLabel, state.lang) : "",
+      actionLink: step.actionLink || "",
+      actionExternal: Boolean(step.actionExternal)
+    });
   }
 
   const list = document.getElementById("plan-steps");
@@ -1839,7 +1877,32 @@ async function showPlan() {
 
   translatedSteps.forEach((step) => {
     const li = document.createElement("li");
-    li.textContent = step;
+    li.className = "plan-step-item";
+
+    const title = document.createElement("p");
+    title.className = "plan-step-text";
+    title.textContent = step.text;
+    li.appendChild(title);
+
+    if (step.description) {
+      const description = document.createElement("p");
+      description.className = "small-text plan-step-description";
+      description.textContent = step.description;
+      li.appendChild(description);
+    }
+
+    if (step.actionLink && step.actionLabel) {
+      const actionLink = document.createElement("a");
+      actionLink.className = "secondary-btn plan-step-link";
+      actionLink.href = step.actionLink;
+      if (step.actionExternal) {
+        actionLink.target = "_blank";
+        actionLink.rel = "noopener noreferrer";
+      }
+      actionLink.textContent = step.actionLabel;
+      li.appendChild(actionLink);
+    }
+
     list.appendChild(li);
   });
 

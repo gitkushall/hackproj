@@ -1404,6 +1404,25 @@ textarea:focus {
   font-size: 1rem;
 }
 
+.plan-step-item {
+  margin-bottom: 14px;
+}
+
+.plan-step-text {
+  margin: 0;
+}
+
+.plan-step-description {
+  margin: 6px 0 0;
+}
+
+.plan-step-link {
+  display: inline-flex;
+  width: auto;
+  margin-top: 10px;
+  text-decoration: none;
+}
+
 #transport-btn {
   background: linear-gradient(135deg, var(--green) 0%, #5ea05f 100%);
 }
