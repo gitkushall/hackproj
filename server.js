@@ -5,6 +5,7 @@ const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "127.0.0.1";
+const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY || "";
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
@@ -15,6 +16,8 @@ const clientsFilePath = path.join(dataDirectory, "clients.json");
 const workersFilePath = path.join(dataDirectory, "workers.json");
 const notificationsFilePath = path.join(dataDirectory, "notifications.json");
 const transportRequestsFilePath = path.join(dataDirectory, "transport-requests.json");
+const messagesFilePath = path.join(dataDirectory, "messages.json");
+const clientDocumentsFilePath = path.join(dataDirectory, "client-documents.json");
 
 const systemData = {
   total_users: 284,
@@ -127,6 +130,66 @@ const defaultClientAccounts = [
   { clientId: "CL-1004", name: "Luis Rivera", phone: "(973) 210-1104", username: "luis.rivera", password: "Luis@1234" }
 ];
 
+const defaultMessages = [
+  {
+    id: "MSG-00",
+    client_id: "CL-1001",
+    worker_id: "WK-01",
+    sender: "worker",
+    text: "Hi Maria, I can help with your birth certificate and State ID.",
+    image_name: null,
+    image_data: null,
+    image_type: null,
+    timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString()
+  },
+  {
+    id: "MSG-00B",
+    client_id: "CL-1002",
+    worker_id: "WK-02",
+    sender: "client",
+    text: "I still need help with my SSN card.",
+    image_name: null,
+    image_data: null,
+    image_type: null,
+    timestamp: new Date(Date.now() - 1000 * 60 * 110).toISOString()
+  },
+  {
+    id: "MSG-01",
+    client_id: "CL-1003",
+    worker_id: "WK-03",
+    sender: "client",
+    text: "I need help getting my State ID appointment.",
+    image_name: null,
+    image_data: null,
+    image_type: null,
+    timestamp: new Date(Date.now() - 1000 * 60 * 90).toISOString()
+  },
+  {
+    id: "MSG-02",
+    client_id: "CL-1003",
+    worker_id: "WK-03",
+    sender: "worker",
+    text: "I can help with that. I am checking MVC options for you.",
+    image_name: null,
+    image_data: null,
+    image_type: null,
+    timestamp: new Date(Date.now() - 1000 * 60 * 75).toISOString()
+  },
+  {
+    id: "MSG-03",
+    client_id: "CL-1004",
+    worker_id: "WK-04",
+    sender: "worker",
+    text: "Luis, I am reviewing your document list now.",
+    image_name: null,
+    image_data: null,
+    image_type: null,
+    timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString()
+  }
+];
+
+const defaultClientDocuments = [];
+
 function ensureDataDirectory() {
   fs.mkdirSync(dataDirectory, { recursive: true });
 }
@@ -171,54 +234,21 @@ function saveCountyState() {
   saveJsonFile(transportRequestsFilePath, transportRequests);
 }
 
+function saveMessages() {
+  saveJsonFile(messagesFilePath, messages);
+}
+
+function saveClientDocuments() {
+  saveJsonFile(clientDocumentsFilePath, clientDocuments);
+}
+
 const clients = loadJsonFile(clientsFilePath, defaultClients);
 const workers = loadJsonFile(workersFilePath, defaultWorkers);
 const notifications = loadJsonFile(notificationsFilePath, defaultNotifications);
 const transportRequests = loadJsonFile(transportRequestsFilePath, defaultTransportRequests);
 const clientAccounts = loadJsonFile(clientAccountsFilePath, defaultClientAccounts);
-
-const messages = [
-  {
-    id: "MSG-00",
-    client_id: "CL-1001",
-    worker_id: "WK-01",
-    sender: "worker",
-    text: "Hi Maria, I can help with your birth certificate and State ID.",
-    timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString()
-  },
-  {
-    id: "MSG-00B",
-    client_id: "CL-1002",
-    worker_id: "WK-02",
-    sender: "client",
-    text: "I still need help with my SSN card.",
-    timestamp: new Date(Date.now() - 1000 * 60 * 110).toISOString()
-  },
-  {
-    id: "MSG-01",
-    client_id: "CL-1003",
-    worker_id: "WK-03",
-    sender: "client",
-    text: "I need help getting my State ID appointment.",
-    timestamp: new Date(Date.now() - 1000 * 60 * 90).toISOString()
-  },
-  {
-    id: "MSG-02",
-    client_id: "CL-1003",
-    worker_id: "WK-03",
-    sender: "worker",
-    text: "I can help with that. I am checking MVC options for you.",
-    timestamp: new Date(Date.now() - 1000 * 60 * 75).toISOString()
-  },
-  {
-    id: "MSG-03",
-    client_id: "CL-1004",
-    worker_id: "WK-04",
-    sender: "worker",
-    text: "Luis, I am reviewing your document list now.",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString()
-  }
-];
+const messages = loadJsonFile(messagesFilePath, defaultMessages);
+const clientDocuments = loadJsonFile(clientDocumentsFilePath, defaultClientDocuments);
 
 function getRecommendedWorker() {
   return workers.reduce((lowest, worker) => (
@@ -228,6 +258,45 @@ function getRecommendedWorker() {
 
 function normalizePhone(phone) {
   return String(phone || "").replace(/\D/g, "");
+}
+
+async function translateWithGoogle(text, targetLang, sourceLang = "en") {
+  if (!GOOGLE_TRANSLATE_API_KEY) {
+    const error = new Error("Google Translate API key is not configured.");
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const response = await fetch(`https://translation.googleapis.com/language/translate/v2?key=${encodeURIComponent(GOOGLE_TRANSLATE_API_KEY)}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      q: text,
+      source: sourceLang,
+      target: targetLang,
+      format: "text"
+    })
+  });
+
+  if (!response.ok) {
+    let details = `Google Translate request failed with status ${response.status}.`;
+
+    try {
+      const errorData = await response.json();
+      details = errorData?.error?.message || details;
+    } catch (error) {
+      // Keep the default status-based message when the response body is not JSON.
+    }
+
+    const requestError = new Error(details);
+    requestError.statusCode = response.status;
+    throw requestError;
+  }
+
+  const data = await response.json();
+  return data?.data?.translations?.[0]?.translatedText || text;
 }
 
 function getNextClientIdNumber() {
@@ -297,6 +366,52 @@ app.get("/api/client-accounts", (_req, res) => {
   });
 });
 
+app.get("/api/client-documents", (req, res) => {
+  const clientId = String(req.query.client_id || "").trim();
+
+  if (!clientId) {
+    res.status(400).json({ error: "client_id is required." });
+    return;
+  }
+
+  const client = clients.find((item) => item.id === clientId);
+  if (!client) {
+    res.status(400).json({ error: "Client not found." });
+    return;
+  }
+
+  res.json({
+    documents: clientDocuments
+      .filter((document) => document.client_id === clientId)
+      .sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at))
+  });
+});
+
+app.post("/api/translate", async (req, res) => {
+  const text = String(req.body?.text || "").trim();
+  const targetLang = String(req.body?.targetLang || "").trim().toLowerCase();
+  const sourceLang = String(req.body?.sourceLang || "en").trim().toLowerCase();
+
+  if (!text) {
+    res.status(400).json({ error: "Text is required." });
+    return;
+  }
+
+  if (!targetLang) {
+    res.status(400).json({ error: "Target language is required." });
+    return;
+  }
+
+  try {
+    const translatedText = await translateWithGoogle(text, targetLang, sourceLang);
+    res.json({ translatedText });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({
+      error: error.message || "Translation request failed."
+    });
+  }
+});
+
 app.get("/api/worker-notifications", (req, res) => {
   const workerId = String(req.query.worker_id || "").trim();
 
@@ -321,10 +436,11 @@ app.get("/api/worker-notifications", (req, res) => {
     .filter((message) => message.sender === "client" && workerClientIds.has(message.client_id) && message.worker_id === workerId)
     .map((message) => {
       const client = clients.find((item) => item.id === message.client_id);
+      const detail = message.text || (message.image_name ? `shared ${message.image_name}` : "sent a message");
 
       return {
         id: message.id,
-        message: `${client ? client.name : message.client_id}: ${message.text}`,
+        message: `${client ? client.name : message.client_id}: ${detail}`,
         source: "client",
         timestamp: message.timestamp
       };
@@ -406,6 +522,12 @@ app.post("/api/case-status", (req, res) => {
   } else if (action === "complete") {
     client.status = "completed";
     client.worker_status = "completed";
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index].client_id === clientId) {
+        messages.splice(index, 1);
+      }
+    }
+    saveMessages();
     notifications.unshift({
       id: `NT-${Date.now()}`,
       message: `${worker.name} completed ${client.name}`,
@@ -466,7 +588,10 @@ app.post("/api/messages", (req, res) => {
     client_id: clientId,
     worker_id: workerId,
     sender,
-    text
+    text,
+    image_name: imageName,
+    image_data: imageData,
+    image_type: imageType
   } = req.body || {};
 
   const client = clients.find((item) => item.id === clientId);
@@ -486,8 +611,12 @@ app.post("/api/messages", (req, res) => {
     return;
   }
 
-  if (!text || !String(text).trim()) {
-    res.status(400).json({ error: "Message text is required." });
+  const trimmedText = String(text || "").trim();
+  const hasText = Boolean(trimmedText);
+  const hasImage = Boolean(String(imageData || "").trim());
+
+  if (!hasText && !hasImage) {
+    res.status(400).json({ error: "Message text or image is required." });
     return;
   }
 
@@ -496,15 +625,101 @@ app.post("/api/messages", (req, res) => {
     client_id: clientId,
     worker_id: workerId || client.assigned_worker || null,
     sender: sender === "client" ? "client" : "worker",
-    text: String(text).trim(),
+    text: trimmedText,
+    image_name: hasImage ? String(imageName || "shared-image").trim() || "shared-image" : null,
+    image_data: hasImage ? String(imageData).trim() : null,
+    image_type: hasImage ? String(imageType || "image/jpeg").trim() : null,
     timestamp: new Date().toISOString()
   };
 
   messages.push(message);
+  saveMessages();
 
   res.json({
     success: true,
     message
+  });
+});
+
+app.post("/api/client-documents", (req, res) => {
+  const {
+    client_id: clientId,
+    worker_id: workerId,
+    document_type: documentType,
+    file_name: fileName,
+    file_data: fileData,
+    file_type: fileType,
+    uploaded_by: uploadedBy
+  } = req.body || {};
+
+  const client = clients.find((item) => item.id === clientId);
+  const allowedTypes = new Set(["passport", "ssn", "state_id", "birth_certificate"]);
+
+  if (!client) {
+    res.status(400).json({ error: "Client not found." });
+    return;
+  }
+
+  if (!allowedTypes.has(String(documentType || "").trim())) {
+    res.status(400).json({ error: "Invalid document type." });
+    return;
+  }
+
+  if (!String(fileData || "").trim()) {
+    res.status(400).json({ error: "Document image is required." });
+    return;
+  }
+
+  if (workerId && client.assigned_worker && workerId !== client.assigned_worker) {
+    res.status(400).json({ error: "Document must match the assigned case worker." });
+    return;
+  }
+
+  const documentRecord = {
+    id: `DOC-${Date.now()}`,
+    client_id: clientId,
+    worker_id: workerId || client.assigned_worker || null,
+    document_type: String(documentType).trim(),
+    file_name: String(fileName || "document-image").trim() || "document-image",
+    file_data: String(fileData).trim(),
+    file_type: String(fileType || "image/jpeg").trim(),
+    uploaded_by: uploadedBy === "client" ? "client" : "worker",
+    uploaded_at: new Date().toISOString()
+  };
+
+  clientDocuments.unshift(documentRecord);
+  saveClientDocuments();
+
+  res.json({
+    success: true,
+    document: documentRecord
+  });
+});
+
+app.delete("/api/client-documents/:documentId", (req, res) => {
+  const documentId = String(req.params.documentId || "").trim();
+  const clientId = String(req.query.client_id || "").trim();
+
+  if (!documentId || !clientId) {
+    res.status(400).json({ error: "documentId and client_id are required." });
+    return;
+  }
+
+  const documentIndex = clientDocuments.findIndex((item) => (
+    item.id === documentId && item.client_id === clientId
+  ));
+
+  if (documentIndex === -1) {
+    res.status(404).json({ error: "Document not found." });
+    return;
+  }
+
+  const [removedDocument] = clientDocuments.splice(documentIndex, 1);
+  saveClientDocuments();
+
+  res.json({
+    success: true,
+    document: removedDocument
   });
 });
 

@@ -17,10 +17,17 @@ const state = {
     highlightNotificationId: null,
     refreshIntervalId: null,
     isLoading: false,
-    isAiPanelOpen: false
+    isAiPanelOpen: false,
+    selectedWorkerId: null
   },
   clientPortalData: {
-    currentClientId: "CL-1006"
+    currentClientId: "CL-1006",
+    pendingImage: null,
+    documents: [],
+    selectedDocumentType: null,
+    pendingDocumentByType: {},
+    chatRefreshIntervalId: null,
+    isChatPanelOpen: false
   },
   caseWorkerData: {
     currentWorkerId: "WK-03",
@@ -36,13 +43,19 @@ const state = {
     notes: {},
     transportMessages: {},
     documentUploads: {},
-    openUploadPanels: {}
+    documents: [],
+    pendingDocumentByType: {},
+    openUploadPanels: {},
+    pendingChatImage: null,
+    activeWorkspacePanel: null,
+    showChatImagesOnly: false
   },
   answers: {
     hasBirth: null,
     hasSSN: null,
     hasID: null
-  }
+  },
+  lastPlan: null
 };
 
 const CASE_WORKER_CREDENTIALS = {
@@ -111,6 +124,13 @@ const housingData = [
   { city: "Paterson", units: 12 },
   { city: "Clifton", units: 8 },
   { city: "Passaic", units: 5 }
+];
+
+const DOCUMENT_TYPES = [
+  { key: "passport", labelKey: "docPassportTitle", fallback: "Passport" },
+  { key: "ssn", labelKey: "docSsnTitle", fallback: "SSN" },
+  { key: "state_id", labelKey: "docIdTitle", fallback: "State ID" },
+  { key: "birth_certificate", labelKey: "docBirthTitle", fallback: "Birth Certificate" }
 ];
 
 const uiText = {
@@ -345,18 +365,24 @@ const passaicCountyCities = [
   "Prospect Park"
 ];
 
+const countyWorkerOffices = {
+  "WK-01": "Paterson Office",
+  "WK-02": "Passaic Office",
+  "WK-03": "Clifton Office",
+  "WK-04": "Wayne Office"
+};
+
 async function translateText(text, targetLang) {
   if (targetLang === "en") return text;
 
   try {
-    const response = await fetch("https://libretranslate.de/translate", {
+    const response = await fetch("/api/translate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        q: text,
-        source: "en",
-        target: targetLang,
-        format: "text"
+        text,
+        sourceLang: "en",
+        targetLang
       })
     });
 
@@ -366,6 +392,197 @@ async function translateText(text, targetLang) {
   } catch (error) {
     return text;
   }
+}
+
+const staticTranslations = {
+  es: {
+    "Just now": "Justo ahora",
+    "No county notifications yet.": "Todavia no hay notificaciones del condado.",
+    "No transportation requests yet.": "Todavia no hay solicitudes de transporte.",
+    "No housing availability data yet.": "Todavia no hay datos de vivienda disponibles.",
+    "Passaic County housing network": "Red de vivienda de Passaic County",
+    "Available now": "Disponible ahora",
+    "Beds ready for placement now.": "Camas listas para asignacion ahora.",
+    "Coming soon": "Proximamente",
+    "Beds expected to open shortly.": "Camas que se abriran pronto.",
+    "No current cases yet.": "Todavia no hay casos actuales.",
+    "No notifications yet.": "Todavia no hay notificaciones.",
+    "Client update": "Actualizacion del cliente",
+    "County update": "Actualizacion del condado",
+    "No uploaded files for this document yet.": "Todavia no hay archivos cargados para este documento.",
+    "Select a client to manage documents.": "Seleccione un cliente para administrar documentos.",
+    "Client documents": "Documentos del cliente",
+    "Document Types": "Tipos de documentos",
+    "All uploads here are linked directly to this client.": "Todas las cargas aqui estan vinculadas directamente a este cliente.",
+    "Upload images for this document and review previously saved files.": "Suba imagenes para este documento y revise los archivos guardados anteriormente.",
+    "Save Upload": "Guardar carga",
+    "Remove": "Eliminar",
+    "Select one of the 4 document cards.": "Seleccione una de las 4 tarjetas de documentos.",
+    "Unopened documents stay blurred until clicked.": "Los documentos sin abrir permanecen borrosos hasta que haga clic.",
+    "My documents": "Mis documentos",
+    "Client Documents": "Documentos del cliente",
+    "Files uploaded by your case worker for your case.": "Archivos cargados por su trabajador social para su caso.",
+    "Click a card to reveal that document section.": "Haga clic en una tarjeta para mostrar esa seccion del documento.",
+    "These are the files currently saved to your case.": "Estos son los archivos guardados actualmente en su caso.",
+    "Documents stay hidden until you open them.": "Los documentos permanecen ocultos hasta que los abra.",
+    "No messages yet.": "Todavia no hay mensajes.",
+    "You": "Usted",
+    "Case Worker": "Trabajador social",
+    "Client": "Cliente",
+    "Save image": "Guardar imagen",
+    "Save file": "Guardar archivo",
+    "Uploaded by case worker on": "Cargado por el trabajador social el",
+    "Uploaded by client on": "Cargado por el cliente el",
+    "Click to reveal this document area.": "Haga clic para mostrar esta area de documentos.",
+    "No case worker is assigned to this case yet.": "Todavia no hay un trabajador social asignado a este caso.",
+    "Type a message": "Escriba un mensaje",
+    "Case completed. Chat is closed.": "Caso completado. El chat esta cerrado.",
+    "Case completed. Chat history has been cleared.": "Caso completado. El historial del chat ha sido borrado.",
+    "Could not read image.": "No se pudo leer la imagen.",
+    "No clients assigned to this worker yet.": "Todavia no hay clientes asignados a este trabajador.",
+    "Open": "Abrir",
+    "eligible": "elegibles",
+    "units": "unidades",
+    "In Progress": "En progreso",
+    "Missing": "Falta",
+    "Completed": "Completado",
+    "Client workspace": "Espacio de trabajo del cliente",
+    "Client File": "Archivo del cliente",
+    "Choose a workspace below. Each card opens a responsive panel for this client.": "Elija un espacio de trabajo abajo. Cada tarjeta abre un panel adaptable para este cliente.",
+    "Document Uploads": "Carga de documentos",
+    "Review required documents and attach image or file selections.": "Revise los documentos requeridos y adjunte imagenes o archivos.",
+    "Client Chat": "Chat del cliente",
+    "Open the live chat popup for saved messages and shared images.": "Abra el chat en vivo para ver mensajes guardados e imagenes compartidas.",
+    "Case Notes": "Notas del caso",
+    "Track internal notes, blockers, and next steps for this client.": "Registre notas internas, bloqueos y proximos pasos para este cliente.",
+    "Case Activity": "Actividad del caso",
+    "See recent movement across messages, transport, and status changes.": "Vea la actividad reciente en mensajes, transporte y cambios de estado.",
+    "Client Summary": "Resumen del cliente",
+    "Current status:": "Estado actual:",
+    "Transportation needed:": "Transporte necesario:",
+    "Missing documents:": "Documentos faltantes:",
+    "None listed": "Ninguno",
+    "Mark Case Completed": "Marcar caso como completado",
+    "Live Chat Status": "Estado del chat en vivo",
+    "The case is completed. Chat history is removed at completion.": "El caso esta completado. El historial del chat se elimina al completar el caso.",
+    "saved messages currently linked to this client.": "mensajes guardados vinculados actualmente a este cliente.",
+    "Open the chat card to continue the conversation or download the saved transcript.": "Abra la tarjeta de chat para continuar la conversacion o descargar la transcripcion guardada.",
+    "Refresh": "Actualizar",
+    "Save Chat": "Guardar chat",
+    "Show All": "Mostrar todo",
+    "Shared Images": "Imagenes compartidas",
+    "No shared images yet.": "Todavia no hay imagenes compartidas.",
+    "Upload Image": "Subir imagen",
+    "Send": "Enviar",
+    "Transportation request sent to Passaic County": "Solicitud de transporte enviada a Passaic County",
+    "Assignment could not be completed. Please try again.": "No se pudo completar la asignacion. Intente de nuevo.",
+    "Select a client to open the full file.": "Seleccione un cliente para abrir el archivo completo.",
+    "Pending approval": "Pendiente de aprobacion",
+    "Case status": "Estado del caso",
+    "Case completed": "Caso completado",
+    "Case active": "Caso activo",
+    "Alert": "Alerta",
+    "Worker message": "Mensaje del trabajador social",
+    "Client message": "Mensaje del cliente",
+    "Sent an update": "Envio una actualizacion",
+    "Shared": "Compartio",
+    "Recent case updates, transport alerts, and message activity.": "Actualizaciones recientes del caso, alertas de transporte y actividad de mensajes.",
+    "No activity yet.": "Todavia no hay actividad.",
+    "Keep notes for this client file. Notes stay on screen during this session.": "Guarde notas para este archivo del cliente. Las notas permanecen en pantalla durante esta sesion.",
+    "Notes": "Notas",
+    "Document barriers, next steps, appointment updates...": "Barreras de documentos, proximos pasos, actualizaciones de citas...",
+    "Save Notes": "Guardar notas",
+    "Live case conversation. History stays available until this case is marked complete.": "Conversacion en vivo del caso. El historial sigue disponible hasta que el caso se marque como completado.",
+    "No files selected yet.": "Todavia no hay archivos seleccionados.",
+    "Upload": "Subir"
+  }
+};
+
+function getLocale() {
+  return state.lang === "es" ? "es-US" : "en-US";
+}
+
+function localizeText(text) {
+  if (state.lang === "en") {
+    return text;
+  }
+
+  return staticTranslations.es[text] || text;
+}
+
+function getDocumentTypeLabel(key) {
+  const item = DOCUMENT_TYPES.find((entry) => entry.key === key);
+  if (!item) {
+    return key
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  return uiText[state.lang][item.labelKey] || item.fallback;
+}
+
+function formatCountLabel(count, singularEn, pluralEn, singularEs, pluralEs) {
+  const label = count === 1
+    ? (state.lang === "es" ? singularEs : singularEn)
+    : (state.lang === "es" ? pluralEs : pluralEn);
+
+  return `${count} ${label}`;
+}
+
+function getStatusText(status) {
+  if (status === "completed") {
+    return state.lang === "es" ? "Completado" : "Completed";
+  }
+  if (status === "pending") {
+    return state.lang === "es" ? "Pendiente" : "Pending";
+  }
+  if (status === "assigned" || status === "active") {
+    return state.lang === "es" ? "Activo" : "Active";
+  }
+
+  return status;
+}
+
+function formatLocalizedTime(timestampRaw) {
+  const timestamp = new Date(timestampRaw);
+  if (Number.isNaN(timestamp.getTime())) {
+    return localizeText("Just now");
+  }
+
+  return timestamp.toLocaleString(getLocale(), {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+function getYesNoLabel(value) {
+  return value ? (state.lang === "es" ? "Si" : "Yes") : (state.lang === "es" ? "No" : "No");
+}
+
+async function renderCurrentPlan() {
+  if (!state.lastPlan) {
+    return;
+  }
+
+  const translatedSteps = [];
+
+  for (const step of state.lastPlan.steps) {
+    translatedSteps.push(await translateText(step, state.lang));
+  }
+
+  const list = document.getElementById("plan-steps");
+  list.innerHTML = "";
+
+  translatedSteps.forEach((step) => {
+    const li = document.createElement("li");
+    li.textContent = step;
+    list.appendChild(li);
+  });
+
+  document.getElementById("transport-btn").classList.toggle("hidden", !state.lastPlan.transportation_needed);
 }
 
 function generatePlan(answers, birthPlace, currentCity) {
@@ -421,20 +638,20 @@ function setupLocationDropdowns() {
 }
 
 function openScreen(screenId) {
-  ["login-screen", "create-account-screen", "admin-dashboard-screen", "caseworker-client-screen", "dashboard-screen", "questions-screen", "result-screen"].forEach((id) => {
+  ["login-screen", "create-account-screen", "admin-dashboard-screen", "caseworker-client-screen", "caseworker-documents-screen", "client-documents-screen", "dashboard-screen", "questions-screen", "result-screen"].forEach((id) => {
     document.getElementById(id).classList.toggle("hidden", id !== screenId);
   });
   document.getElementById("login-error").textContent = "";
   document.getElementById("create-account-error").textContent = "";
 
-  const isAdminScreen = screenId === "admin-dashboard-screen" || screenId === "caseworker-client-screen";
+  const isAdminScreen = screenId === "admin-dashboard-screen" || screenId === "caseworker-client-screen" || screenId === "caseworker-documents-screen";
   const isAdminLogin = screenId === "login-screen" && state.authView === "admin";
   const isCreateAccountScreen = screenId === "create-account-screen";
   const postLogin = screenId !== "login-screen" && !isCreateAccountScreen;
   const showHelp = postLogin && !isAdminScreen && !isAdminLogin;
   const adminPortalBtn = document.getElementById("admin-portal-btn");
   if (adminPortalBtn) {
-    adminPortalBtn.classList.toggle("hidden", postLogin);
+    adminPortalBtn.classList.toggle("hidden", postLogin || isAdminLogin);
   }
 
   document.getElementById("skyline").classList.toggle("dimmed", postLogin);
@@ -446,21 +663,27 @@ function openScreen(screenId) {
     closeHelpChat();
   }
 
+  if (screenId !== "admin-dashboard-screen" || state.adminRole !== "passaic") {
+    closeWorkerProfile();
+  }
+
   syncAdminLayoutMode(screenId);
   syncCountyAutoRefresh();
   syncCountyAiAccess();
 }
 
 function syncAdminLayoutMode(screenId) {
-  const onCaseworkerScreen = screenId === "admin-dashboard-screen" || screenId === "caseworker-client-screen";
+  const onCaseworkerScreen = screenId === "admin-dashboard-screen" || screenId === "caseworker-client-screen" || screenId === "caseworker-documents-screen";
   const onAdminDashboard = screenId === "admin-dashboard-screen";
   const adminDashboard = document.getElementById("admin-dashboard-screen");
   const caseworkerClientScreen = document.getElementById("caseworker-client-screen");
+  const caseworkerDocumentsScreen = document.getElementById("caseworker-documents-screen");
   const appWrap = document.querySelector(".app-wrap");
 
   adminDashboard.classList.toggle("county-mode", onAdminDashboard && state.adminRole === "passaic");
   adminDashboard.classList.toggle("caseworker-mode", onAdminDashboard && state.adminRole === "caseworker");
   caseworkerClientScreen.classList.toggle("caseworker-mode", screenId === "caseworker-client-screen");
+  caseworkerDocumentsScreen.classList.toggle("caseworker-mode", screenId === "caseworker-documents-screen");
   appWrap.classList.toggle("county-expanded", onAdminDashboard && state.adminRole === "passaic");
   appWrap.classList.toggle("caseworker-expanded", onCaseworkerScreen && state.adminRole === "caseworker");
 }
@@ -481,6 +704,7 @@ function applyLanguage() {
   document.querySelectorAll(".lang-btn").forEach((button) => {
     button.classList.toggle("active", button.dataset.lang === state.lang);
   });
+  document.documentElement.lang = state.lang;
 
   document.getElementById("login-eyebrow").textContent = isAdmin ? t.adminEyebrow : t.loginEyebrow;
   document.getElementById("login-title").textContent = isAdmin ? t.adminTitle : t.loginTitle;
@@ -513,6 +737,7 @@ function applyLanguage() {
   document.getElementById("code-demo-note").textContent = `${t.demoCode}: ${state.demoCode}`;
   document.getElementById("admin-login-back-btn").textContent = t.adminBack;
   document.getElementById("admin-google-mark").textContent = t.adminMark;
+  document.getElementById("admin-demo-side-eyebrow").textContent = t.loginDemoEyebrow;
   document.getElementById("caseworker-role-btn").textContent = t.adminRoleCaseworker;
   document.getElementById("passaic-role-btn").textContent = t.adminRolePassaic;
   document.getElementById("admin-email-label").textContent = t.adminEmail;
@@ -545,7 +770,7 @@ function applyLanguage() {
       state.adminRole === "caseworker" ? t.adminRoleCaseworker : t.adminRolePassaic
     );
   document.getElementById("admin-role-subtitle").textContent =
-    state.adminRole === "caseworker" && currentWorker ? `${currentWorker.active_cases} active cases` : (
+    state.adminRole === "caseworker" && currentWorker ? formatCountLabel(currentWorker.active_cases, "active case", "active cases", "caso activo", "casos activos") : (
       state.adminRole === "caseworker" ? t.adminSummaryCases : t.adminSummaryCounty
     );
   document.getElementById("county-users-number").textContent = String(passaicCountyMetrics.totalUsers);
@@ -556,18 +781,22 @@ function applyLanguage() {
   document.getElementById("county-apps-label").textContent = t.countyApplications;
 
   document.getElementById("dashboard-eyebrow").textContent = t.dashboardEyebrow;
-  document.getElementById("dashboard-title").textContent = clientFirstName ? `Hi ${clientFirstName}` : t.dashboardTitle;
+  document.getElementById("dashboard-title").textContent = clientFirstName
+    ? (state.lang === "es" ? `Hola ${clientFirstName}` : `Hi ${clientFirstName}`)
+    : t.dashboardTitle;
   document.getElementById("dashboard-subtitle").textContent = t.dashboardSubtitle;
-  document.getElementById("doc-id-title").textContent = t.docIdTitle;
-  document.getElementById("doc-id-text").textContent = t.docIdText;
-  document.getElementById("doc-birth-title").textContent = t.docBirthTitle;
-  document.getElementById("doc-birth-text").textContent = t.docBirthText;
-  document.getElementById("doc-passport-title").textContent = t.docPassportTitle;
-  document.getElementById("doc-passport-text").textContent = t.docPassportText;
-  document.getElementById("doc-ssn-title").textContent = t.docSsnTitle;
-  document.getElementById("doc-ssn-text").textContent = t.docSsnText;
+  document.getElementById("doc-id-title").textContent = state.lang === "es" ? "Ver su ID" : "View Your ID";
+  document.getElementById("doc-id-text").textContent = state.lang === "es" ? "Abra su pagina de documentos" : "Open your document page";
+  document.getElementById("doc-birth-title").textContent = state.lang === "es" ? "Chatee con su trabajador social" : "Chat with Your Case Worker";
+  document.getElementById("doc-birth-text").textContent = state.lang === "es" ? "Abra su conversacion" : "Open your conversation";
+  document.getElementById("doc-passport-title").textContent = state.lang === "es" ? "Notificaciones" : "Notifications";
+  document.getElementById("doc-passport-text").textContent = state.lang === "es" ? "Las actualizaciones apareceran aqui" : "Updates will appear here";
+  document.getElementById("doc-ssn-title").textContent = state.lang === "es" ? "Proximamente" : "Coming Soon";
+  document.getElementById("doc-ssn-text").textContent = state.lang === "es" ? "Vacio por ahora" : "Empty for now";
   document.getElementById("dashboard-note").textContent = t.dashboardNote;
   document.getElementById("dashboard-continue-btn").textContent = t.dashboardContinue;
+  document.getElementById("client-chat-title").textContent = state.lang === "es" ? "💬 Envie un mensaje a su trabajador social" : "💬 Message Your Case Worker";
+  document.getElementById("client-chat-upload-label").textContent = state.lang === "es" ? "Subir imagen" : "Upload Image";
 
   document.getElementById("main-title").textContent = t.mainTitle;
   document.getElementById("main-subtitle").textContent = t.mainSubtitle;
@@ -593,9 +822,93 @@ function applyLanguage() {
   document.getElementById("county-ai-float-btn").textContent = t.countyAiButton;
   document.getElementById("county-ai-title").textContent = t.countyAiTitle;
   document.getElementById("county-ai-subtitle").textContent = t.countyAiSubtitle;
+  document.getElementById("county-ai-note").textContent = state.lang === "es"
+    ? "Este asistente actualmente usa logica simple. Se puede actualizar a una IA real para brindar informacion mas profunda si el sistema es aprobado."
+    : "This assistant currently uses simple logic. It can be upgraded to a real AI (like ChatGPT) to provide deeper insights if the system is approved.";
   document.getElementById("ai-input").placeholder = t.countyAiPlaceholder;
   document.getElementById("ai-ask-btn").textContent = t.countyAiAsk;
+  document.getElementById("county-hero-eyebrow").textContent = state.lang === "es" ? "Coordinacion de vivienda de Passaic County" : "Passaic County Housing Coordination";
+  document.getElementById("county-hero-title").textContent = state.lang === "es" ? "Administre solicitudes, asignaciones y rendimiento del sistema" : "Manage requests, assignments, and system performance";
+  document.getElementById("county-hero-subtitle").textContent = state.lang === "es"
+    ? "Revise solicitudes de clientes, asigne al mejor trabajador y supervise la actividad del condado."
+    : "Review incoming client requests, assign the best worker, and monitor county-wide activity.";
+  document.getElementById("county-hero-badge-queue").textContent = state.lang === "es" ? "Fila de ingreso en vivo" : "Live intake queue";
+  document.getElementById("county-hero-badge-balance").textContent = state.lang === "es" ? "Balance del personal" : "Worker balancing";
+  document.getElementById("county-hero-badge-transport").textContent = state.lang === "es" ? "Monitoreo de transporte" : "Transportation watch";
+  document.getElementById("county-refresh-btn").textContent = state.lang === "es" ? "Actualizar datos" : "Refresh Data";
+  document.getElementById("county-system-reach-kicker").textContent = state.lang === "es" ? "Alcance del sistema" : "System reach";
+  document.getElementById("county-users-note").textContent = state.lang === "es" ? "Actividad en todo el condado en casos abiertos de apoyo de vivienda." : "County-wide activity across open housing support cases.";
+  document.getElementById("county-placement-kicker").textContent = state.lang === "es" ? "Progreso de ubicacion" : "Placement progress";
+  document.getElementById("county-housed-note").textContent = state.lang === "es" ? "Clientes que pasaron de solicitud a ubicacion de vivienda." : "Clients who moved from request to housing placement.";
+  document.getElementById("county-open-workload-kicker").textContent = state.lang === "es" ? "Carga abierta" : "Open workload";
+  document.getElementById("county-apps-note").textContent = state.lang === "es" ? "Solicitudes que siguen en revision, documentos y asignacion." : "Requests still moving through review, documents, and assignment.";
+  document.getElementById("county-ai-kicker").textContent = state.lang === "es" ? "Recomendacion IA" : "AI recommendation";
+  document.getElementById("county-recommended-worker-label").textContent = state.lang === "es" ? "Mejor trabajador sugerido" : "Best Worker Match";
+  document.getElementById("county-recommended-worker-note").textContent = state.lang === "es" ? "Siguiente asignacion sugerida segun carga y balance de fila." : "Suggested next assignment based on workload and queue balance.";
+  document.getElementById("county-queue-kicker").textContent = state.lang === "es" ? "Gestion de fila" : "Queue management";
+  document.getElementById("county-client-requests-title").textContent = state.lang === "es" ? "🏠 Solicitudes de clientes" : "🏠 Client Requests";
+  document.getElementById("county-client-requests-subtitle").textContent = state.lang === "es" ? "Asigne clientes al trabajador con menor carga o elija otro trabajador." : "Assign clients to the lowest-workload case worker or choose a different worker.";
+  document.getElementById("county-bottleneck-kicker").textContent = state.lang === "es" ? "Friccion del sistema" : "System friction";
+  document.getElementById("county-bottleneck-title").textContent = state.lang === "es" ? "⚠️ Cuellos de botella" : "⚠️ Bottlenecks";
+  document.getElementById("county-bottleneck-id").textContent = state.lang === "es" ? "52% atascado en ID estatal" : "52% stuck at State ID";
+  document.getElementById("county-bottleneck-ssn").textContent = state.lang === "es" ? "28% atascado en SSN" : "28% stuck at SSN";
+  document.getElementById("county-bottleneck-birth").textContent = state.lang === "es" ? "20% atascado en acta de nacimiento" : "20% stuck at Birth Certificate";
+  document.getElementById("county-transport-impact-kicker").textContent = state.lang === "es" ? "Riesgo de movilidad" : "Mobility risk";
+  document.getElementById("county-transport-impact-title").textContent = state.lang === "es" ? "🚗 Impacto del transporte" : "🚗 Transport Impact";
+  document.getElementById("county-transport-impact-note").textContent = state.lang === "es" ? "de los usuarios necesitan apoyo de transporte y es mas probable que pierdan citas." : "of users need transportation support and are more likely to miss appointments.";
+  document.getElementById("county-activity-kicker").textContent = state.lang === "es" ? "Flujo de actividad" : "Activity feed";
+  document.getElementById("county-notifications-title").textContent = state.lang === "es" ? "🔔 Notificaciones" : "🔔 Notifications";
+  document.getElementById("county-notifications-subtitle").textContent = state.lang === "es" ? "Actividad reciente de asignaciones y del sistema." : "Recent assignment and system activity.";
+  document.getElementById("county-notifications-live-pill").textContent = state.lang === "es" ? "En vivo" : "Live";
+  document.getElementById("county-clear-notifications-btn").textContent = state.lang === "es" ? "Limpiar" : "Clear";
+  document.getElementById("county-staffing-kicker").textContent = state.lang === "es" ? "Vista del personal" : "Staffing view";
+  document.getElementById("county-workers-title").textContent = state.lang === "es" ? "👥 Trabajadores sociales" : "👥 Case Workers";
+  document.getElementById("county-workers-subtitle").textContent = state.lang === "es" ? "Controle la carga y vea el trabajador recomendado para la siguiente asignacion." : "Track workload and see the recommended worker for the next assignment.";
+  document.getElementById("county-workers-pill").textContent = state.lang === "es" ? "Fila equilibrada" : "Balanced queue";
+  document.getElementById("county-field-support-kicker").textContent = state.lang === "es" ? "Apoyo en campo" : "Field support";
+  document.getElementById("county-transport-requests-title").textContent = state.lang === "es" ? "🚗 Solicitudes de transporte" : "🚗 Transport Requests";
+  document.getElementById("county-transport-requests-subtitle").textContent = state.lang === "es" ? "Solicitudes de Uber o transporte enviadas por trabajadores sociales." : "Uber or transportation requests sent by case workers.";
+  document.getElementById("county-transport-pill").textContent = state.lang === "es" ? "Prioridad" : "Priority";
+  document.getElementById("county-housing-kicker").textContent = state.lang === "es" ? "Disponibilidad de vivienda" : "Housing availability";
+  document.getElementById("county-housing-title").textContent = state.lang === "es" ? "🛏️ Vivienda disponible del condado" : "🛏️ County Housing Availability";
+  document.getElementById("county-housing-subtitle").textContent = state.lang === "es" ? "Camas disponibles ahora y proximas aperturas en ciudades de Passaic County." : "Beds available now and upcoming housing openings across Passaic County cities.";
+  document.getElementById("county-housing-pill").textContent = state.lang === "es" ? "Vivienda en vivo" : "Live housing";
+  document.getElementById("county-worker-modal-eyebrow").textContent = state.lang === "es" ? "Vista de personal de Passaic County" : "Passaic County Staffing View";
+  document.getElementById("county-worker-modal-title").textContent = state.lang === "es" ? "Perfil del trabajador social" : "Case Worker Profile";
+  document.getElementById("ai-response").textContent = state.lang === "es"
+    ? "La mayoria de las demoras ocurren en el paso de la ID estatal por citas y transporte."
+    : "Most delays are happening at the State ID step due to appointments and transportation issues.";
 
+  refreshLocalizedScreens();
+
+}
+
+function refreshLocalizedScreens() {
+  if (!document.getElementById("dashboard-screen").classList.contains("hidden")) {
+    renderClientPortalChat();
+  }
+
+  if (!document.getElementById("admin-dashboard-screen").classList.contains("hidden")) {
+    if (state.adminRole === "passaic") {
+      renderCountyDashboard();
+    } else {
+      renderCaseWorkerDashboard();
+    }
+  }
+
+  if (!document.getElementById("caseworker-client-screen").classList.contains("hidden")) {
+    renderCaseFileView();
+  }
+
+  if (!document.getElementById("caseworker-documents-screen").classList.contains("hidden")) {
+    renderCaseworkerDocumentsView();
+  }
+
+  if (!document.getElementById("client-documents-screen").classList.contains("hidden")) {
+    renderClientDocumentsView();
+  }
+
+  void renderCurrentPlan();
 }
 
 function setAuthView(view) {
@@ -604,7 +917,7 @@ function setAuthView(view) {
 
   document.getElementById("user-login-panel").classList.toggle("hidden", showAdmin);
   document.getElementById("admin-login-panel").classList.toggle("hidden", !showAdmin);
-  document.getElementById("login-demo-card").classList.toggle("hidden", showAdmin);
+  document.getElementById("login-demo-card").classList.remove("hidden");
   document.getElementById("login-error").textContent = "";
   openScreen("login-screen");
 }
@@ -651,10 +964,7 @@ function setLoginView(view) {
 }
 
 function formatDocumentLabel(value) {
-  return value
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+  return getDocumentTypeLabel(value);
 }
 
 function escapeHtml(value) {
@@ -667,7 +977,12 @@ function escapeHtml(value) {
 }
 
 function renderDemoList(label, entries) {
-  return `${label}: ${entries.map((entry) => `<span class="demo-line">${escapeHtml(entry)}</span>`).join("")}`;
+  return `
+    <div class="demo-note-title">${escapeHtml(label)}</div>
+    <div class="demo-note-list">
+      ${entries.map((entry) => `<div class="demo-note-item">${escapeHtml(entry)}</div>`).join("")}
+    </div>
+  `;
 }
 
 function renderDemoSection(label, entries) {
@@ -679,7 +994,38 @@ function renderDemoSection(label, entries) {
   `;
 }
 
+function renderAdminCredentialPairs(title, accounts) {
+  return `
+    <div class="login-demo-section">
+      <span class="login-demo-label">${escapeHtml(title)}</span>
+      ${accounts.map((account) => `
+        <div class="login-demo-item">
+          <div>${escapeHtml(account.email)}</div>
+          <div>${escapeHtml(state.lang === "es" ? `Contrasena: ${account.password}` : `Pass: ${account.password}`)}</div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderLoginDemoPanel(t, clientPhoneList, clientUsernameList, clientPasswordList) {
+  if (state.authView === "admin") {
+    const title = state.adminRole === "caseworker"
+      ? (state.lang === "es" ? "Demo de trabajador social" : "Case Worker Demo")
+      : (state.lang === "es" ? "Demo de Passaic County" : "Passaic County Demo");
+    const sections = state.adminRole === "caseworker"
+      ? [
+        renderAdminCredentialPairs(title, CASE_WORKER_ACCOUNTS)
+      ]
+      : [
+        renderAdminCredentialPairs(title, [{ email: state.demoAdminEmail, password: ADMIN_CREDENTIALS.password }])
+      ];
+
+    document.getElementById("login-demo-title").textContent = title;
+    document.getElementById("login-demo-list").innerHTML = sections.join("");
+    return;
+  }
+
   const title = state.loginView === "phone" ? t.loginDemoPhoneTitle : t.loginDemoUsernameTitle;
   const sections = state.loginView === "phone"
     ? [renderDemoSection(t.demoPhone, clientPhoneList)]
@@ -790,7 +1136,9 @@ async function loadClientMessages(clientId, workerId = null) {
 }
 
 function showServerOfflineMessage() {
-  return "Server not running. Please start backend.";
+  return state.lang === "es"
+    ? "El servidor no esta en ejecucion. Inicie el backend."
+    : "Server not running. Please start backend.";
 }
 
 function renderCountyMetrics() {
@@ -807,6 +1155,32 @@ function renderCountyMetrics() {
     : "-";
 }
 
+function getClientProgress(client) {
+  if (client.worker_status === "completed" || client.status === "completed") {
+    return 100;
+  }
+
+  const missingCount = Array.isArray(client.missing_documents) ? client.missing_documents.length : 0;
+  return Math.max(20, 100 - (missingCount * 25));
+}
+
+function getWorkerProfile(workerId) {
+  const worker = state.countyData.workers.find((item) => item.id === workerId);
+  if (!worker) return null;
+
+  const clients = state.countyData.clients.filter((client) => client.assigned_worker === workerId);
+  const averageProgress = clients.length
+    ? Math.round(clients.reduce((total, client) => total + getClientProgress(client), 0) / clients.length)
+    : 0;
+
+  return {
+    worker,
+    office: countyWorkerOffices[workerId] || "Passaic County Main Office",
+    clients,
+    averageProgress
+  };
+}
+
 function renderWorkers() {
   const list = document.getElementById("worker-load-list");
 
@@ -815,7 +1189,7 @@ function renderWorkers() {
     const loadState = worker.active_cases >= 7 ? "high" : worker.active_cases >= 5 ? "medium" : "low";
 
     return `
-      <div class="worker-load-card ${isRecommended ? "recommended" : ""}">
+      <button class="worker-load-card county-worker-trigger ${isRecommended ? "recommended" : ""}" type="button" data-worker-id="${escapeHtml(worker.id)}">
         <div>
           <strong>${escapeHtml(worker.name)}</strong>
           <p class="small-text">Worker ID: ${escapeHtml(worker.id)}</p>
@@ -824,33 +1198,136 @@ function renderWorkers() {
           <span class="worker-load-badge ${loadState}">${worker.active_cases} active</span>
           ${isRecommended ? '<span class="worker-recommended-flag">Recommended</span>' : ""}
         </div>
-      </div>
+      </button>
     `;
   }).join("");
+
+  list.querySelectorAll(".county-worker-trigger").forEach((button) => {
+    button.addEventListener("click", () => {
+      openWorkerProfile(button.dataset.workerId);
+    });
+  });
+}
+
+function renderWorkerProfileModal() {
+  const overlay = document.getElementById("county-worker-modal");
+  const body = document.getElementById("county-worker-modal-body");
+  const profile = state.countyData.selectedWorkerId ? getWorkerProfile(state.countyData.selectedWorkerId) : null;
+
+  if (!profile) {
+    overlay.classList.add("hidden");
+    overlay.hidden = true;
+    body.innerHTML = "";
+    return;
+  }
+
+  body.innerHTML = `
+    <div class="county-worker-profile-head">
+      <div>
+        <span class="panel-kicker">Staff profile</span>
+        <h3>${escapeHtml(profile.worker.name)}</h3>
+        <p class="small-text">${escapeHtml(profile.office)} • ${escapeHtml(profile.worker.id)}</p>
+      </div>
+      <span class="worker-load-badge ${profile.worker.active_cases >= 7 ? "high" : profile.worker.active_cases >= 5 ? "medium" : "low"}">
+        ${profile.worker.active_cases} active cases
+      </span>
+    </div>
+
+    <div class="county-worker-profile-grid">
+      <div class="county-worker-profile-card">
+        <span class="metric-kicker">Office</span>
+        <strong>${escapeHtml(profile.office)}</strong>
+        <p class="small-text">Current Passaic County assignment location.</p>
+      </div>
+      <div class="county-worker-profile-card">
+        <span class="metric-kicker">Case load</span>
+        <strong>${profile.clients.length}</strong>
+        <p class="small-text">Clients currently assigned to this worker.</p>
+      </div>
+      <div class="county-worker-profile-card">
+        <span class="metric-kicker">Client progress</span>
+        <strong>${profile.averageProgress}%</strong>
+        <p class="small-text">Average case progress across assigned clients.</p>
+      </div>
+    </div>
+
+    <div class="county-worker-profile-section">
+      <div class="county-section-head">
+        <div>
+          <p class="panel-kicker">Assigned clients</p>
+          <strong>Current caseload</strong>
+          <p class="small-text">Progress is estimated from case status and remaining document steps.</p>
+        </div>
+      </div>
+      <div class="county-worker-client-list">
+        ${profile.clients.length ? profile.clients.map((client) => `
+          <article class="county-worker-client-card">
+            <div class="county-worker-client-top">
+              <div>
+                <strong>${escapeHtml(client.name)}</strong>
+                <p class="small-text">${escapeHtml(client.city)} • ${escapeHtml(client.id)}</p>
+              </div>
+              <span class="client-status-pill ${escapeHtml(client.status)}">${escapeHtml(client.status)}</span>
+            </div>
+            <div class="county-worker-progress-row">
+              <span class="small-text">${getClientProgress(client)}% complete</span>
+              <span class="small-text">${Math.max(0, Array.isArray(client.missing_documents) ? client.missing_documents.length : 0)} document steps left</span>
+            </div>
+            <div class="county-worker-progress-bar">
+              <span style="width: ${getClientProgress(client)}%"></span>
+            </div>
+          </article>
+        `).join("") : '<div class="county-empty-state">No clients assigned to this worker yet.</div>'}
+      </div>
+    </div>
+  `;
+
+  overlay.classList.remove("hidden");
+  overlay.hidden = false;
+}
+
+function openWorkerProfile(workerId) {
+  state.countyData.selectedWorkerId = workerId;
+  renderWorkerProfileModal();
+}
+
+function closeWorkerProfile() {
+  state.countyData.selectedWorkerId = null;
+  renderWorkerProfileModal();
 }
 
 function renderNotifications() {
   const list = document.getElementById("county-notification-list");
 
   if (!state.countyData.notifications.length) {
-    list.innerHTML = '<div class="county-empty-state">No county notifications yet.</div>';
+    list.innerHTML = `<div class="county-empty-state">${localizeText("No county notifications yet.")}</div>`;
     return;
   }
 
   list.innerHTML = state.countyData.notifications.map((item) => {
     const timestamp = new Date(item.timestamp);
     const formatted = Number.isNaN(timestamp.getTime())
-      ? "Just now"
-      : timestamp.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      ? localizeText("Just now")
+      : timestamp.toLocaleString(getLocale(), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
     const isNew = item.id === state.countyData.highlightNotificationId;
 
     return `
       <div class="notification-card ${isNew ? "notification-card-new" : ""}">
-        <strong>${escapeHtml(item.message)}</strong>
+        <strong>${escapeHtml(localizeText(item.message))}</strong>
         <span class="small-text">${escapeHtml(formatted)}</span>
       </div>
     `;
   }).join("");
+}
+
+function clearCountyNotifications() {
+  const importantNotification = state.countyData.notifications.find(
+    (item) => item.id === state.countyData.highlightNotificationId
+  ) || state.countyData.notifications[0] || null;
+
+  state.countyData.notifications = importantNotification ? [importantNotification] : [];
+  state.countyData.highlightNotificationId = importantNotification ? importantNotification.id : null;
+  renderNotifications();
 }
 
 function renderTransportRequests() {
@@ -859,25 +1336,85 @@ function renderTransportRequests() {
   list.innerHTML = state.countyData.transportRequests.length ? state.countyData.transportRequests.map((item) => {
     const timestamp = new Date(item.timestamp);
     const formatted = Number.isNaN(timestamp.getTime())
-      ? "Just now"
-      : timestamp.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      ? localizeText("Just now")
+      : timestamp.toLocaleString(getLocale(), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
     return `
       <div class="notification-card">
-        <strong>${escapeHtml(item.message)}</strong>
+        <strong>${escapeHtml(localizeText(item.message))}</strong>
         <span class="small-text">${escapeHtml(formatted)}</span>
       </div>
     `;
-  }).join("") : '<div class="county-empty-state">No transportation requests yet.</div>';
+  }).join("") : `<div class="county-empty-state">${localizeText("No transportation requests yet.")}</div>`;
+}
+
+function renderCountyHousingAvailability() {
+  const panel = document.getElementById("county-housing-availability");
+
+  if (!housingData.length) {
+    panel.innerHTML = `<div class="county-empty-state">${localizeText("No housing availability data yet.")}</div>`;
+    return;
+  }
+
+  const rows = housingData.map((item) => {
+    const availableNow = item.units;
+    const comingSoon = Math.max(1, Math.round(item.units * 0.5));
+
+    return `
+      <article class="county-housing-city-card">
+        <div class="county-housing-city-head">
+          <div>
+            <strong>${escapeHtml(item.city)}</strong>
+            <p class="small-text">${localizeText("Passaic County housing network")}</p>
+          </div>
+          <span class="county-count-pill">${availableNow + comingSoon} total</span>
+        </div>
+        <div class="county-housing-stat-grid">
+          <div class="county-housing-stat available">
+            <span class="metric-kicker">${localizeText("Available now")}</span>
+            <strong>${availableNow}</strong>
+            <p class="small-text">${localizeText("Beds ready for placement now.")}</p>
+          </div>
+          <div class="county-housing-stat soon">
+            <span class="metric-kicker">${localizeText("Coming soon")}</span>
+            <strong>${comingSoon}</strong>
+            <p class="small-text">${localizeText("Beds expected to open shortly.")}</p>
+          </div>
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  panel.innerHTML = `
+    <div class="county-housing-availability-list">
+      ${rows}
+    </div>
+  `;
 }
 
 function renderClients() {
   const list = document.getElementById("client-request-list");
   const pendingCount = state.countyData.clients.filter((client) => client.status !== "assigned").length;
-  document.getElementById("county-client-count").textContent = `${pendingCount} open`;
+  document.getElementById("county-client-count").textContent = formatCountLabel(pendingCount, "open", "open", "abierto", "abiertos");
   const workerNameById = Object.fromEntries(state.countyData.workers.map((worker) => [worker.id, worker.name]));
+  const sortedClients = [...state.countyData.clients].sort((left, right) => {
+    const getPriority = (client) => {
+      const hasAssignedWorker = Boolean(client.assigned_worker);
+      const isPending = client.status === "pending" || client.worker_status === "pending_approval";
+      const isActiveAssigned = client.status === "active" && hasAssignedWorker;
 
-  list.innerHTML = state.countyData.clients.map((client) => {
+      if (!hasAssignedWorker) return 0;
+      if (isPending) return 1;
+      if (isActiveAssigned) return 3;
+      return 2;
+    };
+
+    const priorityDiff = getPriority(left) - getPriority(right);
+    if (priorityDiff !== 0) return priorityDiff;
+    return String(left.id).localeCompare(String(right.id));
+  });
+
+  list.innerHTML = sortedClients.map((client) => {
     const selectedWorkerId = client.assigned_worker || state.countyData.recommendedWorkerId || "";
     const workerOptions = state.countyData.workers.map((worker) => (
       `<option value="${escapeHtml(worker.id)}" ${worker.id === selectedWorkerId ? "selected" : ""}>${escapeHtml(worker.name)} (${worker.active_cases})</option>`
@@ -893,17 +1430,21 @@ function renderClients() {
             <strong>${escapeHtml(client.name)}</strong>
             <p class="small-text">${escapeHtml(client.city)} • ${escapeHtml(client.id)}</p>
           </div>
-          <span class="client-status-pill ${client.status}">${escapeHtml(client.status)}</span>
+          <span class="client-status-pill ${client.status}">${escapeHtml(getStatusText(client.status))}</span>
         </div>
 
         <div class="client-tag-row">${tags}</div>
 
         <div class="client-request-meta">
           <span class="transport-flag ${client.transportation_needed ? "needed" : "clear"}">
-            ${client.transportation_needed ? "Transport needed" : "Transport clear"}
+            ${client.transportation_needed ? (state.lang === "es" ? "Transporte necesario" : "Transport needed") : (state.lang === "es" ? "Transporte cubierto" : "Transport clear")}
           </span>
           <span class="small-text">
-            ${client.assigned_worker ? `Assigned to ${escapeHtml(workerNameById[client.assigned_worker] || client.assigned_worker)}` : "Not assigned yet"}
+            ${client.assigned_worker
+              ? (state.lang === "es"
+                ? `Asignado a ${escapeHtml(workerNameById[client.assigned_worker] || client.assigned_worker)}`
+                : `Assigned to ${escapeHtml(workerNameById[client.assigned_worker] || client.assigned_worker)}`)
+              : (state.lang === "es" ? "Todavia no asignado" : "Not assigned yet")}
           </span>
         </div>
 
@@ -912,7 +1453,7 @@ function renderClients() {
             ${workerOptions}
           </select>
           <button class="secondary-btn assign-worker-btn" type="button" data-client-id="${escapeHtml(client.id)}">
-            Assign
+            ${state.lang === "es" ? "Asignar" : "Assign"}
           </button>
         </div>
       </article>
@@ -931,6 +1472,7 @@ function renderCountyDashboard() {
   renderWorkers();
   renderNotifications();
   renderTransportRequests();
+  renderCountyHousingAvailability();
   renderClients();
 }
 
@@ -975,6 +1517,9 @@ async function loadCountyDashboard() {
       <div class="county-empty-state">${showServerOfflineMessage()}</div>
     `;
     document.getElementById("county-transport-request-list").innerHTML = `
+      <div class="county-empty-state">${showServerOfflineMessage()}</div>
+    `;
+    document.getElementById("county-housing-availability").innerHTML = `
       <div class="county-empty-state">${showServerOfflineMessage()}</div>
     `;
     document.getElementById("ai-response").innerText = showServerOfflineMessage();
@@ -1144,8 +1689,48 @@ function generateDemoIdentity() {
 // Keep login success separate from the screen implementation.
 function showApp() {
   loadClientPortalChat();
+  hideClientChatPanel();
   applyLanguage();
   openScreen("dashboard-screen");
+}
+
+function hideClientChatPanel() {
+  const panel = document.getElementById("client-chat-panel");
+  if (panel) {
+    panel.classList.add("hidden");
+  }
+  state.clientPortalData.isChatPanelOpen = false;
+  if (state.clientPortalData.chatRefreshIntervalId) {
+    window.clearInterval(state.clientPortalData.chatRefreshIntervalId);
+    state.clientPortalData.chatRefreshIntervalId = null;
+  }
+}
+
+async function showClientChatPanel() {
+  const panel = document.getElementById("client-chat-panel");
+  if (panel) {
+    state.clientPortalData.isChatPanelOpen = true;
+    panel.classList.remove("hidden");
+    await loadClientPortalChat();
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!state.clientPortalData.chatRefreshIntervalId) {
+      state.clientPortalData.chatRefreshIntervalId = window.setInterval(async () => {
+        if (!state.clientPortalData.isChatPanelOpen || document.getElementById("dashboard-screen").classList.contains("hidden")) {
+          return;
+        }
+        await loadClientPortalChat();
+      }, 4000);
+    }
+  }
+}
+
+async function showClientDocuments(documentType) {
+  try {
+    await loadClientDocuments(state.clientPortalData.currentClientId, "client");
+  } catch (error) {
+    state.clientPortalData.documents = [];
+  }
+  openClientDocumentsPage(documentType);
 }
 
 function getClientAccountByPhone(phone) {
@@ -1169,34 +1754,570 @@ function getFirstName(name) {
   return name ? name.trim().split(/\s+/)[0] : "";
 }
 
+function formatChatTime(timestampRaw) {
+  return formatLocalizedTime(timestampRaw);
+}
+
+function getCaseMessages(clientId, workerId) {
+  return (state.caseWorkerData.messagesByClient[clientId] || []).filter((message) => (
+    message.client_id === clientId &&
+    (!workerId || message.worker_id === workerId)
+  ));
+}
+
+function buildMessageImageHtml(message) {
+  if (!message.image_data) {
+    return "";
+  }
+
+  const safeName = escapeHtml(message.image_name || "shared-image");
+  return `
+    <a class="worker-chat-image-link" href="${message.image_data}" download="${safeName}">
+      <img class="worker-chat-image" src="${message.image_data}" alt="${safeName}" />
+    </a>
+    <a class="worker-chat-download" href="${message.image_data}" download="${safeName}">${localizeText("Save image")}</a>
+  `;
+}
+
+function buildChatMessagesHtml(messages, emptyLabel, viewerLabel) {
+  if (!messages.length) {
+    return `<div class="county-empty-state">${localizeText(emptyLabel)}</div>`;
+  }
+
+  return messages.map((message) => `
+    <div class="worker-chat-message ${message.sender}">
+      <div class="worker-chat-message-top">
+        <span class="worker-chat-sender">${message.sender === "worker" ? localizeText("Case Worker") : localizeText(viewerLabel)}</span>
+        <span class="worker-chat-time">${escapeHtml(formatChatTime(message.timestamp))}</span>
+      </div>
+      ${message.text ? `<p>${escapeHtml(message.text)}</p>` : ""}
+      ${buildMessageImageHtml(message)}
+    </div>
+  `).join("");
+}
+
+function getChatTranscript(client, messages) {
+  return messages.map((message) => {
+    const sender = message.sender === "worker" ? localizeText("Case Worker") : client.name;
+    const imageLine = message.image_name ? ` [Image: ${message.image_name}]` : "";
+    return `[${formatChatTime(message.timestamp)}] ${sender}: ${message.text || ""}${imageLine}`.trim();
+  }).join("\n");
+}
+
+function downloadTextFile(filename, content) {
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Could not read image."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function setPendingChatImage(file, owner) {
+  if (!file) {
+    if (owner === "client") {
+      state.clientPortalData.pendingImage = null;
+    } else {
+      state.caseWorkerData.pendingChatImage = null;
+    }
+    return;
+  }
+
+  const imagePayload = {
+    name: file.name,
+    type: file.type || "image/jpeg",
+    data: await readFileAsDataUrl(file)
+  };
+
+  if (owner === "client") {
+    state.clientPortalData.pendingImage = imagePayload;
+  } else {
+    state.caseWorkerData.pendingChatImage = imagePayload;
+  }
+}
+
+function clearPendingChatImage(owner) {
+  if (owner === "client") {
+    state.clientPortalData.pendingImage = null;
+    const input = document.getElementById("client-chat-image-input");
+    if (input) input.value = "";
+  } else {
+    state.caseWorkerData.pendingChatImage = null;
+    const input = document.getElementById("worker-chat-image-input");
+    if (input) input.value = "";
+  }
+}
+
+async function postChatMessage({ clientId, workerId, sender, text, image }) {
+  return fetchJson("/api/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: clientId,
+      worker_id: workerId,
+      sender,
+      text,
+      image_name: image?.name || null,
+      image_data: image?.data || null,
+      image_type: image?.type || null
+    })
+  });
+}
+
+function getDocumentsForType(documents, documentType) {
+  return documents.filter((item) => item.document_type === documentType);
+}
+
+async function loadClientDocuments(clientId, owner = "client") {
+  const data = await fetchJson(`/api/client-documents?client_id=${encodeURIComponent(clientId)}`);
+
+  if (owner === "worker") {
+    state.caseWorkerData.documents = data.documents || [];
+    return state.caseWorkerData.documents;
+  }
+
+  state.clientPortalData.documents = data.documents || [];
+  return state.clientPortalData.documents;
+}
+
+async function postClientDocument({ clientId, workerId, documentType, file, uploadedBy }) {
+  return fetchJson("/api/client-documents", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: clientId,
+      worker_id: workerId,
+      document_type: documentType,
+      file_name: file.name,
+      file_data: file.data,
+      file_type: file.type,
+      uploaded_by: uploadedBy
+    })
+  });
+}
+
+async function deleteClientDocument(documentId, clientId) {
+  return fetchJson(`/api/client-documents/${encodeURIComponent(documentId)}?client_id=${encodeURIComponent(clientId)}`, {
+    method: "DELETE"
+  });
+}
+
+function openClientDocumentsPage(documentType = null) {
+  state.clientPortalData.selectedDocumentType = documentType;
+  renderClientDocumentsView();
+  openScreen("client-documents-screen");
+}
+
+async function openCaseworkerDocumentsPage(clientId, documentType = null) {
+  state.caseWorkerData.fullCaseViewId = clientId;
+  state.caseWorkerData.activeWorkspacePanel = null;
+  try {
+    await loadClientDocuments(clientId, "worker");
+  } catch (error) {
+    state.caseWorkerData.documents = [];
+  }
+  state.caseWorkerData.selectedClientId = clientId;
+  state.clientPortalData.selectedDocumentType = documentType;
+  renderCaseworkerDocumentsView();
+  openScreen("caseworker-documents-screen");
+}
+
+function buildDocumentCardsHtml(selectedType, documents, viewerMode) {
+  return DOCUMENT_TYPES.map((item) => {
+    const isSelected = selectedType === item.key;
+    const documentCount = getDocumentsForType(documents, item.key).length;
+    const label = getDocumentTypeLabel(item.key);
+    const visualClass = item.key === "state_id"
+      ? "id-art"
+      : item.key === "birth_certificate"
+        ? "birth-art"
+        : item.key === "passport"
+          ? "passport-art"
+          : "ssn-art";
+    const description = isSelected
+      ? (state.lang === "es"
+        ? `Abrir ${viewerMode === "workspace" ? "area de trabajo" : "visor"} para ${label}.`
+        : `Open ${viewerMode} for ${label}.`)
+      : localizeText("Click to reveal this document area.");
+
+    return `
+      <button class="document-page-card ${isSelected ? "selected" : ""}" type="button" data-document-card="${item.key}">
+        <span class="doc-art document-page-visual ${visualClass}" aria-hidden="true"></span>
+        <span class="document-page-card-top">
+          <strong>${escapeHtml(label)}</strong>
+          <span class="county-count-pill">${formatCountLabel(documentCount, "file", "files", "archivo", "archivos")}</span>
+        </span>
+        <p class="small-text">${escapeHtml(description)}</p>
+      </button>
+    `;
+  }).join("");
+}
+
+function buildDocumentGalleryHtml(documents, options = {}) {
+  const {
+    removable = false
+  } = options;
+
+  if (!documents.length) {
+    return `<div class="county-empty-state">${localizeText("No uploaded files for this document yet.")}</div>`;
+  }
+
+  return documents.map((item) => `
+    <article class="document-file-card">
+      <a class="document-file-image-link" href="${item.file_data}" download="${escapeHtml(item.file_name)}">
+        <img class="document-file-image" src="${item.file_data}" alt="${escapeHtml(item.file_name)}" />
+      </a>
+      <div class="document-file-meta">
+        <strong>${escapeHtml(item.file_name)}</strong>
+        <p class="small-text">${escapeHtml(item.uploaded_by === "worker" ? localizeText("Uploaded by case worker on") : localizeText("Uploaded by client on"))} ${escapeHtml(formatChatTime(item.uploaded_at))}</p>
+        <div class="document-file-actions">
+          <a class="worker-chat-download" href="${item.file_data}" download="${escapeHtml(item.file_name)}">${localizeText("Save file")}</a>
+          ${removable ? `<button class="secondary-btn document-remove-btn" type="button" data-remove-document-id="${escapeHtml(item.id)}">${localizeText("Remove")}</button>` : ""}
+        </div>
+      </div>
+    </article>
+  `).join("");
+}
+
+function renderCaseworkerDocumentsView() {
+  const container = document.getElementById("caseworker-documents-view");
+  const client = state.caseWorkerData.clients.find((item) => item.id === state.caseWorkerData.fullCaseViewId);
+
+  if (!client) {
+    container.innerHTML = `<div class="county-empty-state">${localizeText("Select a client to manage documents.")}</div>`;
+    return;
+  }
+
+  const selectedType = state.clientPortalData.selectedDocumentType;
+  const selectedLabel = selectedType ? getDocumentTypeLabel(selectedType) : (state.lang === "es" ? "Documento" : "Document");
+  const selectedDocuments = selectedType ? getDocumentsForType(state.caseWorkerData.documents, selectedType) : [];
+  const pendingFile = selectedType ? state.caseWorkerData.pendingDocumentByType[selectedType] : null;
+
+  container.innerHTML = `
+    <div class="document-page-shell">
+      <div class="screen-top-row caseworker-file-top">
+        <button class="back-link-btn screen-back-btn" type="button" id="caseworker-documents-back-btn">Go Back</button>
+      </div>
+      <div class="caseworker-file-hero">
+        <div>
+          <p class="eyebrow">${localizeText("Client documents")}</p>
+          <h2>${escapeHtml(client.name)}</h2>
+          <p class="small-text">${escapeHtml(client.city)} • ${escapeHtml(client.id)}</p>
+        </div>
+      </div>
+      <div class="document-page-grid">
+        <aside class="caseworker-panel">
+          <strong>${localizeText("Document Types")}</strong>
+          <p class="small-text">${localizeText("All uploads here are linked directly to this client.")}</p>
+          <div class="document-page-card-list">
+            ${buildDocumentCardsHtml(selectedType, state.caseWorkerData.documents, "workspace")}
+          </div>
+        </aside>
+        <div class="caseworker-panel">
+          ${selectedType ? `
+            <div class="workspace-panel-head">
+              <div>
+                <strong>${escapeHtml(selectedLabel)}</strong>
+                <p class="small-text">${localizeText("Upload images for this document and review previously saved files.")}</p>
+              </div>
+            </div>
+            <div class="document-upload-toolbar">
+              <label class="secondary-btn chat-upload-btn" for="caseworker-document-input">${state.lang === "es" ? `Subir ${escapeHtml(selectedLabel)}` : `Upload ${escapeHtml(selectedLabel)}`}</label>
+              <input id="caseworker-document-input" class="chat-upload-input" type="file" accept="image/*" />
+              <button class="secondary-btn worker-save-notes-btn" type="button" id="caseworker-document-save-btn" ${pendingFile ? "" : "disabled"}>${localizeText("Save Upload")}</button>
+            </div>
+            <div id="caseworker-document-preview">
+              ${pendingFile ? `
+                <div class="chat-image-preview-card">
+                  <img src="${pendingFile.data}" alt="${escapeHtml(pendingFile.name)}" />
+                  <div>
+                    <strong>${escapeHtml(pendingFile.name)}</strong>
+                    <button class="secondary-btn chat-image-remove-btn" type="button" id="caseworker-document-remove-btn">${localizeText("Remove")}</button>
+                  </div>
+                </div>
+              ` : ""}
+            </div>
+            <div class="document-file-grid">
+              ${buildDocumentGalleryHtml(selectedDocuments, { removable: true })}
+            </div>
+          ` : `
+            <div class="document-page-empty">
+              <strong>${localizeText("Select one of the 4 document cards.")}</strong>
+              <p class="small-text">${localizeText("Unopened documents stay blurred until clicked.")}</p>
+            </div>
+          `}
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("caseworker-documents-back-btn").addEventListener("click", () => {
+    renderCaseFileView();
+    openScreen("caseworker-client-screen");
+  });
+
+  container.querySelectorAll("[data-document-card]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.clientPortalData.selectedDocumentType = button.dataset.documentCard;
+      renderCaseworkerDocumentsView();
+    });
+  });
+
+  const uploadInput = document.getElementById("caseworker-document-input");
+  if (uploadInput && selectedType) {
+    uploadInput.addEventListener("change", async (event) => {
+      const [file] = Array.from(event.target.files || []);
+      state.caseWorkerData.pendingDocumentByType[selectedType] = file ? {
+        name: file.name,
+        type: file.type || "image/jpeg",
+        data: await readFileAsDataUrl(file)
+      } : null;
+      renderCaseworkerDocumentsView();
+    });
+  }
+
+  const removeButton = document.getElementById("caseworker-document-remove-btn");
+  if (removeButton && selectedType) {
+    removeButton.addEventListener("click", () => {
+      delete state.caseWorkerData.pendingDocumentByType[selectedType];
+      renderCaseworkerDocumentsView();
+    });
+  }
+
+  const saveButton = document.getElementById("caseworker-document-save-btn");
+  if (saveButton && selectedType) {
+    saveButton.addEventListener("click", async () => {
+      const pending = state.caseWorkerData.pendingDocumentByType[selectedType];
+      if (!pending) return;
+
+      await postClientDocument({
+        clientId: client.id,
+        workerId: state.caseWorkerData.currentWorkerId,
+        documentType: selectedType,
+        file: pending,
+        uploadedBy: "worker"
+      });
+
+      delete state.caseWorkerData.pendingDocumentByType[selectedType];
+      await loadClientDocuments(client.id, "worker");
+      if (state.clientPortalData.currentClientId === client.id) {
+        await loadClientDocuments(client.id, "client");
+      }
+      renderCaseworkerDocumentsView();
+    });
+  }
+
+  container.querySelectorAll("[data-remove-document-id]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await deleteClientDocument(button.dataset.removeDocumentId, client.id);
+      await loadClientDocuments(client.id, "worker");
+      if (state.clientPortalData.currentClientId === client.id) {
+        await loadClientDocuments(client.id, "client");
+      }
+      renderCaseworkerDocumentsView();
+    });
+  });
+}
+
+function renderClientDocumentsView() {
+  const container = document.getElementById("client-documents-view");
+  const account = getCurrentClientAccount();
+  const currentClient = state.caseWorkerData.clients.find((item) => item.id === state.clientPortalData.currentClientId) || null;
+  const selectedType = state.clientPortalData.selectedDocumentType;
+  const selectedLabel = selectedType ? getDocumentTypeLabel(selectedType) : (state.lang === "es" ? "Documento" : "Document");
+  const selectedDocuments = selectedType ? getDocumentsForType(state.clientPortalData.documents, selectedType) : [];
+  const pendingFile = selectedType ? state.clientPortalData.pendingDocumentByType[selectedType] : null;
+
+  container.innerHTML = `
+    <div class="document-page-shell">
+      <div class="screen-top-row caseworker-file-top">
+        <button class="back-link-btn screen-back-btn" type="button" id="client-documents-back-btn">Go Back</button>
+      </div>
+      <div class="caseworker-file-hero">
+        <div>
+          <p class="eyebrow">${localizeText("My documents")}</p>
+          <h2>${escapeHtml(account?.name || localizeText("Client Documents"))}</h2>
+          <p class="small-text">${localizeText("Files uploaded by your case worker for your case.")}</p>
+        </div>
+      </div>
+      <div class="caseworker-panel client-document-card-panel">
+        <strong>${localizeText("Document Types")}</strong>
+        <p class="small-text">${localizeText("Click a card to reveal that document section.")}</p>
+        <div class="client-document-card-grid">
+          ${buildDocumentCardsHtml(selectedType, state.clientPortalData.documents, "viewer")}
+        </div>
+      </div>
+      <div class="caseworker-panel">
+        <div class="document-page-empty">
+          <strong>${localizeText("Select one of the 4 document cards.")}</strong>
+          <p class="small-text">${localizeText("Click a card to reveal that document section.")}</p>
+        </div>
+      </div>
+      ${selectedType ? `
+        <div class="workspace-overlay">
+          <div class="workspace-modal document-modal">
+            <div class="workspace-panel-body">
+              <div class="workspace-panel-head">
+                <div>
+                  <strong>${escapeHtml(selectedLabel)}</strong>
+                  <p class="small-text">${localizeText("These are the files currently saved to your case.")}</p>
+                </div>
+                <button class="chat-close-btn workspace-close-btn" type="button" id="client-document-close-btn">X</button>
+              </div>
+              <div class="document-upload-toolbar">
+                <label class="secondary-btn chat-upload-btn" for="client-document-input">${state.lang === "es" ? `Subir ${escapeHtml(selectedLabel)}` : `Upload ${escapeHtml(selectedLabel)}`}</label>
+                <input id="client-document-input" class="chat-upload-input" type="file" accept="image/*" />
+                <button class="secondary-btn worker-save-notes-btn" type="button" id="client-document-save-btn" ${pendingFile ? "" : "disabled"}>${localizeText("Save Upload")}</button>
+              </div>
+              <div id="client-document-preview">
+                ${pendingFile ? `
+                  <div class="chat-image-preview-card">
+                    <img src="${pendingFile.data}" alt="${escapeHtml(pendingFile.name)}" />
+                    <div>
+                      <strong>${escapeHtml(pendingFile.name)}</strong>
+                      <button class="secondary-btn chat-image-remove-btn" type="button" id="client-document-remove-btn">${localizeText("Remove")}</button>
+                    </div>
+                  </div>
+                ` : ""}
+              </div>
+              <div class="document-file-grid">
+                ${buildDocumentGalleryHtml(selectedDocuments, { removable: true })}
+              </div>
+            </div>
+          </div>
+        </div>
+      ` : ""}
+    </div>
+  `;
+
+  document.getElementById("client-documents-back-btn").addEventListener("click", () => {
+    openScreen("dashboard-screen");
+  });
+
+  container.querySelectorAll("[data-document-card]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.clientPortalData.selectedDocumentType = button.dataset.documentCard;
+      renderClientDocumentsView();
+    });
+  });
+
+  const closeButton = document.getElementById("client-document-close-btn");
+  if (closeButton) {
+    closeButton.addEventListener("click", () => {
+      state.clientPortalData.selectedDocumentType = null;
+      renderClientDocumentsView();
+    });
+  }
+
+  const uploadInput = document.getElementById("client-document-input");
+  if (uploadInput && selectedType) {
+    uploadInput.addEventListener("change", async (event) => {
+      const [file] = Array.from(event.target.files || []);
+      state.clientPortalData.pendingDocumentByType[selectedType] = file ? {
+        name: file.name,
+        type: file.type || "image/jpeg",
+        data: await readFileAsDataUrl(file)
+      } : null;
+      renderClientDocumentsView();
+    });
+  }
+
+  const removePendingButton = document.getElementById("client-document-remove-btn");
+  if (removePendingButton && selectedType) {
+    removePendingButton.addEventListener("click", () => {
+      delete state.clientPortalData.pendingDocumentByType[selectedType];
+      renderClientDocumentsView();
+    });
+  }
+
+  const saveButton = document.getElementById("client-document-save-btn");
+  if (saveButton && selectedType) {
+    saveButton.addEventListener("click", async () => {
+      const pending = state.clientPortalData.pendingDocumentByType[selectedType];
+      if (!pending) return;
+
+      await postClientDocument({
+        clientId: state.clientPortalData.currentClientId,
+        workerId: currentClient?.assigned_worker || null,
+        documentType: selectedType,
+        file: pending,
+        uploadedBy: "client"
+      });
+
+      delete state.clientPortalData.pendingDocumentByType[selectedType];
+      await loadClientDocuments(state.clientPortalData.currentClientId, "client");
+      if (currentClient?.assigned_worker) {
+        await loadClientDocuments(state.clientPortalData.currentClientId, "worker");
+      }
+      renderClientDocumentsView();
+    });
+  }
+
+  container.querySelectorAll("[data-remove-document-id]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await deleteClientDocument(button.dataset.removeDocumentId, state.clientPortalData.currentClientId);
+      await loadClientDocuments(state.clientPortalData.currentClientId, "client");
+      renderClientDocumentsView();
+    });
+  });
+}
+
 function renderClientPortalChat() {
   const client = state.caseWorkerData.clients.find((item) => item.id === state.clientPortalData.currentClientId);
-  const messages = (state.caseWorkerData.messagesByClient[state.clientPortalData.currentClientId] || [])
-    .filter((message) => (
-      message.client_id === state.clientPortalData.currentClientId &&
-      (!client?.assigned_worker || message.worker_id === client.assigned_worker)
-    ));
+  const messages = getCaseMessages(state.clientPortalData.currentClientId, client?.assigned_worker || null);
   const isCompleted = client?.worker_status === "completed";
   const history = document.getElementById("client-chat-history");
   const status = document.getElementById("client-chat-status");
   const input = document.getElementById("client-chat-input");
   const send = document.getElementById("client-chat-send-btn");
   const note = document.getElementById("client-chat-note");
+  const preview = document.getElementById("client-chat-image-preview");
+  const pendingImage = state.clientPortalData.pendingImage;
 
-  history.innerHTML = messages.length ? messages.map((message) => `
-    <div class="worker-chat-message ${message.sender}">
-      <span class="worker-chat-sender">${message.sender === "worker" ? "Case Worker" : "You"}</span>
-      <p>${escapeHtml(message.text)}</p>
-    </div>
-  `).join("") : '<div class="county-empty-state">No messages yet.</div>';
+  history.innerHTML = buildChatMessagesHtml(messages, "No messages yet.", "You");
+  history.scrollTop = history.scrollHeight;
 
-  status.textContent = isCompleted ? "🔒 Case Completed – Chat Closed" : "🟢 Case Active";
+  status.textContent = isCompleted
+    ? (state.lang === "es" ? "🔒 Caso completado - Chat cerrado" : "🔒 Case Completed - Chat Closed")
+    : (state.lang === "es" ? "🟢 Caso activo" : "🟢 Case Active");
   status.classList.toggle("locked", isCompleted);
   status.classList.toggle("active", !isCompleted);
   input.disabled = Boolean(isCompleted);
   send.disabled = Boolean(isCompleted);
-  input.placeholder = isCompleted ? "Case completed. Chat is closed." : "Type a message";
-  note.textContent = isCompleted ? "Case completed. Chat is closed." : "";
+  input.placeholder = isCompleted ? localizeText("Case completed. Chat is closed.") : localizeText("Type a message");
+  note.textContent = isCompleted ? localizeText("Case completed. Chat is closed.") : "";
+
+  if (preview) {
+    preview.innerHTML = pendingImage ? `
+      <div class="chat-image-preview-card">
+        <img src="${pendingImage.data}" alt="${escapeHtml(pendingImage.name)}" />
+        <div>
+          <strong>${escapeHtml(pendingImage.name)}</strong>
+          <button class="secondary-btn chat-image-remove-btn" type="button" id="client-chat-image-remove-btn" ${isCompleted ? "disabled" : ""}>${localizeText("Remove")}</button>
+        </div>
+      </div>
+    ` : "";
+
+    const removeButton = document.getElementById("client-chat-image-remove-btn");
+    if (removeButton) {
+      removeButton.addEventListener("click", () => {
+        clearPendingChatImage("client");
+        renderClientPortalChat();
+      });
+    }
+  }
 }
 
 async function loadClientPortalChat() {
@@ -1206,10 +2327,14 @@ async function loadClientPortalChat() {
     const currentClient = state.caseWorkerData.clients.find((item) => item.id === state.clientPortalData.currentClientId);
 
     await loadClientMessages(state.clientPortalData.currentClientId, currentClient?.assigned_worker || null);
-    renderClientPortalChat();
+    if (state.clientPortalData.isChatPanelOpen) {
+      renderClientPortalChat();
+    }
   } catch (error) {
-    document.getElementById("client-chat-history").innerHTML = `<div class="county-empty-state">${showServerOfflineMessage()}</div>`;
-    document.getElementById("client-chat-note").textContent = showServerOfflineMessage();
+    if (state.clientPortalData.isChatPanelOpen) {
+      document.getElementById("client-chat-history").innerHTML = `<div class="county-empty-state">${showServerOfflineMessage()}</div>`;
+      document.getElementById("client-chat-note").textContent = showServerOfflineMessage();
+    }
   }
 }
 
@@ -1217,10 +2342,11 @@ async function sendClientMessage() {
   const input = document.getElementById("client-chat-input");
   const clientId = state.clientPortalData.currentClientId;
   const client = state.caseWorkerData.clients.find((item) => item.id === clientId);
+  const image = state.clientPortalData.pendingImage;
 
   if (!input || !client) return;
   if (!client.assigned_worker) {
-    document.getElementById("client-chat-note").textContent = "No case worker is assigned to this case yet.";
+    document.getElementById("client-chat-note").textContent = localizeText("No case worker is assigned to this case yet.");
     return;
   }
   if (client.worker_status === "completed") {
@@ -1229,21 +2355,19 @@ async function sendClientMessage() {
   }
 
   const text = input.value.trim();
-  if (!text) return;
+  if (!text && !image) return;
 
   try {
     state.caseWorkerData.chatNotices[clientId] = "";
-    await fetchJson("/api/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_id: state.clientPortalData.currentClientId,
-        worker_id: client.assigned_worker,
-        sender: "client",
-        text
-      })
+    await postChatMessage({
+      clientId: state.clientPortalData.currentClientId,
+      workerId: client.assigned_worker,
+      sender: "client",
+      text,
+      image
     });
     input.value = "";
+    clearPendingChatImage("client");
     await loadClientPortalChat();
   } catch (error) {
     document.getElementById("client-chat-note").textContent =
@@ -1279,16 +2403,16 @@ function getCurrentCases() {
 }
 
 function getCaseStatusLabel(client) {
-  if (client.status === "completed") return "Completed";
-  if (client.worker_status === "pending_approval" || client.status === "pending") return "Pending";
-  return "Active";
+  if (client.status === "completed") return state.lang === "es" ? "Completado" : "Completed";
+  if (client.worker_status === "pending_approval" || client.status === "pending") return state.lang === "es" ? "Pendiente" : "Pending";
+  return state.lang === "es" ? "Activo" : "Active";
 }
 
 function renderWorkerClientList(clients) {
   const list = document.getElementById("worker-case-list");
 
   if (!clients.length) {
-    list.innerHTML = `<div class="county-empty-state">No current cases yet.</div>`;
+    list.innerHTML = `<div class="county-empty-state">${localizeText("No current cases yet.")}</div>`;
     return;
   }
 
@@ -1307,7 +2431,7 @@ function renderWorkerClientList(clients) {
         ${client.missing_documents.map((doc) => `<span class="document-tag">${escapeHtml(formatDocumentLabel(doc))}</span>`).join("")}
       </div>
       <div class="worker-client-actions">
-        <button class="secondary-btn worker-select-btn" type="button" data-client-id="${escapeHtml(client.id)}">Open</button>
+        <button class="secondary-btn worker-select-btn" type="button" data-client-id="${escapeHtml(client.id)}">${localizeText("Open")}</button>
       </div>
     </article>
   `).join("");
@@ -1323,23 +2447,23 @@ function renderWorkerNotifications() {
   const list = document.getElementById("worker-notification-list");
   const notifications = state.caseWorkerData.notifications || [];
 
-  document.getElementById("worker-notification-count").textContent = `${notifications.length} alerts`;
+  document.getElementById("worker-notification-count").textContent = formatCountLabel(notifications.length, "alert", "alerts", "alerta", "alertas");
 
   if (!notifications.length) {
-    list.innerHTML = `<div class="county-empty-state">No notifications yet.</div>`;
+    list.innerHTML = `<div class="county-empty-state">${localizeText("No notifications yet.")}</div>`;
     return;
   }
 
   list.innerHTML = notifications.map((item) => {
     const timestamp = new Date(item.timestamp);
     const formatted = Number.isNaN(timestamp.getTime())
-      ? "Just now"
-      : timestamp.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      ? localizeText("Just now")
+      : timestamp.toLocaleString(getLocale(), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
     return `
       <div class="notification-card">
-        <strong>${escapeHtml(item.message)}</strong>
-        <span class="small-text">${escapeHtml(item.source === "client" ? "Client update" : "County update")}</span>
+        <strong>${escapeHtml(localizeText(item.message))}</strong>
+        <span class="small-text">${escapeHtml(item.source === "client" ? localizeText("Client update") : localizeText("County update"))}</span>
         <span class="small-text">${escapeHtml(formatted)}</span>
       </div>
     `;
@@ -1363,6 +2487,9 @@ async function loadMessages(clientId) {
 async function openCase(clientId) {
   state.caseWorkerData.selectedClientId = clientId;
   state.caseWorkerData.fullCaseViewId = clientId;
+  state.caseWorkerData.activeWorkspacePanel = null;
+  state.caseWorkerData.showChatImagesOnly = false;
+  clearPendingChatImage("worker");
   await loadMessages(clientId);
   renderCaseFileView();
   openScreen("caseworker-client-screen");
@@ -1370,28 +2497,31 @@ async function openCase(clientId) {
 
 function closeCaseFileView() {
   state.caseWorkerData.fullCaseViewId = null;
+  state.caseWorkerData.activeWorkspacePanel = null;
+  state.caseWorkerData.showChatImagesOnly = false;
+  clearPendingChatImage("worker");
   openScreen("admin-dashboard-screen");
   renderCaseWorkerDashboard();
 }
 
 function renderHousingOpportunities() {
   const eligibleClients = state.caseWorkerData.clients.filter((client) => client.missing_documents.length === 0);
-  document.getElementById("eligible-clients-count").textContent = `${eligibleClients.length} eligible`;
+  document.getElementById("eligible-clients-count").textContent = `${eligibleClients.length} ${localizeText("eligible")}`;
   document.getElementById("housing-opportunity-list").innerHTML = housingData.map((item) => `
     <div class="housing-opportunity-card">
       <strong>${escapeHtml(item.city)}</strong>
-      <span class="small-text">${item.units} units</span>
+      <span class="small-text">${item.units} ${localizeText("units")}</span>
     </div>
   `).join("");
 }
 
 function getDocumentStatus(client, documentKey) {
   if (client.missing_documents.includes(documentKey)) {
-    if (documentKey === "ssn") return "⏳ In Progress";
-    return "❌ Missing";
+    if (documentKey === "ssn") return `⏳ ${localizeText("In Progress")}`;
+    return `❌ ${localizeText("Missing")}`;
   }
 
-  return "✅ Completed";
+  return `✅ ${localizeText("Completed")}`;
 }
 
 function getDocumentStatusClass(statusText) {
@@ -1569,6 +2699,168 @@ function renderSelectedClientDetails() {
   }
 }
 
+function openWorkspacePanel(panelName) {
+  state.caseWorkerData.activeWorkspacePanel = panelName;
+  if (panelName !== "chat") {
+    state.caseWorkerData.showChatImagesOnly = false;
+  }
+  renderCaseFileView();
+}
+
+function closeWorkspacePanel() {
+  state.caseWorkerData.activeWorkspacePanel = null;
+  state.caseWorkerData.showChatImagesOnly = false;
+  clearPendingChatImage("worker");
+  renderCaseFileView();
+}
+
+function getCaseActivityItems(client) {
+  const transportRequests = state.caseWorkerData.notifications.filter((item) => (
+    item.message && item.message.includes(client.name)
+  ));
+  const messages = getCaseMessages(client.id, state.caseWorkerData.currentWorkerId);
+
+  return [
+    {
+      label: "Case status",
+      detail: client.worker_status === "completed" ? "Case completed" : client.worker_status === "pending_approval" ? "Pending approval" : "Case active"
+    },
+    ...transportRequests.slice(0, 3).map((item) => ({
+      label: "Alert",
+      detail: `${item.message} • ${formatChatTime(item.timestamp)}`
+    })),
+    ...messages.slice(-4).map((message) => ({
+      label: message.sender === "worker" ? "Worker message" : "Client message",
+      detail: `${message.text || (message.image_name ? `Shared ${message.image_name}` : "Sent an update")} • ${formatChatTime(message.timestamp)}`
+    }))
+  ];
+}
+
+function buildWorkspacePanelContent(client) {
+  const panelName = state.caseWorkerData.activeWorkspacePanel;
+  const notes = state.caseWorkerData.notes[client.id] || "";
+  const uploads = ["birth_certificate", "ssn", "state_id"].map((key) => ({
+    key,
+    label: formatDocumentLabel(key),
+    files: state.caseWorkerData.documentUploads[`${client.id}:${key}`] || []
+  }));
+  const messages = getCaseMessages(client.id, state.caseWorkerData.currentWorkerId);
+  const onlyImages = state.caseWorkerData.showChatImagesOnly;
+  const visibleMessages = onlyImages ? messages.filter((message) => message.image_data) : messages;
+  const isCompleted = client.worker_status === "completed";
+  const pendingImage = state.caseWorkerData.pendingChatImage;
+
+  if (panelName === "documents") {
+    return `
+      <div class="workspace-panel-body">
+        <div class="workspace-panel-head">
+          <div>
+            <strong>Document Uploads</strong>
+            <p class="small-text">Upload or review client files by document type.</p>
+          </div>
+          <button class="chat-close-btn workspace-close-btn" type="button" id="workspace-close-btn">X</button>
+        </div>
+        <div class="workspace-doc-grid">
+          ${uploads.map((item) => `
+            <div class="worker-detail-block workspace-doc-card">
+              <strong>${escapeHtml(item.label)}</strong>
+              <p class="small-text">${item.files.length ? `${item.files.length} file(s) selected` : "No files selected yet."}</p>
+              <input class="workspace-file-input" id="upload-${client.id}-${item.key}" type="file" multiple />
+              <button class="secondary-btn worker-save-notes-btn workspace-upload-btn" type="button" data-upload-doc="${item.key}">Save File List</button>
+              ${item.files.length ? `<div class="workspace-chip-row">${item.files.map((fileName) => `<span class="document-tag">${escapeHtml(fileName)}</span>`).join("")}</div>` : ""}
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  if (panelName === "notes") {
+    return `
+      <div class="workspace-panel-body">
+        <div class="workspace-panel-head">
+          <div>
+            <strong>Case Notes</strong>
+            <p class="small-text">Keep notes for this client file. Notes stay on screen during this session.</p>
+          </div>
+          <button class="chat-close-btn workspace-close-btn" type="button" id="workspace-close-btn">X</button>
+        </div>
+        <div class="worker-detail-block">
+          <label for="workspace-notes-input">Notes</label>
+          <textarea id="workspace-notes-input" rows="10" placeholder="Document barriers, next steps, appointment updates...">${escapeHtml(notes)}</textarea>
+          <button class="secondary-btn worker-save-notes-btn" type="button" id="workspace-notes-save-btn">Save Notes</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (panelName === "activity") {
+    const activityItems = getCaseActivityItems(client);
+
+    return `
+      <div class="workspace-panel-body">
+        <div class="workspace-panel-head">
+          <div>
+            <strong>Case Activity</strong>
+            <p class="small-text">Recent case updates, transport alerts, and message activity.</p>
+          </div>
+          <button class="chat-close-btn workspace-close-btn" type="button" id="workspace-close-btn">X</button>
+        </div>
+        <div class="workspace-activity-list">
+          ${activityItems.length ? activityItems.map((item) => `
+            <div class="worker-detail-block workspace-activity-card">
+              <strong>${escapeHtml(item.label)}</strong>
+              <p class="small-text">${escapeHtml(item.detail)}</p>
+            </div>
+          `).join("") : '<div class="county-empty-state">No activity yet.</div>'}
+        </div>
+      </div>
+    `;
+  }
+
+  if (panelName === "chat") {
+    return `
+      <div class="workspace-panel-body workspace-chat-panel">
+        <div class="workspace-panel-head">
+          <div>
+            <strong>Client Chat</strong>
+            <p class="small-text">Live case conversation. History stays available until this case is marked complete.</p>
+          </div>
+          <div class="workspace-chat-actions">
+            <button class="secondary-btn workspace-action-btn" type="button" id="workspace-chat-refresh-btn">Refresh</button>
+            <button class="secondary-btn workspace-action-btn" type="button" id="workspace-chat-save-btn">Save Chat</button>
+            <button class="secondary-btn workspace-action-btn" type="button" id="workspace-chat-images-btn">${onlyImages ? "Show All" : "Shared Images"}</button>
+            <button class="chat-close-btn workspace-close-btn" type="button" id="workspace-close-btn">X</button>
+          </div>
+        </div>
+        <div class="worker-chat-history workspace-chat-history" id="workspace-chat-history">
+          ${buildChatMessagesHtml(visibleMessages, onlyImages ? "No shared images yet." : "No messages yet.", "Client")}
+        </div>
+        <div id="worker-chat-image-preview">
+          ${pendingImage ? `
+            <div class="chat-image-preview-card">
+              <img src="${pendingImage.data}" alt="${escapeHtml(pendingImage.name)}" />
+              <div>
+                <strong>${escapeHtml(pendingImage.name)}</strong>
+                <button class="secondary-btn chat-image-remove-btn" type="button" id="worker-chat-image-remove-btn" ${isCompleted ? "disabled" : ""}>Remove</button>
+              </div>
+            </div>
+          ` : ""}
+        </div>
+        <div class="worker-chat-compose worker-chat-compose-rich">
+          <input id="worker-chat-input" type="text" placeholder="${isCompleted ? "Case completed. Chat is closed." : "Type a message"}" ${isCompleted ? "disabled" : ""} />
+          <label class="secondary-btn chat-upload-btn ${isCompleted ? "disabled" : ""}" for="worker-chat-image-input">Upload Image</label>
+          <input id="worker-chat-image-input" class="chat-upload-input" type="file" accept="image/*" ${isCompleted ? "disabled" : ""} />
+          <button class="secondary-btn worker-chat-send-btn" type="button" ${isCompleted ? "disabled" : ""}>Send</button>
+        </div>
+        <p class="small-text worker-inline-message" id="workspace-chat-note">${isCompleted ? "Case completed. Chat history has been cleared." : (state.caseWorkerData.chatNotices[client.id] || "")}</p>
+      </div>
+    `;
+  }
+
+  return "";
+}
+
 function renderCaseFileView() {
   const container = document.getElementById("caseworker-full-view");
   const selectedClient = state.caseWorkerData.clients.find((client) => client.id === state.caseWorkerData.fullCaseViewId);
@@ -1603,26 +2895,26 @@ function renderCaseFileView() {
             <div class="county-section-head">
               <div>
                 <strong>📁 Client File</strong>
-                <p class="small-text">This page is the new workspace for everything related to this client.</p>
+                <p class="small-text">Choose a workspace below. Each card opens a responsive panel for this client.</p>
               </div>
             </div>
             <div class="caseworker-workspace-placeholder-grid">
-              <div class="worker-detail-block">
+              <button class="worker-detail-block workspace-launch-card" type="button" data-panel="documents">
                 <strong>Document Uploads</strong>
-                <p class="small-text">Upload controls will go here.</p>
-              </div>
-              <div class="worker-detail-block">
+                <p class="small-text">Review required documents and attach image or file selections.</p>
+              </button>
+              <button class="worker-detail-block workspace-launch-card" type="button" data-panel="chat">
                 <strong>Client Chat</strong>
-                <p class="small-text">Conversation tools will go here.</p>
-              </div>
-              <div class="worker-detail-block">
+                <p class="small-text">Open the live chat popup for saved messages and shared images.</p>
+              </button>
+              <button class="worker-detail-block workspace-launch-card" type="button" data-panel="notes">
                 <strong>Case Notes</strong>
-                <p class="small-text">Notes and case planning tools will go here.</p>
-              </div>
-              <div class="worker-detail-block">
+                <p class="small-text">Track internal notes, blockers, and next steps for this client.</p>
+              </button>
+              <button class="worker-detail-block workspace-launch-card" type="button" data-panel="activity">
                 <strong>Case Activity</strong>
-                <p class="small-text">Timeline, alerts, and status updates will go here.</p>
-              </div>
+                <p class="small-text">See recent movement across messages, transport, and status changes.</p>
+              </button>
             </div>
           </div>
         </div>
@@ -1633,27 +2925,140 @@ function renderCaseFileView() {
             <p class="small-text">Current status: ${selectedClient.worker_status === "pending_approval" ? "Pending approval" : (selectedClient.worker_status === "completed" ? "Completed" : "Active")}</p>
             <p class="small-text">Transportation needed: ${selectedClient.transportation_needed ? "Yes" : "No"}</p>
             <p class="small-text">Missing documents: ${selectedClient.missing_documents.length ? escapeHtml(selectedClient.missing_documents.map(formatDocumentLabel).join(", ")) : "None listed"}</p>
+            <button class="secondary-btn worker-complete-btn" type="button" id="caseworker-complete-case-btn" ${selectedClient.worker_status === "completed" ? "disabled" : ""}>Mark Case Completed</button>
           </div>
 
           <div class="caseworker-panel">
-            <strong>Next Build Area</strong>
-            <p class="small-text">Tell me what should be added to this page next and I’ll build it into this workspace.</p>
+            <strong>Live Chat Status</strong>
+            <p class="small-text">${selectedClient.worker_status === "completed" ? "The case is completed. Chat history is removed at completion." : `${getCaseMessages(selectedClient.id, state.caseWorkerData.currentWorkerId).length} saved messages currently linked to this client.`}</p>
+            <p class="small-text">Open the chat card to continue the conversation or download the saved transcript.</p>
           </div>
         </aside>
       </div>
+      ${state.caseWorkerData.activeWorkspacePanel ? `
+        <div class="workspace-overlay">
+          <div class="workspace-modal ${state.caseWorkerData.activeWorkspacePanel === "chat" ? "chat" : ""}">
+            ${buildWorkspacePanelContent(selectedClient)}
+          </div>
+        </div>
+      ` : ""}
     </div>
   `;
 
   document.getElementById("caseworker-file-back-btn").addEventListener("click", () => {
     closeCaseFileView();
   });
+
+  container.querySelectorAll(".workspace-launch-card").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (button.dataset.panel === "documents") {
+        await openCaseworkerDocumentsPage(selectedClient.id, state.clientPortalData.selectedDocumentType);
+        return;
+      }
+
+      openWorkspacePanel(button.dataset.panel);
+    });
+  });
+
+  const completeButton = document.getElementById("caseworker-complete-case-btn");
+  if (completeButton) {
+    completeButton.addEventListener("click", async () => {
+      await updateCaseApproval(selectedClient.id, "complete");
+      state.caseWorkerData.activeWorkspacePanel = null;
+      state.caseWorkerData.messagesByClient[selectedClient.id] = [];
+      renderCaseFileView();
+    });
+  }
+
+  const closeButton = document.getElementById("workspace-close-btn");
+  if (closeButton) {
+    closeButton.addEventListener("click", () => {
+      closeWorkspacePanel();
+    });
+  }
+
+  container.querySelectorAll("[data-upload-doc]").forEach((button) => {
+    button.addEventListener("click", () => {
+      saveDocumentUpload(selectedClient.id, button.dataset.uploadDoc);
+      renderCaseFileView();
+    });
+  });
+
+  const notesSave = document.getElementById("workspace-notes-save-btn");
+  if (notesSave) {
+    notesSave.addEventListener("click", () => {
+      const textarea = document.getElementById("workspace-notes-input");
+      state.caseWorkerData.notes[selectedClient.id] = textarea ? textarea.value : "";
+      renderCaseFileView();
+    });
+  }
+
+  const chatRefresh = document.getElementById("workspace-chat-refresh-btn");
+  if (chatRefresh) {
+    chatRefresh.addEventListener("click", async () => {
+      await loadMessages(selectedClient.id);
+      renderCaseFileView();
+    });
+  }
+
+  const chatSave = document.getElementById("workspace-chat-save-btn");
+  if (chatSave) {
+    chatSave.addEventListener("click", () => {
+      const transcript = getChatTranscript(selectedClient, getCaseMessages(selectedClient.id, state.caseWorkerData.currentWorkerId));
+      downloadTextFile(`${selectedClient.id}-chat.txt`, transcript || "No messages yet.");
+    });
+  }
+
+  const chatImages = document.getElementById("workspace-chat-images-btn");
+  if (chatImages) {
+    chatImages.addEventListener("click", () => {
+      state.caseWorkerData.showChatImagesOnly = !state.caseWorkerData.showChatImagesOnly;
+      renderCaseFileView();
+    });
+  }
+
+  const workerImageRemove = document.getElementById("worker-chat-image-remove-btn");
+  if (workerImageRemove) {
+    workerImageRemove.addEventListener("click", () => {
+      clearPendingChatImage("worker");
+      renderCaseFileView();
+    });
+  }
+
+  const workerImageInput = document.getElementById("worker-chat-image-input");
+  if (workerImageInput) {
+    workerImageInput.addEventListener("change", async (event) => {
+      const [file] = Array.from(event.target.files || []);
+      await setPendingChatImage(file, "worker");
+      renderCaseFileView();
+    });
+  }
+
+  const workerSend = document.querySelector("#caseworker-full-view .worker-chat-send-btn");
+  if (workerSend) {
+    workerSend.addEventListener("click", async () => {
+      await sendWorkerMessage(selectedClient.id);
+      renderCaseFileView();
+    });
+  }
+
+  const workerInput = document.getElementById("worker-chat-input");
+  if (workerInput) {
+    workerInput.addEventListener("keydown", async (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        await sendWorkerMessage(selectedClient.id);
+        renderCaseFileView();
+      }
+    });
+  }
 }
 
 function renderCaseWorkerDashboard() {
   const currentCases = getCurrentCases();
   const currentWorker = getCurrentWorker();
 
-  document.getElementById("worker-case-count").textContent = `${currentCases.length} cases`;
+  document.getElementById("worker-case-count").textContent = formatCountLabel(currentCases.length, "case", "cases", "caso", "casos");
 
   if (!state.caseWorkerData.selectedClientId) {
     const firstClient = currentCases[0];
@@ -1715,6 +3120,12 @@ async function updateCaseApproval(clientId, action) {
       })
     });
 
+    if (action === "complete") {
+      state.caseWorkerData.messagesByClient[clientId] = [];
+      state.caseWorkerData.chatNotices[clientId] = "";
+      clearPendingChatImage("worker");
+    }
+
     await loadCaseWorkerDashboard();
   } catch (error) {
     document.getElementById("worker-notification-list").innerHTML = `<div class="county-empty-state">${showServerOfflineMessage()}</div>`;
@@ -1724,40 +3135,38 @@ async function updateCaseApproval(clientId, action) {
 async function sendWorkerMessage(clientId) {
   const selectedClient = state.caseWorkerData.clients.find((client) => client.id === clientId);
   const input = document.getElementById("worker-chat-input");
+  const image = state.caseWorkerData.pendingChatImage;
   if (!selectedClient || !input) return;
 
   if (selectedClient.worker_status === "completed") {
     input.disabled = true;
-    const sendButton = document.querySelector(".worker-chat-send-btn");
+    const sendButton = document.querySelector("#caseworker-full-view .worker-chat-send-btn");
     if (sendButton) sendButton.disabled = true;
-    renderCaseWorkerDashboard();
+    renderCaseFileView();
     return;
   }
 
   const text = input.value.trim();
-  if (!text) return;
+  if (!text && !image) return;
 
   try {
-    await fetchJson("/api/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_id: clientId,
-        worker_id: state.caseWorkerData.currentWorkerId,
-        sender: "worker",
-        text
-      })
+    state.caseWorkerData.chatNotices[clientId] = "";
+    await postChatMessage({
+      clientId,
+      workerId: state.caseWorkerData.currentWorkerId,
+      sender: "worker",
+      text,
+      image
     });
 
     input.value = "";
+    clearPendingChatImage("worker");
     await loadMessages(clientId);
-    renderCaseWorkerDashboard();
   } catch (error) {
     if (error.message === "SERVER_OFFLINE") {
       document.getElementById("worker-notification-list").innerHTML = `<div class="county-empty-state">${showServerOfflineMessage()}</div>`;
     } else {
       state.caseWorkerData.chatNotices[clientId] = error.message;
-      renderCaseWorkerDashboard();
     }
   }
 }
@@ -1828,6 +3237,7 @@ async function showPlan() {
   const birthPlace = `${birthCity}, ${birthState}`;
 
   const plan = generatePlan(state.answers, birthPlace, currentCity);
+  state.lastPlan = plan;
   const translatedSteps = [];
 
   for (const step of plan.steps) {
@@ -2078,8 +3488,20 @@ function bindEvents() {
   });
 
   document.querySelectorAll(".doc-card").forEach((card) => {
-    card.addEventListener("click", () => {
-      showQuestionScreen();
+    card.addEventListener("click", async () => {
+      if (card.dataset.doc === "id") {
+        await showClientDocuments("state_id");
+        return;
+      }
+
+      if (card.dataset.doc === "chat") {
+        await showClientChatPanel();
+        return;
+      }
+
+      if (card.dataset.doc === "notifications" || card.dataset.doc === "empty") {
+        return;
+      }
     });
   });
 
@@ -2126,6 +3548,11 @@ function bindEvents() {
   });
 
   document.getElementById("client-chat-send-btn").addEventListener("click", sendClientMessage);
+  document.getElementById("client-chat-image-input").addEventListener("change", async (event) => {
+    const [file] = Array.from(event.target.files || []);
+    await setPendingChatImage(file, "client");
+    renderClientPortalChat();
+  });
   document.getElementById("client-chat-input").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -2135,6 +3562,19 @@ function bindEvents() {
 
   document.getElementById("county-refresh-btn").addEventListener("click", () => {
     loadCountyDashboard();
+  });
+  document.getElementById("county-clear-notifications-btn").addEventListener("click", clearCountyNotifications);
+
+  document.getElementById("county-worker-modal-close-btn").addEventListener("click", closeWorkerProfile);
+  document.getElementById("county-worker-modal").addEventListener("click", (event) => {
+    if (event.target instanceof HTMLElement && event.target.dataset.workerModalClose === "true") {
+      closeWorkerProfile();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.countyData.selectedWorkerId) {
+      closeWorkerProfile();
+    }
   });
 }
 

@@ -1,5 +1,15 @@
 [
   {
+    "id": "CL-1010",
+    "name": "Adarsha",
+    "city": "Passaic",
+    "missing_documents": [],
+    "transportation_needed": false,
+    "status": "pending",
+    "assigned_worker": "WK-01",
+    "worker_status": "pending_approval"
+  },
+  {
     "id": "CL-1009",
     "name": "namej",
     "city": "Passaic",
@@ -28,9 +38,9 @@
       "state_id"
     ],
     "transportation_needed": true,
-    "status": "active",
-    "assigned_worker": "WK-01",
-    "worker_status": "active"
+    "status": "pending",
+    "assigned_worker": "WK-04",
+    "worker_status": "pending_approval"
   },
   {
     "id": "CL-1002",
@@ -40,9 +50,9 @@
       "ssn"
     ],
     "transportation_needed": false,
-    "status": "active",
+    "status": "pending",
     "assigned_worker": "WK-02",
-    "worker_status": "active"
+    "worker_status": "pending_approval"
   },
   {
     "id": "CL-1003",
@@ -79,8 +89,8 @@
     ],
     "transportation_needed": false,
     "status": "pending",
-    "assigned_worker": null,
-    "worker_status": null
+    "assigned_worker": "WK-04",
+    "worker_status": "pending_approval"
   },
   {
     "id": "CL-1006",
