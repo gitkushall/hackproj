@@ -1,6 +1,8 @@
 const express = require("express");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { verifyAdminLogin } = require("./backend/auth/adminAuthStore");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -123,12 +125,7 @@ const defaultTransportRequests = [
   }
 ];
 
-const defaultClientAccounts = [
-  { clientId: "CL-1001", name: "Maria Lopez", phone: "(973) 210-1101", username: "maria.lopez", password: "Maria@1234" },
-  { clientId: "CL-1002", name: "James Carter", phone: "(973) 210-1102", username: "james.carter", password: "James@1234" },
-  { clientId: "CL-1003", name: "Aisha Brown", phone: "(973) 210-1103", username: "aisha.brown", password: "Aisha@1234" },
-  { clientId: "CL-1004", name: "Luis Rivera", phone: "(973) 210-1104", username: "luis.rivera", password: "Luis@1234" }
-];
+const defaultClientAccounts = [];
 
 const defaultMessages = [
   {
@@ -249,6 +246,10 @@ const transportRequests = loadJsonFile(transportRequestsFilePath, defaultTranspo
 const clientAccounts = loadJsonFile(clientAccountsFilePath, defaultClientAccounts);
 const messages = loadJsonFile(messagesFilePath, defaultMessages);
 const clientDocuments = loadJsonFile(clientDocumentsFilePath, defaultClientDocuments);
+const phoneOtpStore = new Map();
+const authSessions = new Map();
+
+migrateClientAccounts();
 
 function getRecommendedWorker() {
   return workers.reduce((lowest, worker) => (
@@ -258,6 +259,249 @@ function getRecommendedWorker() {
 
 function normalizePhone(phone) {
   return String(phone || "").replace(/\D/g, "");
+}
+
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+  const hash = crypto.scryptSync(String(password), salt, 64).toString("hex");
+  return { salt, hash };
+}
+
+function verifyPassword(password, salt, hash) {
+  if (!salt || !hash) {
+    return false;
+  }
+
+  const nextHash = crypto.scryptSync(String(password), salt, 64).toString("hex");
+  return crypto.timingSafeEqual(Buffer.from(nextHash, "hex"), Buffer.from(hash, "hex"));
+}
+
+function sanitizeClientAccount(account) {
+  return {
+    clientId: account.clientId,
+    name: account.name,
+    phone: account.phone || "",
+    email: account.email || "",
+    hasCompletedIntake: Boolean(account.hasCompletedIntake),
+    documentAnswers: account.documentAnswers || null,
+    intakeLocations: account.intakeLocations || null,
+    roadmapPlan: account.roadmapPlan || null,
+    intakeCompletedAt: account.intakeCompletedAt || null
+  };
+}
+
+function parseCookies(header = "") {
+  return header.split(";").reduce((cookies, part) => {
+    const [rawKey, ...rawValue] = part.trim().split("=");
+    if (!rawKey) {
+      return cookies;
+    }
+
+    cookies[rawKey] = decodeURIComponent(rawValue.join("=") || "");
+    return cookies;
+  }, {});
+}
+
+function appendSetCookie(res, cookieValue) {
+  const existing = res.getHeader("Set-Cookie");
+  if (!existing) {
+    res.setHeader("Set-Cookie", cookieValue);
+    return;
+  }
+
+  const cookies = Array.isArray(existing) ? existing.concat(cookieValue) : [existing, cookieValue];
+  res.setHeader("Set-Cookie", cookies);
+}
+
+function createAuthSession(res, account) {
+  const sessionId = crypto.randomBytes(24).toString("hex");
+  const expiresAt = Date.now() + (1000 * 60 * 60 * 24 * 7);
+
+  authSessions.set(sessionId, {
+    clientId: account.clientId,
+    expiresAt
+  });
+
+  appendSetCookie(
+    res,
+    `auth_session=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 7}`
+  );
+}
+
+function clearAuthSession(req, res) {
+  const cookies = parseCookies(req.headers.cookie || "");
+  if (cookies.auth_session) {
+    authSessions.delete(cookies.auth_session);
+  }
+
+  appendSetCookie(res, "auth_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+}
+
+function getAuthenticatedAccount(req) {
+  const cookies = parseCookies(req.headers.cookie || "");
+  const sessionId = cookies.auth_session;
+
+  if (!sessionId) {
+    return null;
+  }
+
+  const session = authSessions.get(sessionId);
+  if (!session || session.expiresAt < Date.now()) {
+    authSessions.delete(sessionId);
+    return null;
+  }
+
+  return clientAccounts.find((account) => account.clientId === session.clientId) || null;
+}
+
+function findClientAccountByPhone(phone) {
+  const normalized = normalizePhone(phone);
+  return clientAccounts.find((account) => normalizePhone(account.phone) === normalized) || null;
+}
+
+function findClientAccountByEmail(email) {
+  const normalized = normalizeEmail(email);
+  return clientAccounts.find((account) => normalizeEmail(account.email) === normalized) || null;
+}
+
+function ensureClientRecordForAccount(account, requestCaseWorker) {
+  let client = clients.find((item) => item.id === account.clientId);
+
+  if (!client) {
+    client = {
+      id: account.clientId,
+      name: account.name,
+      city: "Passaic",
+      missing_documents: [],
+      transportation_needed: false,
+      status: requestCaseWorker ? "pending" : "active",
+      assigned_worker: null,
+      worker_status: null
+    };
+    clients.unshift(client);
+  }
+}
+
+function getMissingDocumentsFromAnswers(answers = {}) {
+  const missing = [];
+
+  if (answers.hasBirth === false) {
+    missing.push("birth_certificate");
+  }
+  if (answers.hasSSN === false) {
+    missing.push("ssn");
+  }
+  if (answers.hasID === false) {
+    missing.push("state_id");
+  }
+
+  return missing;
+}
+
+function saveClientIntake(account, payload = {}) {
+  const documentAnswers = {
+    hasBirth: Boolean(payload.documentAnswers?.hasBirth),
+    hasSSN: Boolean(payload.documentAnswers?.hasSSN),
+    hasID: Boolean(payload.documentAnswers?.hasID)
+  };
+  const intakeLocations = {
+    birth: payload.intakeLocations?.birth || null,
+    current: payload.intakeLocations?.current || null
+  };
+  const roadmapPlan = payload.roadmapPlan || null;
+
+  account.hasCompletedIntake = true;
+  account.documentAnswers = documentAnswers;
+  account.intakeLocations = intakeLocations;
+  account.roadmapPlan = roadmapPlan;
+  account.intakeCompletedAt = new Date().toISOString();
+
+  const client = clients.find((item) => item.id === account.clientId);
+  if (client) {
+    client.missing_documents = getMissingDocumentsFromAnswers(documentAnswers);
+    client.transportation_needed = documentAnswers.hasID === false;
+    client.city = intakeLocations.current?.city || client.city;
+  }
+
+  saveClientAccounts(clientAccounts);
+  saveCountyState();
+}
+
+function migrateClientAccounts() {
+  let changed = false;
+
+  clientAccounts.forEach((account, index) => {
+    if (account.password && !account.passwordHash) {
+      const { salt, hash } = hashPassword(account.password);
+      account.passwordSalt = salt;
+      account.passwordHash = hash;
+      delete account.password;
+      changed = true;
+    }
+
+    if (!Array.isArray(account.authMethods)) {
+      const methods = [];
+      if (account.phone) methods.push("phone");
+      if (account.email) methods.push("email");
+      account.authMethods = methods;
+      changed = true;
+    }
+
+    if (!account.clientId) {
+      account.clientId = `CL-${String(getNextClientIdNumber() + index)}`;
+      changed = true;
+    }
+
+    if (!("email" in account)) {
+      account.email = "";
+      changed = true;
+    }
+
+    if (!("hasCompletedIntake" in account)) {
+      account.hasCompletedIntake = false;
+      changed = true;
+    }
+
+    if (!("documentAnswers" in account)) {
+      account.documentAnswers = null;
+      changed = true;
+    }
+
+    if (!("intakeLocations" in account)) {
+      account.intakeLocations = null;
+      changed = true;
+    }
+
+    if (!("roadmapPlan" in account)) {
+      account.roadmapPlan = null;
+      changed = true;
+    }
+
+    if (!("intakeCompletedAt" in account)) {
+      account.intakeCompletedAt = null;
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    saveClientAccounts(clientAccounts);
+  }
+}
+
+function addAccountCreationNotification(account, requestCaseWorker) {
+  const message = requestCaseWorker
+    ? `Client ${account.name} created an account and requested a case worker`
+    : `New account created in Passaic County: client ${account.name}`;
+
+  notifications.unshift({
+    id: `NT-${Date.now()}`,
+    message,
+    worker_id: "system",
+    timestamp: new Date().toISOString()
+  });
 }
 
 async function translateWithGoogle(text, targetLang, sourceLang = "en") {
@@ -360,9 +604,265 @@ app.get("/api/transport-requests", (_req, res) => {
   });
 });
 
-app.get("/api/client-accounts", (_req, res) => {
+app.post("/api/auth/signup/phone", (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  const phone = String(req.body?.phone || "").trim();
+  const requestCaseWorker = Boolean(req.body?.request_case_worker);
+
+  if (!name || !phone) {
+    res.status(400).json({ error: "Enter your name and phone number." });
+    return;
+  }
+
+  if (findClientAccountByPhone(phone)) {
+    res.status(400).json({ error: "That phone number is already in use." });
+    return;
+  }
+
+  const account = {
+    clientId: `CL-${String(getNextClientIdNumber())}`,
+    name,
+    phone,
+    email: "",
+    passwordHash: "",
+    passwordSalt: "",
+    authMethods: ["phone"],
+    hasCompletedIntake: false,
+    documentAnswers: null,
+    intakeLocations: null,
+    roadmapPlan: null,
+    intakeCompletedAt: null,
+    createdAt: new Date().toISOString()
+  };
+
+  clientAccounts.push(account);
+  ensureClientRecordForAccount(account, requestCaseWorker);
+  addAccountCreationNotification(account, requestCaseWorker);
+  saveClientAccounts(clientAccounts);
+  saveCountyState();
+
   res.json({
-    accounts: clientAccounts
+    success: true,
+    user: sanitizeClientAccount(account)
+  });
+});
+
+app.post("/api/auth/signup/email", (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  const email = String(req.body?.email || "").trim();
+  const password = String(req.body?.password || "").trim();
+  const requestCaseWorker = Boolean(req.body?.request_case_worker);
+
+  if (!name || !email || !password) {
+    res.status(400).json({ error: "Enter your name, email, and password." });
+    return;
+  }
+
+  if (findClientAccountByEmail(email)) {
+    res.status(400).json({ error: "That email is already in use." });
+    return;
+  }
+
+  const { salt, hash } = hashPassword(password);
+  const account = {
+    clientId: `CL-${String(getNextClientIdNumber())}`,
+    name,
+    phone: "",
+    email,
+    passwordHash: hash,
+    passwordSalt: salt,
+    authMethods: ["email"],
+    hasCompletedIntake: false,
+    documentAnswers: null,
+    intakeLocations: null,
+    roadmapPlan: null,
+    intakeCompletedAt: null,
+    createdAt: new Date().toISOString()
+  };
+
+  clientAccounts.push(account);
+  ensureClientRecordForAccount(account, requestCaseWorker);
+  addAccountCreationNotification(account, requestCaseWorker);
+  saveClientAccounts(clientAccounts);
+  saveCountyState();
+
+  res.json({
+    success: true,
+    user: sanitizeClientAccount(account)
+  });
+});
+
+app.post("/api/auth/login/phone/send-otp", (req, res) => {
+  const phone = String(req.body?.phone || "").trim();
+
+  if (!phone) {
+    res.status(400).json({ error: "Enter your phone number." });
+    return;
+  }
+
+  const account = findClientAccountByPhone(phone);
+  if (!account) {
+    res.status(404).json({ error: "Create account first." });
+    return;
+  }
+
+  const code = String(Math.floor(1000 + Math.random() * 9000));
+  const expiresAt = Date.now() + (1000 * 60 * 5);
+  phoneOtpStore.set(normalizePhone(phone), {
+    code,
+    clientId: account.clientId,
+    expiresAt
+  });
+
+  console.log(`[auth] OTP for ${phone}: ${code} (expires in 5 minutes)`);
+
+  res.json({ success: true });
+});
+
+app.post("/api/auth/login/phone/verify-otp", (req, res) => {
+  const phone = String(req.body?.phone || "").trim();
+  const otp = String(req.body?.otp || "").trim();
+  const normalizedPhone = normalizePhone(phone);
+  const otpEntry = phoneOtpStore.get(normalizedPhone);
+
+  if (!otpEntry) {
+    res.status(400).json({ error: "Request a new OTP code." });
+    return;
+  }
+
+  if (otpEntry.expiresAt < Date.now()) {
+    phoneOtpStore.delete(normalizedPhone);
+    res.status(400).json({ error: "The OTP code expired. Request a new one." });
+    return;
+  }
+
+  if (otpEntry.code !== otp) {
+    res.status(400).json({ error: "The OTP code is incorrect." });
+    return;
+  }
+
+  const account = clientAccounts.find((item) => item.clientId === otpEntry.clientId);
+  if (!account) {
+    phoneOtpStore.delete(normalizedPhone);
+    res.status(404).json({ error: "Create account first." });
+    return;
+  }
+
+  phoneOtpStore.delete(normalizedPhone);
+  createAuthSession(res, account);
+
+  res.json({
+    success: true,
+    user: sanitizeClientAccount(account)
+  });
+});
+
+app.post("/api/auth/login/email", (req, res) => {
+  const email = String(req.body?.email || "").trim();
+  const password = String(req.body?.password || "").trim();
+  const account = findClientAccountByEmail(email);
+
+  if (!account) {
+    res.status(404).json({ error: "Create account first." });
+    return;
+  }
+
+  if (!verifyPassword(password, account.passwordSalt, account.passwordHash)) {
+    res.status(401).json({ error: "Wrong password." });
+    return;
+  }
+
+  createAuthSession(res, account);
+
+  res.json({
+    success: true,
+    user: sanitizeClientAccount(account)
+  });
+});
+
+app.post("/api/admin/login", (req, res) => {
+  const role = String(req.body?.role || "passaic").trim();
+  const email = String(req.body?.email || "").trim();
+  const password = String(req.body?.password || "").trim();
+
+  if (!email || !password) {
+    res.status(400).json({ success: false, error: "Missing credentials" });
+    return;
+  }
+
+  const account = verifyAdminLogin(role, email, password);
+
+  if (!account) {
+    res.status(401).json({ success: false, error: "Invalid credentials" });
+    return;
+  }
+
+  res.json({
+    success: true,
+    role: account.role,
+    workerId: account.workerId || null,
+    account
+  });
+});
+
+app.post("/api/auth/logout", (req, res) => {
+  clearAuthSession(req, res);
+  res.json({ success: true });
+});
+
+app.get("/api/auth/me", (req, res) => {
+  const account = getAuthenticatedAccount(req);
+
+  if (!account) {
+    res.json({ authenticated: false });
+    return;
+  }
+
+  res.json({
+    authenticated: true,
+    user: sanitizeClientAccount(account)
+  });
+});
+
+app.post("/api/auth/intake", (req, res) => {
+  const account = getAuthenticatedAccount(req);
+
+  if (!account) {
+    res.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const documentAnswers = req.body?.documentAnswers || {};
+  const intakeLocations = req.body?.intakeLocations || {};
+  const roadmapPlan = req.body?.roadmapPlan || null;
+
+  const hasValidAnswers =
+    typeof documentAnswers.hasBirth === "boolean" &&
+    typeof documentAnswers.hasSSN === "boolean" &&
+    typeof documentAnswers.hasID === "boolean";
+
+  const hasValidBirthLocation =
+    intakeLocations.birth &&
+    intakeLocations.birth.state &&
+    intakeLocations.birth.county &&
+    intakeLocations.birth.city;
+
+  const hasValidCurrentLocation =
+    intakeLocations.current &&
+    intakeLocations.current.state &&
+    intakeLocations.current.county &&
+    intakeLocations.current.city;
+
+  if (!hasValidAnswers || !hasValidBirthLocation || !hasValidCurrentLocation || !roadmapPlan) {
+    res.status(400).json({ error: "Complete the intake form before saving." });
+    return;
+  }
+
+  saveClientIntake(account, { documentAnswers, intakeLocations, roadmapPlan });
+
+  res.json({
+    success: true,
+    user: sanitizeClientAccount(account)
   });
 });
 
@@ -760,81 +1260,6 @@ app.post("/api/admin-chat", (req, res) => {
   const { question = "" } = req.body || {};
   res.json({
     response: createInsightResponse(question)
-  });
-});
-
-app.post("/api/client-accounts", (req, res) => {
-  const {
-    name = "",
-    phone = "",
-    username = "",
-    password = "",
-    request_case_worker: requestCaseWorker = false
-  } = req.body || {};
-
-  const trimmedName = String(name).trim();
-  const trimmedPhone = String(phone).trim();
-  const trimmedUsername = String(username).trim();
-  const trimmedPassword = String(password).trim();
-
-  if (!trimmedName || !trimmedPhone || !trimmedUsername || !trimmedPassword) {
-    res.status(400).json({ error: "Enter your name, phone number, username, and password." });
-    return;
-  }
-
-  const duplicateAccount = clientAccounts.some((account) => (
-    account.username.toLowerCase() === trimmedUsername.toLowerCase() ||
-    normalizePhone(account.phone) === normalizePhone(trimmedPhone)
-  ));
-
-  if (duplicateAccount) {
-    res.status(400).json({ error: "That username or phone number is already in use." });
-    return;
-  }
-
-  const account = {
-    clientId: `CL-${String(getNextClientIdNumber())}`,
-    name: trimmedName,
-    phone: trimmedPhone,
-    username: trimmedUsername,
-    password: trimmedPassword
-  };
-
-  clientAccounts.push(account);
-  saveClientAccounts(clientAccounts);
-
-  const notificationPrefix = requestCaseWorker
-    ? `Client ${account.name} created an account and requested a case worker`
-    : `New account created in Passaic County: client ${account.name}, username ${account.username}`;
-
-  notifications.unshift({
-    id: `NT-${Date.now()}`,
-    message: notificationPrefix,
-    worker_id: "system",
-    timestamp: new Date().toISOString()
-  });
-
-  if (requestCaseWorker) {
-    const existingCountyClient = clients.find((client) => client.id === account.clientId);
-
-    if (!existingCountyClient) {
-      clients.unshift({
-        id: account.clientId,
-        name: account.name,
-        city: "Passaic",
-        missing_documents: [],
-        transportation_needed: false,
-        status: "pending",
-        assigned_worker: null,
-        worker_status: null
-      });
-    }
-  }
-  saveCountyState();
-
-  res.json({
-    success: true,
-    account
   });
 });
 

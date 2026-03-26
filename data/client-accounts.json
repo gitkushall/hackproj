@@ -1,30 +1,226 @@
 [
   {
-    "clientId": "CL-1007",
-    "name": "Jordan",
-    "phone": "9891234567",
-    "username": "jordy",
-    "password": "Jordan@1234"
+    "clientId": "CL-1011",
+    "name": "rr",
+    "phone": "4454454455",
+    "email": "",
+    "passwordHash": "",
+    "passwordSalt": "",
+    "authMethods": [
+      "phone"
+    ],
+    "createdAt": "2026-03-26T06:16:54.297Z",
+    "hasCompletedIntake": false,
+    "documentAnswers": null,
+    "intakeLocations": null,
+    "roadmapPlan": null,
+    "intakeCompletedAt": null
   },
   {
-    "clientId": "CL-1008",
-    "name": "jordannn",
-    "phone": "7891234675",
-    "username": "lee.j",
-    "password": "Jordann@1234"
+    "clientId": "CL-1012",
+    "name": "jj",
+    "phone": "8883334444",
+    "email": "",
+    "passwordHash": "",
+    "passwordSalt": "",
+    "authMethods": [
+      "phone"
+    ],
+    "hasCompletedIntake": true,
+    "documentAnswers": {
+      "hasBirth": false,
+      "hasSSN": false,
+      "hasID": false
+    },
+    "intakeLocations": {
+      "birth": {
+        "state": "New Jersey",
+        "county": "Hudson",
+        "city": "Jersey City"
+      },
+      "current": {
+        "state": "New Jersey",
+        "county": "Hudson",
+        "city": "Jersey City"
+      }
+    },
+    "roadmapPlan": {
+      "steps": [
+        {
+          "text": "You need a birth certificate.",
+          "description": "Use the official New Jersey Vital Statistics page to request a birth certificate online or find next steps.",
+          "actionLabel": "Request Birth Certificate",
+          "actionLink": "https://www.nj.gov/health/vital/",
+          "actionExternal": true
+        },
+        {
+          "text": "Go to the Vital Records Office in Jersey City, Hudson County, New Jersey."
+        },
+        {
+          "text": "Ask for a copy."
+        },
+        {
+          "text": "You need a Social Security card.",
+          "description": "Visit the official Social Security website to apply for or replace your SSN card.",
+          "actionLabel": "Get Social Security Card",
+          "actionLink": "https://www.ssa.gov/number-card",
+          "actionExternal": true
+        },
+        {
+          "text": "Go to SSA office in Jersey City, Hudson County, New Jersey."
+        },
+        {
+          "text": "You need a State ID.",
+          "description": "Visit the official New Jersey MVC website to apply for a State ID or schedule an appointment.",
+          "actionLabel": "Apply for State ID",
+          "actionLink": "https://www.nj.gov/mvc/index.html",
+          "actionExternal": true
+        },
+        {
+          "text": "Go to DMV/MVC in Jersey City, Hudson County, New Jersey."
+        }
+      ],
+      "transportation_needed": true
+    },
+    "intakeCompletedAt": "2026-03-26T13:38:04.669Z",
+    "createdAt": "2026-03-26T12:52:58.491Z"
   },
   {
-    "clientId": "CL-1009",
-    "name": "namej",
-    "phone": "1234567890",
-    "username": "name.j",
-    "password": "namej@1234"
+    "clientId": "CL-1013",
+    "name": "kushal",
+    "phone": "4444444444",
+    "email": "",
+    "passwordHash": "",
+    "passwordSalt": "",
+    "authMethods": [
+      "phone"
+    ],
+    "hasCompletedIntake": true,
+    "documentAnswers": {
+      "hasBirth": false,
+      "hasSSN": false,
+      "hasID": false
+    },
+    "intakeLocations": {
+      "birth": {
+        "state": "New Jersey",
+        "county": "Passaic",
+        "city": "Paterson"
+      },
+      "current": {
+        "state": "New Jersey",
+        "county": "Passaic",
+        "city": "Paterson"
+      }
+    },
+    "roadmapPlan": {
+      "steps": [
+        {
+          "text": "You need a birth certificate.",
+          "description": "Use the official New Jersey Vital Statistics page to request a birth certificate online or find next steps.",
+          "actionLabel": "Request Birth Certificate",
+          "actionLink": "https://www.nj.gov/health/vital/",
+          "actionExternal": true
+        },
+        {
+          "text": "Go to the Vital Records Office in Paterson, Passaic County, New Jersey."
+        },
+        {
+          "text": "Ask for a copy."
+        },
+        {
+          "text": "You need a Social Security card.",
+          "description": "Visit the official Social Security website to apply for or replace your SSN card.",
+          "actionLabel": "Get Social Security Card",
+          "actionLink": "https://www.ssa.gov/number-card",
+          "actionExternal": true
+        },
+        {
+          "text": "Go to SSA office in Paterson, Passaic County, New Jersey."
+        },
+        {
+          "text": "You need a State ID.",
+          "description": "Visit the official New Jersey MVC website to apply for a State ID or schedule an appointment.",
+          "actionLabel": "Apply for State ID",
+          "actionLink": "https://www.nj.gov/mvc/index.html",
+          "actionExternal": true
+        },
+        {
+          "text": "Go to DMV/MVC in Paterson, Passaic County, New Jersey."
+        }
+      ],
+      "transportation_needed": true
+    },
+    "intakeCompletedAt": "2026-03-26T13:26:51.665Z",
+    "createdAt": "2026-03-26T13:25:46.506Z"
   },
   {
-    "clientId": "CL-1010",
-    "name": "Adarsha",
-    "phone": "9891235678",
-    "username": "mishro.a",
-    "password": "Adarsha@1234"
+    "clientId": "CL-1014",
+    "name": "Kushal Subedi",
+    "phone": "",
+    "email": "kushallsub123@gmail.com",
+    "passwordHash": "ce399508497411f06968515ca37311b061dad5966e84983529db17292a7e661ed3372da61718dfadc4dc20945d1e6e61e610947963105fed42404c226ce6f98a",
+    "passwordSalt": "37063ddb1d6c8882fd28f4fccbbc5be4",
+    "authMethods": [
+      "email"
+    ],
+    "hasCompletedIntake": true,
+    "documentAnswers": {
+      "hasBirth": false,
+      "hasSSN": false,
+      "hasID": false
+    },
+    "intakeLocations": {
+      "birth": {
+        "state": "New Jersey",
+        "county": "Essex",
+        "city": "Newark"
+      },
+      "current": {
+        "state": "New Jersey",
+        "county": "Essex",
+        "city": "Newark"
+      }
+    },
+    "roadmapPlan": {
+      "steps": [
+        {
+          "text": "You need a birth certificate.",
+          "description": "Use the official New Jersey Vital Statistics page to request a birth certificate online or find next steps.",
+          "actionLabel": "Request Birth Certificate",
+          "actionLink": "https://www.nj.gov/health/vital/",
+          "actionExternal": true
+        },
+        {
+          "text": "Go to the Vital Records Office in Newark, Essex County, New Jersey."
+        },
+        {
+          "text": "Ask for a copy."
+        },
+        {
+          "text": "You need a Social Security card.",
+          "description": "Visit the official Social Security website to apply for or replace your SSN card.",
+          "actionLabel": "Get Social Security Card",
+          "actionLink": "https://www.ssa.gov/number-card",
+          "actionExternal": true
+        },
+        {
+          "text": "Go to SSA office in Newark, Essex County, New Jersey."
+        },
+        {
+          "text": "You need a State ID.",
+          "description": "Visit the official New Jersey MVC website to apply for a State ID or schedule an appointment.",
+          "actionLabel": "Apply for State ID",
+          "actionLink": "https://www.nj.gov/mvc/index.html",
+          "actionExternal": true
+        },
+        {
+          "text": "Go to DMV/MVC in Newark, Essex County, New Jersey."
+        }
+      ],
+      "transportation_needed": true
+    },
+    "intakeCompletedAt": "2026-03-26T13:28:11.231Z",
+    "createdAt": "2026-03-26T13:27:35.701Z"
   }
 ]

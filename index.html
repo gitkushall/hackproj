@@ -52,7 +52,7 @@
             <div id="user-login-panel" class="user-login-main">
                 <div class="choice-row" id="login-option-row">
                   <button class="choice-btn active" type="button" id="phone-option-btn">Phone Login</button>
-                  <button class="choice-btn" type="button" id="worker-option-btn">Case Worker Login</button>
+                  <button class="choice-btn" type="button" id="worker-option-btn">Email Login</button>
                 </div>
 
                 <form id="phone-login-form" novalidate>
@@ -64,17 +64,17 @@
                   <div class="hidden" id="code-entry-block">
                     <label for="code-input" id="code-label">Enter code</label>
                     <input id="code-input" type="text" inputmode="numeric" maxlength="4" placeholder="1234" />
-                    <p class="demo-note" id="code-demo-note">Demo code:</p>
+                    <p class="demo-note" id="code-demo-note">Check the server console for the OTP code.</p>
                     <button class="big-btn" type="button" id="verify-code-btn">Verify Code</button>
                   </div>
                 </form>
 
                 <form id="worker-login-form" class="hidden" novalidate>
-                  <label for="worker-username-input" id="worker-username-label">Username</label>
-                  <input id="worker-username-input" type="text" autocomplete="username" placeholder="user123" />
+                  <label for="worker-username-input" id="worker-username-label">Email</label>
+                  <input id="worker-username-input" type="email" autocomplete="email" placeholder="name@example.com" />
 
                   <label for="worker-password-input" id="worker-password-label">Password</label>
-                  <input id="worker-password-input" type="password" autocomplete="current-password" placeholder="1234" />
+                  <input id="worker-password-input" type="password" autocomplete="current-password" placeholder="Enter password" />
 
                   <button class="big-btn" type="submit" id="worker-login-btn">Login</button>
                 </form>
@@ -101,23 +101,18 @@
 
                   <button class="big-btn" type="submit" id="admin-login-btn">Login with Gmail</button>
                 </form>
-
-                <aside class="admin-demo-sidecard demo-box">
-                  <p class="eyebrow admin-demo-side-eyebrow" id="admin-demo-side-eyebrow">Demo access</p>
-                  <div class="demo-note" id="admin-demo-note">Admin demo:</div>
-                  <div class="demo-note" id="admin-password-demo-note">Demo password:</div>
-                </aside>
+                <div class="form-section">
+                  <p class="small-text" id="admin-demo-copy">Demo access for judges</p>
+                  <div class="choice-row" id="admin-demo-row">
+                    <button class="choice-btn" type="button" id="admin-demo-caseworker-btn">Demo Case Worker</button>
+                    <button class="choice-btn" type="button" id="admin-demo-county-btn">Demo County</button>
+                  </div>
+                </div>
               </div>
             </div>
 
             <p class="error-text" id="login-error" aria-live="polite"></p>
           </div>
-
-          <aside class="login-demo-card" id="login-demo-card">
-            <p class="eyebrow login-demo-eyebrow" id="login-demo-eyebrow">Demo access</p>
-            <h2 class="login-demo-title" id="login-demo-title">Phone demo</h2>
-            <div class="login-demo-list" id="login-demo-list"></div>
-          </aside>
         </div>
       </section>
 
@@ -131,22 +126,31 @@
             <p class="eyebrow" id="create-account-screen-eyebrow">Create account</p>
             <h1 id="create-account-screen-title">Set up your housing portal account</h1>
             <p class="small-text" id="create-account-screen-subtitle">
-              Enter your name, phone number, username, and password to create your account.
+              Create a phone account for OTP login or an email account with password.
             </p>
           </div>
 
           <div class="create-account-panel create-account-page-panel">
+            <div class="choice-row" id="create-account-mode-row">
+              <button class="choice-btn active" type="button" id="create-account-phone-mode-btn">Phone Account</button>
+              <button class="choice-btn" type="button" id="create-account-email-mode-btn">Email Account</button>
+            </div>
+
             <label for="create-account-name-input" id="create-account-name-label">Full name</label>
             <input id="create-account-name-input" type="text" autocomplete="name" placeholder="Jordan Lee" />
 
-            <label for="create-account-phone-input" id="create-account-phone-label">Phone number</label>
-            <input id="create-account-phone-input" type="tel" inputmode="tel" autocomplete="tel" placeholder="(973) 555-0100" />
+            <div id="create-account-phone-fields">
+              <label for="create-account-phone-input" id="create-account-phone-label">Phone number</label>
+              <input id="create-account-phone-input" type="tel" inputmode="tel" autocomplete="tel" placeholder="(973) 555-0100" />
+            </div>
 
-            <label for="create-account-username-input" id="create-account-username-label">Create username</label>
-            <input id="create-account-username-input" type="text" autocomplete="username" placeholder="jordan.lee" />
+            <div class="hidden" id="create-account-email-fields">
+              <label for="create-account-email-input" id="create-account-email-label">Email</label>
+              <input id="create-account-email-input" type="email" autocomplete="email" placeholder="name@example.com" />
 
-            <label for="create-account-password-input" id="create-account-password-label">Create password</label>
-            <input id="create-account-password-input" type="password" autocomplete="new-password" placeholder="Create password" />
+              <label for="create-account-password-input" id="create-account-password-label">Create password</label>
+              <input id="create-account-password-input" type="password" autocomplete="new-password" placeholder="Create password" />
+            </div>
 
             <label class="create-account-check-row" for="create-account-request-worker-input">
               <input id="create-account-request-worker-input" type="checkbox" />
@@ -416,6 +420,7 @@
       <section class="card hidden" id="questions-screen">
         <div class="screen-top-row">
           <button class="back-link-btn screen-back-btn" type="button" id="questions-back-btn">Go Back</button>
+          <button class="back-link-btn screen-back-btn" type="button" id="questions-logout-btn">Logout</button>
         </div>
 
         <h1 id="main-title">Get your ID plan</h1>
@@ -447,15 +452,24 @@
 
         <div class="question-block">
           <p id="q-born">Where were you born?</p>
-          <div class="double-select">
+          <div class="triple-select">
             <select id="birth-state"></select>
+            <select id="birth-county"></select>
             <select id="birth-city"></select>
           </div>
         </div>
 
         <div class="question-block">
-          <p id="q-now">Current city (Passaic County)</p>
-          <select id="current-city"></select>
+          <p id="q-now">Current location</p>
+          <label class="question-check-row" for="current-same-as-birth-input">
+            <input id="current-same-as-birth-input" type="checkbox" />
+            <span id="current-same-as-birth-label">Same as birthplace</span>
+          </label>
+          <div class="triple-select">
+            <select id="current-state"></select>
+            <select id="current-county"></select>
+            <select id="current-city"></select>
+          </div>
         </div>
 
         <p class="error-text" id="plan-error-box" aria-live="polite"></p>
@@ -470,6 +484,7 @@
         <h1 id="result-page-title">Your plan</h1>
         <ul id="plan-steps"></ul>
         <button class="big-btn hidden" type="button" id="transport-btn">Get Transportation Help</button>
+        <button class="big-btn" type="button" id="plan-dashboard-btn">Continue to Dashboard</button>
         <button class="secondary-btn" type="button" id="start-over-btn">Start over</button>
       </section>
     </main>
@@ -526,6 +541,7 @@
       </aside>
     </div>
 
+    <script src="data/usLocations.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

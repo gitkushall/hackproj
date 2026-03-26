@@ -336,6 +336,25 @@ textarea:focus {
   margin: 0;
 }
 
+.question-check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(47, 108, 79, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.74);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.question-check-row input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
 .create-account-screen-shell {
   display: grid;
   gap: 20px;

@@ -7,11 +7,7 @@ const {
   getWorkersResponse,
   updateCaseApproval
 } = require("./caseStore");
-
-const ADMIN_CREDENTIALS = {
-  email: "idhelp.admin.portal@gmail.com",
-  password: "Admin@1234"
-};
+const { verifyAdminLogin } = require("../auth/adminAuthStore");
 
 function createInsightResponse(questionRaw) {
   const systemData = getSystemData();
@@ -38,19 +34,21 @@ function createInsightResponse(questionRaw) {
 }
 
 function handleAdminLogin(req, res) {
-  const { email, password } = req.body || {};
+  const { role = "passaic", email, password } = req.body || {};
 
   if (!email || !password) {
     res.status(400).json({ success: false, error: "Missing credentials" });
     return;
   }
 
-  if (email !== ADMIN_CREDENTIALS.email || password !== ADMIN_CREDENTIALS.password) {
+  const account = verifyAdminLogin(role, email, password);
+
+  if (!account) {
     res.status(401).json({ success: false, error: "Invalid credentials" });
     return;
   }
 
-  res.json({ success: true });
+  res.json({ success: true, role: account.role, workerId: account.workerId || null, account });
 }
 
 function getAdminDashboard(_req, res) {
