@@ -1,6 +1,6 @@
 const crypto = require("crypto");
-const fs = require("fs");
 const path = require("path");
+const { loadJsonArray } = require("../storage/runtimeJsonStore");
 
 const adminAccountsFilePath = path.join(__dirname, "..", "..", "data", "admin-accounts.json");
 
@@ -51,24 +51,8 @@ const defaultAdminAccounts = [
   }
 ];
 
-function ensureStorageFile() {
-  fs.mkdirSync(path.dirname(adminAccountsFilePath), { recursive: true });
-  if (!fs.existsSync(adminAccountsFilePath)) {
-    fs.writeFileSync(adminAccountsFilePath, JSON.stringify(defaultAdminAccounts, null, 2));
-  }
-}
-
 function loadAdminAccounts() {
-  ensureStorageFile();
-
-  try {
-    const raw = fs.readFileSync(adminAccountsFilePath, "utf8");
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : defaultAdminAccounts.slice();
-  } catch (error) {
-    fs.writeFileSync(adminAccountsFilePath, JSON.stringify(defaultAdminAccounts, null, 2));
-    return defaultAdminAccounts.slice();
-  }
+  return loadJsonArray(adminAccountsFilePath, defaultAdminAccounts, { key: "admin-accounts" });
 }
 
 function normalizeEmail(email) {

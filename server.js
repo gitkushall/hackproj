@@ -2,12 +2,12 @@ require("dotenv").config();
 
 const express = require("express");
 const crypto = require("crypto");
-const fs = require("fs");
 const path = require("path");
 const nodemailer = require("nodemailer");
 const twilio = require("twilio");
 const { getDemoAdminAccount, getDemoCaseworkerAccounts, verifyAdminLogin } = require("./backend/auth/adminAuthStore");
 const { generateAdminInsight } = require("./backend/services/openaiService");
+const { getRuntimeStorageInfo, loadJsonArray, saveJsonArray } = require("./backend/storage/runtimeJsonStore");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -340,39 +340,6 @@ const defaultMessages = [
 
 const defaultClientDocuments = [];
 
-function ensureDataDirectory() {
-  fs.mkdirSync(dataDirectory, { recursive: true });
-}
-
-function saveJsonFile(filePath, value) {
-  ensureDataDirectory();
-  fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
-}
-
-function loadJsonFile(filePath, fallbackValue) {
-  ensureDataDirectory();
-
-  if (!fs.existsSync(filePath)) {
-    saveJsonFile(filePath, fallbackValue);
-    return fallbackValue.slice();
-  }
-
-  try {
-    const raw = fs.readFileSync(filePath, "utf8");
-    const parsed = JSON.parse(raw);
-
-    if (!Array.isArray(parsed)) {
-      throw new Error("Storage file must contain an array.");
-    }
-
-    return parsed;
-  } catch (error) {
-    console.error(`Failed to load storage file ${path.basename(filePath)}. Recreating defaults.`, error);
-    saveJsonFile(filePath, fallbackValue);
-    return fallbackValue.slice();
-  }
-}
-
 function enrichWorkerProfile(worker) {
   const profileDefaults = defaultWorkerProfiles[worker.id] || {};
 
@@ -396,36 +363,36 @@ function enrichWorkerProfile(worker) {
 }
 
 function saveClientAccounts(accounts) {
-  saveJsonFile(clientAccountsFilePath, accounts);
+  saveJsonArray(clientAccountsFilePath, accounts, { key: "client-accounts" });
 }
 
 function saveCountyState() {
-  saveJsonFile(clientsFilePath, clients);
-  saveJsonFile(workersFilePath, workers);
-  saveJsonFile(notificationsFilePath, notifications);
-  saveJsonFile(transportRequestsFilePath, transportRequests);
+  saveJsonArray(clientsFilePath, clients, { key: "clients" });
+  saveJsonArray(workersFilePath, workers, { key: "workers" });
+  saveJsonArray(notificationsFilePath, notifications, { key: "notifications" });
+  saveJsonArray(transportRequestsFilePath, transportRequests, { key: "transport-requests" });
 }
 
 function saveClientNotifications() {
-  saveJsonFile(clientNotificationsFilePath, clientNotifications);
+  saveJsonArray(clientNotificationsFilePath, clientNotifications, { key: "client-notifications" });
 }
 
 function saveMessages() {
-  saveJsonFile(messagesFilePath, messages);
+  saveJsonArray(messagesFilePath, messages, { key: "messages" });
 }
 
 function saveClientDocuments() {
-  saveJsonFile(clientDocumentsFilePath, clientDocuments);
+  saveJsonArray(clientDocumentsFilePath, clientDocuments, { key: "client-documents" });
 }
 
-const clients = loadJsonFile(clientsFilePath, defaultClients);
-const workers = loadJsonFile(workersFilePath, defaultWorkers).map(enrichWorkerProfile);
-const notifications = loadJsonFile(notificationsFilePath, defaultNotifications);
-const clientNotifications = loadJsonFile(clientNotificationsFilePath, defaultClientNotifications);
-const transportRequests = loadJsonFile(transportRequestsFilePath, defaultTransportRequests);
-const clientAccounts = loadJsonFile(clientAccountsFilePath, defaultClientAccounts);
-const messages = loadJsonFile(messagesFilePath, defaultMessages);
-const clientDocuments = loadJsonFile(clientDocumentsFilePath, defaultClientDocuments);
+const clients = loadJsonArray(clientsFilePath, defaultClients, { key: "clients" });
+const workers = loadJsonArray(workersFilePath, defaultWorkers, { key: "workers" }).map(enrichWorkerProfile);
+const notifications = loadJsonArray(notificationsFilePath, defaultNotifications, { key: "notifications" });
+const clientNotifications = loadJsonArray(clientNotificationsFilePath, defaultClientNotifications, { key: "client-notifications" });
+const transportRequests = loadJsonArray(transportRequestsFilePath, defaultTransportRequests, { key: "transport-requests" });
+const clientAccounts = loadJsonArray(clientAccountsFilePath, defaultClientAccounts, { key: "client-accounts" });
+const messages = loadJsonArray(messagesFilePath, defaultMessages, { key: "messages" });
+const clientDocuments = loadJsonArray(clientDocumentsFilePath, defaultClientDocuments, { key: "client-documents" });
 const phoneOtpStore = new Map();
 const authSessions = new Map();
 let mailTransporter = null;
@@ -433,7 +400,10 @@ let smsClient = null;
 
 migrateClientAccounts();
 migrateClientNotificationStore();
-saveJsonFile(workersFilePath, workers);
+saveJsonArray(workersFilePath, workers, { key: "workers" });
+
+const runtimeStorage = getRuntimeStorageInfo();
+console.log(`Runtime storage mode: ${runtimeStorage.mode}. Writable target: ${runtimeStorage.writableRoot}.`);
 
 function getRecommendedWorker() {
   return workers.reduce((lowest, worker) => (
