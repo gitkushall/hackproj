@@ -1,20 +1,86 @@
 [
   {
+    "title": "Housing Documentation Specialist",
+    "phone": "(973) 555-0101",
+    "email": "sarah.ahmed@passaic.example.org",
+    "office": "Paterson Support Center",
+    "languages": [
+      "English",
+      "Arabic",
+      "Spanish"
+    ],
+    "specialties": [
+      "State ID",
+      "Birth certificate recovery",
+      "Court-ready document prep"
+    ],
+    "bio": "Sarah helps clients organize missing identity documents and keeps case steps easy to follow.",
+    "availability": "Mon-Fri, 9:00 AM - 5:00 PM",
+    "pronouns": "She/Her",
     "id": "WK-01",
     "name": "Sarah Ahmed",
     "active_cases": 3
   },
   {
+    "title": "Benefits and Records Coordinator",
+    "phone": "(973) 555-0102",
+    "email": "daniel.kim@passaic.example.org",
+    "office": "Passaic Family Resource Office",
+    "languages": [
+      "English",
+      "Korean"
+    ],
+    "specialties": [
+      "SSN replacement",
+      "Agency coordination",
+      "Document follow-ups"
+    ],
+    "bio": "Daniel focuses on benefits paperwork, replacement records, and keeping agency requests moving.",
+    "availability": "Mon-Fri, 8:30 AM - 4:30 PM",
+    "pronouns": "He/Him",
     "id": "WK-02",
     "name": "Daniel Kim",
+    "active_cases": 5
+  },
+  {
+    "title": "Lead Case Worker",
+    "phone": "(973) 555-0103",
+    "email": "priya.shah@passaic.example.org",
+    "office": "Clifton Community Support Hub",
+    "languages": [
+      "English",
+      "Hindi",
+      "Gujarati"
+    ],
+    "specialties": [
+      "State ID appointments",
+      "Transportation planning",
+      "Complex case support"
+    ],
+    "bio": "Priya coordinates appointments, transportation, and urgent next steps for clients with multiple barriers.",
+    "availability": "Mon-Sat, 9:00 AM - 6:00 PM",
+    "pronouns": "She/Her",
+    "id": "WK-03",
+    "name": "Priya Shah",
     "active_cases": 3
   },
   {
-    "id": "WK-03",
-    "name": "Priya Shah",
-    "active_cases": 2
-  },
-  {
+    "title": "Client Intake and Outreach Worker",
+    "phone": "(973) 555-0104",
+    "email": "marcus.hill@passaic.example.org",
+    "office": "Wayne Housing Access Desk",
+    "languages": [
+      "English",
+      "Spanish"
+    ],
+    "specialties": [
+      "New client intake",
+      "Outreach",
+      "Document collection"
+    ],
+    "bio": "Marcus helps new clients get started, collect missing files, and understand the next case milestone.",
+    "availability": "Mon-Fri, 10:00 AM - 6:00 PM",
+    "pronouns": "He/Him",
     "id": "WK-04",
     "name": "Marcus Hill",
     "active_cases": 3

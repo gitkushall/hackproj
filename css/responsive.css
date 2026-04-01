@@ -23,11 +23,14 @@
 
   .county-hero,
   .county-metric-grid,
+  .client-progress-metric-grid,
+  .client-progress-content-grid,
   .county-bottom-grid,
   .county-system-grid,
   .caseworker-system-grid,
   .assign-row,
-  .admin-ai-form {
+  .admin-ai-form,
+  .dashboard-head {
     grid-template-columns: 1fr;
   }
 
@@ -42,7 +45,8 @@
   .worker-client-head,
   .worker-detail-header,
   .worker-detail-actions,
-  .housing-opportunity-card {
+  .housing-opportunity-card,
+  .dashboard-head {
     flex-direction: column;
     align-items: flex-start;
   }
@@ -59,7 +63,8 @@
   .document-page-grid,
   .document-file-grid,
   .client-document-card-grid,
-  .worker-chat-compose-rich {
+  .worker-chat-compose-rich,
+  .client-chat-layout {
     grid-template-columns: 1fr;
   }
 
@@ -77,6 +82,10 @@
 
   .workspace-overlay {
     padding: 12px;
+  }
+
+  .client-progress-hero {
+    flex-direction: column;
   }
 }
 
@@ -113,6 +122,19 @@
   .triple-select {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .client-chat-compose {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "input"
+      "upload"
+      "send";
+  }
+
+  .client-chat-compose .chat-upload-btn,
+  .client-chat-compose .worker-chat-send-btn {
+    width: 100%;
   }
 
   .login-footer {

@@ -104,7 +104,13 @@
                 <div class="form-section">
                   <p class="small-text" id="admin-demo-copy">Demo access for judges</p>
                   <div class="choice-row" id="admin-demo-row">
-                    <button class="choice-btn" type="button" id="admin-demo-caseworker-btn">Demo Case Worker</button>
+                    <div class="admin-demo-worker-stack">
+                      <button class="choice-btn" type="button" id="admin-demo-caseworker-btn">Demo Case Worker</button>
+                      <label for="admin-demo-caseworker-select" id="admin-demo-caseworker-label">Select demo case worker</label>
+                      <select id="admin-demo-caseworker-select">
+                        <option value="">Select case worker</option>
+                      </select>
+                    </div>
                     <button class="choice-btn" type="button" id="admin-demo-county-btn">Demo County</button>
                   </div>
                 </div>
@@ -370,6 +376,16 @@
             <h1 id="dashboard-title">Choose what you need</h1>
             <p class="small-text" id="dashboard-subtitle">Tap a box to see the document you want help with.</p>
           </div>
+          <div class="dashboard-head-actions">
+            <div class="client-notification-shell">
+              <button class="client-bell-btn" type="button" id="client-notification-bell-btn" aria-label="Open notifications">
+                <span class="client-bell-icon" aria-hidden="true">🔔</span>
+                <span class="client-bell-count hidden" id="client-notification-bell-count">0</span>
+              </button>
+            </div>
+            <p class="small-text dashboard-note" id="dashboard-note">Need to update your answers? Edit your intake any time.</p>
+            <button class="secondary-btn dashboard-intake-btn" type="button" id="dashboard-continue-btn">Edit Intake</button>
+          </div>
         </div>
 
         <div class="dashboard-grid">
@@ -391,30 +407,130 @@
             <span class="small-text" id="doc-passport-text">Updates will appear here</span>
           </button>
 
-          <button class="doc-card doc-card-empty" type="button" data-doc="empty">
+          <button class="doc-card doc-card-progress" type="button" data-doc="progress">
             <span class="doc-art birth-art" aria-hidden="true"></span>
-            <strong id="doc-ssn-title">Coming Soon</strong>
-            <span class="small-text" id="doc-ssn-text">Empty for now</span>
+            <strong id="doc-ssn-title">Progress Dashboard</strong>
+            <span class="small-text" id="doc-ssn-text">See what is done and what is left</span>
           </button>
         </div>
+      </section>
 
-        <p class="small-text dashboard-note" id="dashboard-note">You can also continue to answer a few questions for a full plan.</p>
-        <div class="caseworker-panel client-portal-chat-panel hidden" id="client-chat-panel">
-          <div class="worker-chat-head">
-            <strong id="client-chat-title">💬 Message Your Case Worker</strong>
-            <span class="worker-chat-status active" id="client-chat-status">🟢 Case Active</span>
+      <section class="card hidden" id="client-progress-screen">
+        <div class="screen-top-row">
+          <button class="back-link-btn screen-back-btn" type="button" id="client-progress-back-btn">Go Back</button>
+        </div>
+
+        <section class="client-progress-dashboard" id="client-progress-dashboard">
+          <div class="client-progress-hero">
+            <div>
+              <p class="eyebrow" id="client-progress-eyebrow">Case progress</p>
+              <h2 id="client-progress-title">Track your housing case</h2>
+              <p class="small-text" id="client-progress-subtitle">See what is complete, what still needs attention, and what to do next.</p>
+            </div>
+            <div class="client-progress-score-card">
+              <span class="small-text" id="client-progress-score-label">Overall progress</span>
+              <strong id="client-progress-score-value">0%</strong>
+              <div class="client-progress-bar" aria-hidden="true">
+                <span id="client-progress-score-bar"></span>
+              </div>
+            </div>
           </div>
-          <div class="worker-chat-history" id="client-chat-history"></div>
-          <div id="client-chat-image-preview"></div>
-          <div class="worker-chat-compose worker-chat-compose-rich">
-            <input id="client-chat-input" type="text" placeholder="Type a message" />
-            <label class="secondary-btn chat-upload-btn" for="client-chat-image-input" id="client-chat-upload-label">Upload Image</label>
-            <input id="client-chat-image-input" class="chat-upload-input" type="file" accept="image/*" />
-            <button class="secondary-btn worker-chat-send-btn" type="button" id="client-chat-send-btn">Send</button>
+
+          <div class="client-progress-metric-grid">
+            <article class="client-progress-metric">
+              <span class="small-text" id="client-progress-metric-status-label">Case status</span>
+              <strong id="client-progress-status">Pending</strong>
+              <p class="small-text" id="client-progress-status-note">Waiting for your next update.</p>
+            </article>
+            <article class="client-progress-metric">
+              <span class="small-text" id="client-progress-metric-docs-label">Document steps</span>
+              <strong id="client-progress-doc-count">0 left</strong>
+              <p class="small-text" id="client-progress-doc-note">We track missing items from your intake.</p>
+            </article>
+            <article class="client-progress-metric">
+              <span class="small-text" id="client-progress-metric-worker-label">Case worker</span>
+              <strong id="client-progress-worker-name">Not assigned</strong>
+              <p class="small-text" id="client-progress-worker-note">A worker will appear here after assignment.</p>
+            </article>
+            <article class="client-progress-metric">
+              <span class="small-text" id="client-progress-metric-transport-label">Transportation</span>
+              <strong id="client-progress-transport-status">Not needed</strong>
+              <p class="small-text" id="client-progress-transport-note">Transportation help updates appear here.</p>
+            </article>
+          </div>
+
+          <div class="client-progress-content-grid">
+            <article class="client-progress-panel">
+              <div class="client-progress-panel-head">
+                <div>
+                  <strong id="client-progress-stage-title">Progress tracker</strong>
+                  <p class="small-text" id="client-progress-stage-subtitle">Each step updates as your case moves.</p>
+                </div>
+              </div>
+              <div class="client-stage-list" id="client-stage-list"></div>
+            </article>
+
+            <article class="client-progress-panel">
+              <div class="client-progress-panel-head">
+                <div>
+                  <strong id="client-progress-next-title">Next actions</strong>
+                  <p class="small-text" id="client-progress-next-subtitle">Your dashboard keeps the next most useful steps in one place.</p>
+                </div>
+              </div>
+              <div class="client-action-list" id="client-action-list"></div>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <section class="card hidden" id="client-chat-screen">
+        <div class="screen-top-row">
+          <button class="back-link-btn screen-back-btn" type="button" id="client-chat-back-btn">Go Back</button>
+        </div>
+
+        <div class="caseworker-panel client-portal-chat-panel" id="client-chat-panel">
+          <div class="client-chat-layout">
+            <aside class="client-chat-sidebar" id="client-chat-worker-card"></aside>
+            <div class="client-chat-main">
+              <div class="worker-chat-head client-chat-main-head">
+                <div>
+                  <strong id="client-chat-title">💬 Message Your Case Worker</strong>
+                  <p class="small-text client-chat-subtitle" id="client-chat-subtitle">Stay in touch, share images, and review updates for your case.</p>
+                </div>
+                <span class="worker-chat-status active" id="client-chat-status">🟢 Case Active</span>
+              </div>
+              <div class="client-chat-quick-actions" id="client-chat-quick-actions"></div>
+              <div class="worker-chat-history client-chat-history-panel" id="client-chat-history"></div>
+              <div id="client-chat-image-preview"></div>
+              <div class="worker-chat-compose worker-chat-compose-rich client-chat-compose">
+                <input id="client-chat-input" type="text" placeholder="Type a message" />
+                <label class="secondary-btn chat-upload-btn" for="client-chat-image-input" id="client-chat-upload-label">Upload Image</label>
+                <input id="client-chat-image-input" class="chat-upload-input" type="file" accept="image/*" />
+                <button class="secondary-btn worker-chat-send-btn" type="button" id="client-chat-send-btn">Send</button>
+              </div>
+            </div>
           </div>
           <p class="small-text worker-inline-message" id="client-chat-note"></p>
         </div>
-        <button class="big-btn" type="button" id="dashboard-continue-btn">Continue</button>
+      </section>
+
+      <section class="card hidden" id="client-notifications-screen">
+        <div class="screen-top-row">
+          <button class="back-link-btn screen-back-btn" type="button" id="client-notifications-back-btn">Go Back</button>
+        </div>
+
+        <div class="dashboard-head client-detail-page-head">
+          <div>
+            <p class="eyebrow" id="client-notification-page-eyebrow">Notifications</p>
+            <h1 id="client-notification-page-title">Your updates</h1>
+            <p class="small-text" id="client-notification-page-subtitle">Recent case updates appear here.</p>
+          </div>
+          <div class="dashboard-head-actions">
+            <p class="small-text dashboard-note" id="client-notification-delivery-note">By account method</p>
+          </div>
+        </div>
+
+        <div class="client-notification-page-list" id="client-notification-list"></div>
       </section>
 
       <section class="card hidden" id="questions-screen">
@@ -423,8 +539,8 @@
           <button class="back-link-btn screen-back-btn" type="button" id="questions-logout-btn">Logout</button>
         </div>
 
-        <h1 id="main-title">Get your ID plan</h1>
-        <p class="small-text" id="main-subtitle">Answer each question.</p>
+        <h1 id="main-title">Edit your intake</h1>
+        <p class="small-text" id="main-subtitle">Review and update your answers.</p>
 
         <div class="question-block first-block">
           <p id="q-birth">Do you have a birth certificate?</p>
@@ -473,7 +589,7 @@
         </div>
 
         <p class="error-text" id="plan-error-box" aria-live="polite"></p>
-        <button class="big-btn" type="button" id="plan-btn">Get My Plan</button>
+        <button class="big-btn" type="button" id="plan-btn">Save Intake</button>
       </section>
 
       <section class="card hidden" id="result-screen">

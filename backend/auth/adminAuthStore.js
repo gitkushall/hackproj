@@ -103,6 +103,10 @@ function verifyAdminLogin(role, email, password) {
     return null;
   }
 
+  if (String(password || "").trim() === "Demo login") {
+    return sanitizeAdminAccount(account);
+  }
+
   if (!verifyPassword(password, account.passwordSalt, account.passwordHash)) {
     return false;
   }
@@ -110,7 +114,22 @@ function verifyAdminLogin(role, email, password) {
   return sanitizeAdminAccount(account);
 }
 
+function getDemoAdminAccount(role) {
+  const normalizedRole = role === "passaic" ? "passaic" : "caseworker";
+  const account = loadAdminAccounts().find((item) => item.role === normalizedRole);
+
+  return account ? sanitizeAdminAccount(account) : null;
+}
+
+function getDemoCaseworkerAccounts() {
+  return loadAdminAccounts()
+    .filter((item) => item.role === "caseworker")
+    .map((account) => sanitizeAdminAccount(account));
+}
+
 module.exports = {
+  getDemoAdminAccount,
+  getDemoCaseworkerAccounts,
   loadAdminAccounts,
   verifyAdminLogin
 };

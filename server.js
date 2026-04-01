@@ -1,13 +1,33 @@
+require("dotenv").config();
+
 const express = require("express");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { verifyAdminLogin } = require("./backend/auth/adminAuthStore");
+const nodemailer = require("nodemailer");
+const twilio = require("twilio");
+const { getDemoAdminAccount, getDemoCaseworkerAccounts, verifyAdminLogin } = require("./backend/auth/adminAuthStore");
+const { generateAdminInsight } = require("./backend/services/openaiService");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "127.0.0.1";
 const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY || "";
+const SMTP_HOST = process.env.SMTP_HOST || "";
+const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
+const SMTP_USER = process.env.SMTP_USER || "";
+const SMTP_PASS = process.env.SMTP_PASS || "";
+const SMTP_FROM = process.env.SMTP_FROM || "";
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || "";
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || "";
+const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER || "";
+const NJ_BIRTH_ORDER_URL = "https://www.nj.gov/health/vital/order-vital/";
+const NJ_LOCAL_VITAL_RECORDS_URL = "https://www.nj.gov/health/vital/local-vital-records/";
+const SSA_CARD_URL = "https://www.ssa.gov/number-card";
+const SSA_OFFICE_LOCATOR_URL = "https://www.ssa.gov/locator/";
+const NJ_MVC_ID_URL = "https://www.nj.gov/mvc/license/non-driverid.htm";
+const NJ_MVC_APPOINTMENT_URL = "https://telegov.njportal.com/njmvc/AppointmentWizard";
+const NJ_MVC_LOCATIONS_URL = "https://www.nj.gov/mvc/locations/liccenters.htm";
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
@@ -17,6 +37,7 @@ const clientAccountsFilePath = path.join(dataDirectory, "client-accounts.json");
 const clientsFilePath = path.join(dataDirectory, "clients.json");
 const workersFilePath = path.join(dataDirectory, "workers.json");
 const notificationsFilePath = path.join(dataDirectory, "notifications.json");
+const clientNotificationsFilePath = path.join(dataDirectory, "client-notifications.json");
 const transportRequestsFilePath = path.join(dataDirectory, "transport-requests.json");
 const messagesFilePath = path.join(dataDirectory, "messages.json");
 const clientDocumentsFilePath = path.join(dataDirectory, "client-documents.json");
@@ -93,12 +114,143 @@ const defaultClients = [
   }
 ];
 
+const defaultWorkerProfiles = {
+  "WK-01": {
+    title: "Housing Documentation Specialist",
+    phone: "(973) 555-0101",
+    email: "sarah.ahmed@passaic.example.org",
+    office: "Paterson Support Center",
+    languages: ["English", "Arabic", "Spanish"],
+    specialties: ["State ID", "Birth certificate recovery", "Court-ready document prep"],
+    bio: "Sarah helps clients organize missing identity documents and keeps case steps easy to follow.",
+    availability: "Mon-Fri, 9:00 AM - 5:00 PM",
+    pronouns: "She/Her"
+  },
+  "WK-02": {
+    title: "Benefits and Records Coordinator",
+    phone: "(973) 555-0102",
+    email: "daniel.kim@passaic.example.org",
+    office: "Passaic Family Resource Office",
+    languages: ["English", "Korean"],
+    specialties: ["SSN replacement", "Agency coordination", "Document follow-ups"],
+    bio: "Daniel focuses on benefits paperwork, replacement records, and keeping agency requests moving.",
+    availability: "Mon-Fri, 8:30 AM - 4:30 PM",
+    pronouns: "He/Him"
+  },
+  "WK-03": {
+    title: "Lead Case Worker",
+    phone: "(973) 555-0103",
+    email: "priya.shah@passaic.example.org",
+    office: "Clifton Community Support Hub",
+    languages: ["English", "Hindi", "Gujarati"],
+    specialties: ["State ID appointments", "Transportation planning", "Complex case support"],
+    bio: "Priya coordinates appointments, transportation, and urgent next steps for clients with multiple barriers.",
+    availability: "Mon-Sat, 9:00 AM - 6:00 PM",
+    pronouns: "She/Her"
+  },
+  "WK-04": {
+    title: "Client Intake and Outreach Worker",
+    phone: "(973) 555-0104",
+    email: "marcus.hill@passaic.example.org",
+    office: "Wayne Housing Access Desk",
+    languages: ["English", "Spanish"],
+    specialties: ["New client intake", "Outreach", "Document collection"],
+    bio: "Marcus helps new clients get started, collect missing files, and understand the next case milestone.",
+    availability: "Mon-Fri, 10:00 AM - 6:00 PM",
+    pronouns: "He/Him"
+  }
+};
+
+function buildDefaultWorker(id, name, activeCases) {
+  return {
+    id,
+    name,
+    active_cases: activeCases,
+    ...defaultWorkerProfiles[id]
+  };
+}
+
 const defaultWorkers = [
-  { id: "WK-01", name: "Sarah Ahmed", active_cases: 1 },
-  { id: "WK-02", name: "Daniel Kim", active_cases: 1 },
-  { id: "WK-03", name: "Priya Shah", active_cases: 2 },
-  { id: "WK-04", name: "Marcus Hill", active_cases: 1 }
+  buildDefaultWorker("WK-01", "Sarah Ahmed", 1),
+  buildDefaultWorker("WK-02", "Daniel Kim", 1),
+  buildDefaultWorker("WK-03", "Priya Shah", 2),
+  buildDefaultWorker("WK-04", "Marcus Hill", 1)
 ];
+
+const njBirthOfficeDirectory = {
+  paterson: {
+    officeName: "Paterson Health Division Vital Records",
+    address: "125 Ellison Street, Paterson, NJ 07505",
+    detail: "Birth records for Paterson births are handled through the city health division.",
+    links: [
+      { label: "Office information", url: "https://www.patersonnj.gov/egov/apps/services/index.egov?action=i&fDD=9-9&id=39&path=details" },
+      { label: "Order online", url: NJ_BIRTH_ORDER_URL }
+    ]
+  },
+  passaic: {
+    officeName: "Passaic Vital Statistics Office",
+    address: "330 Passaic Street, Passaic, NJ 07055",
+    detail: "Use the city vital statistics page for local certificate instructions.",
+    links: [
+      { label: "Office information", url: "https://www.cityofpassaic.com/304/Vital-Statistics" },
+      { label: "Order online", url: NJ_BIRTH_ORDER_URL }
+    ]
+  },
+  wayne: {
+    officeName: "Wayne Township Vital Statistics",
+    address: "475 Valley Road, Wayne, NJ 07470",
+    detail: "Wayne Township posts vital records steps through its health department page.",
+    links: [
+      { label: "Office information", url: "https://waynetownship.com/health-home-page/vital-statistics/" },
+      { label: "Order online", url: NJ_BIRTH_ORDER_URL }
+    ]
+  },
+  clifton: {
+    officeName: "Clifton City Clerk and Registrar",
+    address: "900 Clifton Avenue, Clifton, NJ 07013",
+    detail: "Clifton birth-record requests are typically coordinated through the city clerk/registrar office.",
+    links: [
+      { label: "Birth certificate form", url: "https://www.cliftonnj.org/DocumentCenter/View/25457" },
+      { label: "Order online", url: NJ_BIRTH_ORDER_URL }
+    ]
+  },
+  totowa: {
+    officeName: "Totowa Borough Registrar of Vital Statistics",
+    address: "537 Totowa Road, Totowa, NJ 07512",
+    detail: "Totowa vital records are coordinated through the borough clerk and registrar.",
+    links: [
+      { label: "Local registrar notice", url: "https://www.totowanj.org/_files/ugd/3cc0e2_93e480e99ef64c12a239f274607bce29.pdf" },
+      { label: "Order online", url: NJ_BIRTH_ORDER_URL }
+    ]
+  }
+};
+
+const njMvcOfficeDirectory = {
+  paterson: {
+    officeName: "Paterson Licensing Center",
+    address: "125 Broadway, Suite 201, Paterson, NJ 07505"
+  },
+  passaic: {
+    officeName: "Paterson Licensing Center",
+    address: "125 Broadway, Suite 201, Paterson, NJ 07505"
+  },
+  clifton: {
+    officeName: "Wayne Licensing Center",
+    address: "481 Route 46 West, Wayne, NJ 07470"
+  },
+  wayne: {
+    officeName: "Wayne Licensing Center",
+    address: "481 Route 46 West, Wayne, NJ 07470"
+  },
+  totowa: {
+    officeName: "Wayne Licensing Center",
+    address: "481 Route 46 West, Wayne, NJ 07470"
+  },
+  default: {
+    officeName: "Nearest NJ MVC Licensing Center",
+    address: "Use the official MVC locations page to choose the closest office."
+  }
+};
 
 const defaultNotifications = [
   {
@@ -126,6 +278,7 @@ const defaultTransportRequests = [
 ];
 
 const defaultClientAccounts = [];
+const defaultClientNotifications = [];
 
 const defaultMessages = [
   {
@@ -220,6 +373,28 @@ function loadJsonFile(filePath, fallbackValue) {
   }
 }
 
+function enrichWorkerProfile(worker) {
+  const profileDefaults = defaultWorkerProfiles[worker.id] || {};
+
+  return {
+    ...profileDefaults,
+    ...worker,
+    languages: Array.isArray(worker.languages) && worker.languages.length
+      ? worker.languages
+      : (profileDefaults.languages || ["English"]),
+    specialties: Array.isArray(worker.specialties) && worker.specialties.length
+      ? worker.specialties
+      : (profileDefaults.specialties || []),
+    bio: worker.bio || profileDefaults.bio || "",
+    availability: worker.availability || profileDefaults.availability || "Mon-Fri, 9:00 AM - 5:00 PM",
+    office: worker.office || profileDefaults.office || "Passaic County Main Office",
+    phone: worker.phone || profileDefaults.phone || "",
+    email: worker.email || profileDefaults.email || "",
+    title: worker.title || profileDefaults.title || "Case Worker",
+    pronouns: worker.pronouns || profileDefaults.pronouns || ""
+  };
+}
+
 function saveClientAccounts(accounts) {
   saveJsonFile(clientAccountsFilePath, accounts);
 }
@@ -231,6 +406,10 @@ function saveCountyState() {
   saveJsonFile(transportRequestsFilePath, transportRequests);
 }
 
+function saveClientNotifications() {
+  saveJsonFile(clientNotificationsFilePath, clientNotifications);
+}
+
 function saveMessages() {
   saveJsonFile(messagesFilePath, messages);
 }
@@ -240,16 +419,21 @@ function saveClientDocuments() {
 }
 
 const clients = loadJsonFile(clientsFilePath, defaultClients);
-const workers = loadJsonFile(workersFilePath, defaultWorkers);
+const workers = loadJsonFile(workersFilePath, defaultWorkers).map(enrichWorkerProfile);
 const notifications = loadJsonFile(notificationsFilePath, defaultNotifications);
+const clientNotifications = loadJsonFile(clientNotificationsFilePath, defaultClientNotifications);
 const transportRequests = loadJsonFile(transportRequestsFilePath, defaultTransportRequests);
 const clientAccounts = loadJsonFile(clientAccountsFilePath, defaultClientAccounts);
 const messages = loadJsonFile(messagesFilePath, defaultMessages);
 const clientDocuments = loadJsonFile(clientDocumentsFilePath, defaultClientDocuments);
 const phoneOtpStore = new Map();
 const authSessions = new Map();
+let mailTransporter = null;
+let smsClient = null;
 
 migrateClientAccounts();
+migrateClientNotificationStore();
+saveJsonFile(workersFilePath, workers);
 
 function getRecommendedWorker() {
   return workers.reduce((lowest, worker) => (
@@ -263,6 +447,166 @@ function normalizePhone(phone) {
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
+}
+
+function isSmtpConfigured() {
+  return Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS && SMTP_FROM);
+}
+
+function isTwilioConfigured() {
+  return Boolean(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER);
+}
+
+function getMailTransporter() {
+  if (!isSmtpConfigured()) {
+    return null;
+  }
+
+  if (!mailTransporter) {
+    mailTransporter = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_PORT === 465,
+      auth: {
+        user: SMTP_USER,
+        pass: SMTP_PASS
+      }
+    });
+  }
+
+  return mailTransporter;
+}
+
+function getSmsClient() {
+  if (!isTwilioConfigured()) {
+    return null;
+  }
+
+  if (!smsClient) {
+    smsClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+  }
+
+  return smsClient;
+}
+
+function getClientNotificationChannel(account) {
+  const methods = Array.isArray(account?.authMethods) ? account.authMethods : [];
+
+  if (methods.includes("email") && account?.email) {
+    return "email";
+  }
+
+  if (methods.includes("phone") && account?.phone) {
+    return "sms";
+  }
+
+  if (account?.email) {
+    return "email";
+  }
+
+  if (account?.phone) {
+    return "sms";
+  }
+
+  return "in_app";
+}
+
+function getClientNotificationTarget(account) {
+  const channel = getClientNotificationChannel(account);
+  if (channel === "email") {
+    return account?.email || "";
+  }
+
+  if (channel === "sms") {
+    return account?.phone || "";
+  }
+
+  return "";
+}
+
+async function deliverClientNotification(account, notification) {
+  const channel = getClientNotificationChannel(account);
+  const recipient = getClientNotificationTarget(account);
+  const body = `${notification.title}: ${notification.message}`;
+
+  if (channel === "email" && recipient) {
+    const transporter = getMailTransporter();
+
+    if (!transporter) {
+      console.log(`[notify:email:simulated] ${recipient} <- ${body}`);
+      return { channel, recipient, provider: "console-simulated-email", status: "simulated" };
+    }
+
+    await transporter.sendMail({
+      from: SMTP_FROM,
+      to: recipient,
+      subject: notification.title,
+      text: body
+    });
+
+    return { channel, recipient, provider: "smtp", status: "sent" };
+  }
+
+  if (channel === "sms" && recipient) {
+    const client = getSmsClient();
+
+    if (!client) {
+      console.log(`[notify:sms:simulated] ${recipient} <- ${body}`);
+      return { channel, recipient, provider: "console-simulated-sms", status: "simulated" };
+    }
+
+    await client.messages.create({
+      body,
+      from: TWILIO_FROM_NUMBER,
+      to: recipient
+    });
+
+    return { channel, recipient, provider: "twilio", status: "sent" };
+  }
+
+  return { channel: "in_app", recipient: "", provider: "in-app", status: "stored" };
+}
+
+async function createClientNotification(clientId, payload = {}) {
+  const account = clientAccounts.find((item) => item.clientId === clientId);
+  if (!account) {
+    return null;
+  }
+
+  const notification = {
+    id: `CNT-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    client_id: clientId,
+    title: String(payload.title || "Case update").trim() || "Case update",
+    message: String(payload.message || "").trim(),
+    category: String(payload.category || "general").trim(),
+    read: false,
+    timestamp: new Date().toISOString(),
+    delivery: {
+      channel: getClientNotificationChannel(account),
+      recipient: getClientNotificationTarget(account),
+      provider: "pending",
+      status: "pending"
+    }
+  };
+
+  clientNotifications.unshift(notification);
+  saveClientNotifications();
+
+  try {
+    notification.delivery = await deliverClientNotification(account, notification);
+  } catch (error) {
+    notification.delivery = {
+      channel: getClientNotificationChannel(account),
+      recipient: getClientNotificationTarget(account),
+      provider: "delivery-error",
+      status: "failed",
+      error: error.message
+    };
+    console.error(`Client notification delivery failed for ${clientId}.`, error.message);
+  }
+
+  saveClientNotifications();
+  return notification;
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -401,6 +745,136 @@ function getMissingDocumentsFromAnswers(answers = {}) {
   return missing;
 }
 
+function getDocumentLabel(documentType) {
+  const labels = {
+    passport: "Passport",
+    ssn: "Social Security card",
+    state_id: "State ID",
+    birth_certificate: "Birth certificate"
+  };
+
+  return labels[documentType] || "Document";
+}
+
+function normalizeLocationValue(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ");
+}
+
+function isNewJerseyLocation(location = {}) {
+  return normalizeLocationValue(location.state) === "new jersey";
+}
+
+function getBirthCertificateRecommendation(account) {
+  const birthLocation = account?.intakeLocations?.birth || {};
+  const birthCityKey = normalizeLocationValue(birthLocation.city);
+  const cityRecommendation = njBirthOfficeDirectory[birthCityKey] || null;
+
+  if (isNewJerseyLocation(birthLocation)) {
+    return {
+      documentType: "birth_certificate",
+      title: "Get your birth certificate",
+      officeName: cityRecommendation?.officeName || `${birthLocation.city || "Local"} Registrar of Vital Statistics`,
+      address: cityRecommendation?.address || `${birthLocation.city || "Birth city"}, ${birthLocation.county || "local county"} County, New Jersey`,
+      detail: cityRecommendation?.detail || "Use the local registrar if you were born in this municipality, or order online through New Jersey Vital Records.",
+      links: cityRecommendation?.links || [
+        { label: "Find local registrar", url: NJ_LOCAL_VITAL_RECORDS_URL },
+        { label: "Order online", url: NJ_BIRTH_ORDER_URL }
+      ]
+    };
+  }
+
+  return {
+    documentType: "birth_certificate",
+    title: "Get your birth certificate",
+    officeName: birthLocation.city
+      ? `${birthLocation.city}, ${birthLocation.state || "birth state"} records office`
+      : "Birth records office",
+    address: birthLocation.city
+      ? `${birthLocation.city}, ${birthLocation.county || ""}${birthLocation.county ? " County, " : ""}${birthLocation.state || ""}`.trim()
+      : "Use the records office in the state where you were born.",
+    detail: "Birth certificates usually must be requested from the state or city where you were born.",
+    links: [
+      { label: "Start NJ online order", url: NJ_BIRTH_ORDER_URL }
+    ]
+  };
+}
+
+function getSsnRecommendation(account) {
+  const currentLocation = account?.intakeLocations?.current || {};
+  const city = currentLocation.city || "your area";
+  const stateName = currentLocation.state || "";
+  const replacementAvailableOnline = true;
+
+  return {
+    documentType: "ssn",
+    title: "Request SSN card",
+    officeName: `Social Security office near ${city}`,
+    address: stateName ? `${city}, ${stateName}` : city,
+    detail: replacementAvailableOnline
+      ? "Start online if you qualify, or use the official SSA locator to find the office that serves your address."
+      : "Use the official SSA locator to find the office that serves your address.",
+    links: [
+      { label: "Replace card online", url: SSA_CARD_URL },
+      { label: "Find local SSA office", url: SSA_OFFICE_LOCATOR_URL }
+    ]
+  };
+}
+
+function getStateIdRecommendation(account) {
+  const currentLocation = account?.intakeLocations?.current || {};
+  const cityKey = normalizeLocationValue(currentLocation.city);
+  const office = njMvcOfficeDirectory[cityKey] || njMvcOfficeDirectory.default;
+
+  if (isNewJerseyLocation(currentLocation)) {
+    return {
+      documentType: "state_id",
+      title: "Finish State ID step",
+      officeName: office.officeName,
+      address: office.address,
+      detail: "New Jersey non-driver IDs are handled through MVC licensing centers and usually require an appointment.",
+      links: [
+        { label: "Book MVC appointment", url: NJ_MVC_APPOINTMENT_URL },
+        { label: "State ID requirements", url: NJ_MVC_ID_URL },
+        { label: "View MVC locations", url: NJ_MVC_LOCATIONS_URL }
+      ]
+    };
+  }
+
+  return {
+    documentType: "state_id",
+    title: "Finish State ID step",
+    officeName: `${currentLocation.state || "State"} ID office`,
+    address: currentLocation.city
+      ? `${currentLocation.city}, ${currentLocation.state || ""}`.trim()
+      : "Use your current state's motor vehicle or identification agency.",
+    detail: "State ID rules depend on your current state, so use the local motor vehicle agency for the next appointment.",
+    links: []
+  };
+}
+
+function buildClientServiceRecommendations(account, client) {
+  const missingDocuments = Array.isArray(client?.missing_documents) ? client.missing_documents : [];
+  const recommendations = {};
+
+  if (missingDocuments.includes("birth_certificate")) {
+    recommendations.birth_certificate = getBirthCertificateRecommendation(account);
+  }
+
+  if (missingDocuments.includes("ssn")) {
+    recommendations.ssn = getSsnRecommendation(account);
+  }
+
+  if (missingDocuments.includes("state_id")) {
+    recommendations.state_id = getStateIdRecommendation(account);
+  }
+
+  return recommendations;
+}
+
 function saveClientIntake(account, payload = {}) {
   const documentAnswers = {
     hasBirth: Boolean(payload.documentAnswers?.hasBirth),
@@ -491,6 +965,31 @@ function migrateClientAccounts() {
   }
 }
 
+function migrateClientNotificationStore() {
+  let changed = false;
+
+  clientNotifications.forEach((notification) => {
+    if (!("read" in notification)) {
+      notification.read = false;
+      changed = true;
+    }
+
+    if (!notification.delivery || typeof notification.delivery !== "object") {
+      notification.delivery = {
+        channel: "in_app",
+        recipient: "",
+        provider: "in-app",
+        status: "stored"
+      };
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    saveClientNotifications();
+  }
+}
+
 function addAccountCreationNotification(account, requestCaseWorker) {
   const message = requestCaseWorker
     ? `Client ${account.name} created an account and requested a case worker`
@@ -502,6 +1001,21 @@ function addAccountCreationNotification(account, requestCaseWorker) {
     worker_id: "system",
     timestamp: new Date().toISOString()
   });
+}
+
+function markClientNotificationsAsRead(clientId) {
+  let changed = false;
+
+  clientNotifications.forEach((notification) => {
+    if (notification.client_id === clientId && !notification.read) {
+      notification.read = true;
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    saveClientNotifications();
+  }
 }
 
 async function translateWithGoogle(text, targetLang, sourceLang = "en") {
@@ -598,13 +1112,45 @@ app.get("/api/notifications", (_req, res) => {
   });
 });
 
+app.get("/api/client-notifications", (req, res) => {
+  const account = getAuthenticatedAccount(req);
+
+  if (!account) {
+    res.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const items = clientNotifications
+    .filter((notification) => notification.client_id === account.clientId)
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  res.json({
+    notifications: items,
+    unread_count: items.filter((notification) => !notification.read).length,
+    delivery_method: getClientNotificationChannel(account),
+    delivery_target: getClientNotificationTarget(account)
+  });
+});
+
+app.post("/api/client-notifications/read-all", (req, res) => {
+  const account = getAuthenticatedAccount(req);
+
+  if (!account) {
+    res.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  markClientNotificationsAsRead(account.clientId);
+  res.json({ success: true, unread_count: 0 });
+});
+
 app.get("/api/transport-requests", (_req, res) => {
   res.json({
     transport_requests: transportRequests.slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
   });
 });
 
-app.post("/api/auth/signup/phone", (req, res) => {
+app.post("/api/auth/signup/phone", async (req, res) => {
   const name = String(req.body?.name || "").trim();
   const phone = String(req.body?.phone || "").trim();
   const requestCaseWorker = Boolean(req.body?.request_case_worker);
@@ -640,6 +1186,13 @@ app.post("/api/auth/signup/phone", (req, res) => {
   addAccountCreationNotification(account, requestCaseWorker);
   saveClientAccounts(clientAccounts);
   saveCountyState();
+  await createClientNotification(account.clientId, {
+    title: "Notifications are on",
+    message: requestCaseWorker
+      ? "Your case worker request was sent. Future updates will come here and by text."
+      : "Your account is ready. Future updates will come here and by text.",
+    category: "account"
+  });
 
   res.json({
     success: true,
@@ -647,7 +1200,7 @@ app.post("/api/auth/signup/phone", (req, res) => {
   });
 });
 
-app.post("/api/auth/signup/email", (req, res) => {
+app.post("/api/auth/signup/email", async (req, res) => {
   const name = String(req.body?.name || "").trim();
   const email = String(req.body?.email || "").trim();
   const password = String(req.body?.password || "").trim();
@@ -685,6 +1238,13 @@ app.post("/api/auth/signup/email", (req, res) => {
   addAccountCreationNotification(account, requestCaseWorker);
   saveClientAccounts(clientAccounts);
   saveCountyState();
+  await createClientNotification(account.clientId, {
+    title: "Notifications are on",
+    message: requestCaseWorker
+      ? "Your case worker request was sent. Future updates will come here and by email."
+      : "Your account is ready. Future updates will come here and by email.",
+    category: "account"
+  });
 
   res.json({
     success: true,
@@ -805,6 +1365,44 @@ app.post("/api/admin/login", (req, res) => {
   });
 });
 
+app.get("/api/admin/demo-accounts", (req, res) => {
+  const role = String(req.query.role || "caseworker").trim();
+
+  if (role === "caseworker") {
+    res.json({
+      role,
+      accounts: getDemoCaseworkerAccounts()
+    });
+    return;
+  }
+
+  const account = getDemoAdminAccount(role);
+  res.json({
+    role,
+    accounts: account ? [account] : []
+  });
+});
+
+app.post("/api/admin/demo-login", (req, res) => {
+  const role = String(req.body?.role || "caseworker").trim();
+  const workerId = String(req.body?.workerId || "").trim();
+  const account = role === "caseworker" && workerId
+    ? getDemoCaseworkerAccounts().find((item) => item.workerId === workerId) || null
+    : getDemoAdminAccount(role);
+
+  if (!account) {
+    res.status(404).json({ success: false, error: "Demo account not found." });
+    return;
+  }
+
+  res.json({
+    success: true,
+    role: account.role,
+    workerId: account.workerId || null,
+    account
+  });
+});
+
 app.post("/api/auth/logout", (req, res) => {
   clearAuthSession(req, res);
   res.json({ success: true });
@@ -821,6 +1419,25 @@ app.get("/api/auth/me", (req, res) => {
   res.json({
     authenticated: true,
     user: sanitizeClientAccount(account)
+  });
+});
+
+app.get("/api/client-service-recommendations", (req, res) => {
+  const account = getAuthenticatedAccount(req);
+
+  if (!account) {
+    res.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  const client = clients.find((item) => item.id === account.clientId);
+  if (!client) {
+    res.status(404).json({ error: "Client not found." });
+    return;
+  }
+
+  res.json({
+    recommendations: buildClientServiceRecommendations(account, client)
   });
 });
 
@@ -952,7 +1569,7 @@ app.get("/api/worker-notifications", (req, res) => {
   });
 });
 
-app.post("/api/assign", (req, res) => {
+app.post("/api/assign", async (req, res) => {
   const { client_id: clientId, worker_id: workerId } = req.body || {};
   const client = clients.find((item) => item.id === clientId);
   const worker = workers.find((item) => item.id === workerId);
@@ -991,6 +1608,11 @@ app.post("/api/assign", (req, res) => {
     timestamp: new Date().toISOString()
   });
   saveCountyState();
+  await createClientNotification(client.id, {
+    title: "Case worker assigned",
+    message: `${worker.name} has been assigned to your case.`,
+    category: "assignment"
+  });
 
   res.json({
     success: true,
@@ -1000,7 +1622,7 @@ app.post("/api/assign", (req, res) => {
   });
 });
 
-app.post("/api/case-status", (req, res) => {
+app.post("/api/case-status", async (req, res) => {
   const { client_id: clientId, worker_id: workerId, action } = req.body || {};
   const client = clients.find((item) => item.id === clientId);
   const worker = workers.find((item) => item.id === workerId);
@@ -1019,6 +1641,11 @@ app.post("/api/case-status", (req, res) => {
       worker_id: worker.id,
       timestamp: new Date().toISOString()
     });
+    await createClientNotification(client.id, {
+      title: "Case accepted",
+      message: `${worker.name} accepted your case and started working on it.`,
+      category: "status"
+    });
   } else if (action === "complete") {
     client.status = "completed";
     client.worker_status = "completed";
@@ -1034,6 +1661,11 @@ app.post("/api/case-status", (req, res) => {
       worker_id: worker.id,
       timestamp: new Date().toISOString()
     });
+    await createClientNotification(client.id, {
+      title: "Case completed",
+      message: `${worker.name} marked your case as completed.`,
+      category: "status"
+    });
   } else if (action === "reject") {
     client.worker_status = "rejected";
     client.status = "pending";
@@ -1046,6 +1678,11 @@ app.post("/api/case-status", (req, res) => {
       message: `${worker.name} rejected ${client.name}`,
       worker_id: worker.id,
       timestamp: new Date().toISOString()
+    });
+    await createClientNotification(client.id, {
+      title: "Assignment changed",
+      message: `${worker.name} declined this case. A new worker can be assigned next.`,
+      category: "status"
     });
   } else {
     res.status(400).json({ error: "Invalid action." });
@@ -1083,7 +1720,7 @@ app.get("/api/messages", (req, res) => {
   });
 });
 
-app.post("/api/messages", (req, res) => {
+app.post("/api/messages", async (req, res) => {
   const {
     client_id: clientId,
     worker_id: workerId,
@@ -1134,6 +1771,15 @@ app.post("/api/messages", (req, res) => {
 
   messages.push(message);
   saveMessages();
+  if (message.sender === "worker") {
+    await createClientNotification(clientId, {
+      title: "New message",
+      message: trimmedText
+        ? `${message.text.slice(0, 120)}${message.text.length > 120 ? "..." : ""}`
+        : "Your case worker sent an image update.",
+      category: "message"
+    });
+  }
 
   res.json({
     success: true,
@@ -1141,7 +1787,7 @@ app.post("/api/messages", (req, res) => {
   });
 });
 
-app.post("/api/client-documents", (req, res) => {
+app.post("/api/client-documents", async (req, res) => {
   const {
     client_id: clientId,
     worker_id: workerId,
@@ -1189,6 +1835,13 @@ app.post("/api/client-documents", (req, res) => {
 
   clientDocuments.unshift(documentRecord);
   saveClientDocuments();
+  if (documentRecord.uploaded_by === "worker") {
+    await createClientNotification(clientId, {
+      title: "New document uploaded",
+      message: `${getDocumentLabel(documentRecord.document_type)} was uploaded to your case.`,
+      category: "document"
+    });
+  }
 
   res.json({
     success: true,
@@ -1223,7 +1876,7 @@ app.delete("/api/client-documents/:documentId", (req, res) => {
   });
 });
 
-app.post("/api/transport-request", (req, res) => {
+app.post("/api/transport-request", async (req, res) => {
   const { client_id: clientId, worker_id: workerId } = req.body || {};
   const client = clients.find((item) => item.id === clientId);
   const worker = workers.find((item) => item.id === workerId);
@@ -1249,6 +1902,11 @@ app.post("/api/transport-request", (req, res) => {
     timestamp: request.timestamp
   });
   saveCountyState();
+  await createClientNotification(client.id, {
+    title: "Transportation requested",
+    message: `${worker.name} requested transportation support for your case.`,
+    category: "transport"
+  });
 
   res.json({
     success: true,
@@ -1256,10 +1914,53 @@ app.post("/api/transport-request", (req, res) => {
   });
 });
 
-app.post("/api/admin-chat", (req, res) => {
+app.post("/api/admin-chat", async (req, res) => {
   const { question = "" } = req.body || {};
+  const trimmedQuestion = String(question || "").trim();
+
+  if (!trimmedQuestion) {
+    res.status(400).json({ success: false, error: "Question is required." });
+    return;
+  }
+
+  const recommended = getRecommendedWorker();
+  const dashboard = {
+    totalUsers: systemData.total_users,
+    completed: systemData.completed,
+    stuckStateId: systemData.stuck_state_id,
+    stuckSsn: systemData.stuck_ssn,
+    stuckBirth: systemData.stuck_birth,
+    transportNeeded: systemData.transport_needed,
+    recommendedWorker: recommended
+      ? {
+          id: recommended.id,
+          name: recommended.name,
+          activeCases: recommended.active_cases
+        }
+      : null
+  };
+
+  try {
+    const response = await generateAdminInsight({
+      question: trimmedQuestion,
+      systemData,
+      dashboard
+    });
+
+    res.json({
+      success: true,
+      provider: "openai",
+      response: response || createInsightResponse(trimmedQuestion)
+    });
+    return;
+  } catch (error) {
+    console.error("OpenAI admin chat failed. Falling back to local insight response.", error.message);
+  }
+
   res.json({
-    response: createInsightResponse(question)
+    success: true,
+    provider: "local-fallback",
+    response: createInsightResponse(trimmedQuestion)
   });
 });
 

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "CNT-1775010184580-43a788",
+    "client_id": "CL-1014",
+    "title": "Case worker assigned",
+    "message": "Daniel Kim has been assigned to your case.",
+    "category": "assignment",
+    "read": false,
+    "timestamp": "2026-04-01T02:23:04.580Z",
+    "delivery": {
+      "channel": "email",
+      "recipient": "kushallsub123@gmail.com",
+      "provider": "console-simulated-email",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1775010179114-81337e",
+    "client_id": "CL-1011",
+    "title": "Case worker assigned",
+    "message": "Marcus Hill has been assigned to your case.",
+    "category": "assignment",
+    "read": false,
+    "timestamp": "2026-04-01T02:22:59.114Z",
+    "delivery": {
+      "channel": "sms",
+      "recipient": "4454454455",
+      "provider": "console-simulated-sms",
+      "status": "simulated"
+    }
+  }
+]

@@ -8,6 +8,7 @@ const {
   updateCaseApproval
 } = require("./caseStore");
 const { verifyAdminLogin } = require("../auth/adminAuthStore");
+const { generateAdminInsight } = require("../services/openaiService");
 
 function createInsightResponse(questionRaw) {
   const systemData = getSystemData();
@@ -96,9 +97,40 @@ function getNotifications(_req, res) {
   res.json({ notifications: getNotificationsResponse() });
 }
 
-function postAdminChat(req, res) {
+async function postAdminChat(req, res) {
   const { question = "" } = req.body || {};
-  res.json({ response: createInsightResponse(question) });
+  const trimmedQuestion = String(question || "").trim();
+
+  if (!trimmedQuestion) {
+    res.status(400).json({ success: false, error: "Question is required." });
+    return;
+  }
+
+  const systemData = getSystemData();
+  const dashboard = getDashboardStats();
+
+  try {
+    const response = await generateAdminInsight({
+      question: trimmedQuestion,
+      systemData,
+      dashboard
+    });
+
+    res.json({
+      success: true,
+      provider: "openai",
+      response: response || createInsightResponse(trimmedQuestion)
+    });
+    return;
+  } catch (error) {
+    console.error("OpenAI admin chat failed. Falling back to local insight response.", error.message);
+  }
+
+  res.json({
+    success: true,
+    provider: "local-fallback",
+    response: createInsightResponse(trimmedQuestion)
+  });
 }
 
 module.exports = {

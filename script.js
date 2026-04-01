@@ -18,15 +18,25 @@ const state = {
     isAiPanelOpen: false,
     selectedWorkerId: null
   },
+  adminDemoWorkers: [],
+  adminSelectedDemoWorkerId: "",
   clientPortalData: {
     currentClientId: null,
     currentUser: null,
+    serviceRecommendations: {},
+    notifications: [],
+    unreadNotificationCount: 0,
+    deliveryMethod: "in_app",
+    deliveryTarget: "",
     pendingImage: null,
     documents: [],
     selectedDocumentType: null,
     pendingDocumentByType: {},
     chatRefreshIntervalId: null,
-    isChatPanelOpen: false
+    notificationRefreshIntervalId: null,
+    isChatPanelOpen: false,
+    isNotificationPanelOpen: false,
+    showWorkerProfile: true
   },
   caseWorkerData: {
     currentWorkerId: "WK-03",
@@ -55,9 +65,6 @@ const state = {
     hasID: null
   },
   sameAsBirthLocation: false,
-  clientNavigation: {
-    currentView: "login"
-  },
   lastPlan: null
 };
 
@@ -113,21 +120,15 @@ const DOCUMENT_TYPES = [
   { key: "birth_certificate", labelKey: "docBirthTitle", fallback: "Birth Certificate" }
 ];
 
-const NJ_BIRTH_CERTIFICATE_URL = "https://www.nj.gov/health/vital/";
+const NJ_BIRTH_CERTIFICATE_URL = "https://www.nj.gov/health/vital/order-vital/";
 const SSA_CARD_URL = "https://www.ssa.gov/number-card";
-const NJ_MVC_URL = "https://www.nj.gov/mvc/index.html";
-const ADMIN_DEMO_ACCESS = {
-  caseworker: {
-    role: "caseworker",
-    email: "priya.shah@idhelp.org",
-    password: "Priya!2026"
-  },
-  passaic: {
-    role: "passaic",
-    email: "county@idhelp.org",
-    password: "Passaic!2026"
-  }
-};
+const NJ_MVC_URL = "https://www.nj.gov/mvc/license/non-driverid.htm";
+const DEFAULT_DEMO_CASEWORKERS = [
+  { workerId: "WK-01", name: "Sarah Ahmed", email: "sarah.ahmed@idhelp.org" },
+  { workerId: "WK-02", name: "Daniel Kim", email: "daniel.kim@idhelp.org" },
+  { workerId: "WK-03", name: "Priya Shah", email: "priya.shah@idhelp.org" },
+  { workerId: "WK-04", name: "Marcus Hill", email: "marcus.hill@idhelp.org" }
+];
 
 const uiText = {
   en: {
@@ -142,9 +143,6 @@ const uiText = {
     adminEmail: "Email",
     adminPassword: "Password",
     adminLogin: "Login",
-    adminDemoCopy: "Demo access for judges",
-    adminDemoCaseworker: "Demo Case Worker",
-    adminDemoCounty: "Demo County",
     adminError: "Wrong email or password",
     adminDashboardEyebrow: "Staff cases",
     adminDashboardTitle: "Your case dashboard",
@@ -215,11 +213,11 @@ const uiText = {
     docPassportText: "Passport support",
     docSsnTitle: "SSN",
     docSsnText: "Social Security help",
-    dashboardNote: "You can also continue to answer a few questions for a full plan.",
-    dashboardContinue: "Continue",
+    dashboardNote: "Need to update your answers? Edit your intake any time.",
+    dashboardContinue: "Edit Intake",
     select: "Select",
-    mainTitle: "Get your ID plan",
-    mainSubtitle: "Answer each question.",
+    mainTitle: "Edit your intake",
+    mainSubtitle: "Review and update your answers.",
     qBirth: "Do you have a birth certificate?",
     qSSN: "Do you have a Social Security card?",
     qID: "Do you have a State ID?",
@@ -231,10 +229,9 @@ const uiText = {
     selectCity: "Select a city",
     yes: "Yes",
     no: "No",
-    getPlan: "Get My Plan",
-    yourPlan: "Your plan",
+    getPlan: "Save Intake",
+    yourPlan: "Your intake summary",
     transport: "Get Transportation Help",
-    planDashboard: "Continue to Dashboard",
     startOver: "Start over",
     helpButton: "Need Help?",
     helpTitle: "Need Help?",
@@ -257,9 +254,6 @@ const uiText = {
     adminEmail: "Correo",
     adminPassword: "Contrasena",
     adminLogin: "Entrar",
-    adminDemoCopy: "Acceso demo para jueces",
-    adminDemoCaseworker: "Demo trabajador social",
-    adminDemoCounty: "Demo del condado",
     adminError: "Correo o contrasena incorrectos",
     adminDashboardEyebrow: "Casos del personal",
     adminDashboardTitle: "Su panel de casos",
@@ -330,11 +324,11 @@ const uiText = {
     docPassportText: "Ayuda con pasaporte",
     docSsnTitle: "SSN",
     docSsnText: "Ayuda con Seguro Social",
-    dashboardNote: "Tambien puede continuar para responder unas preguntas y obtener un plan completo.",
-    dashboardContinue: "Continuar",
+    dashboardNote: "Necesita actualizar sus respuestas? Puede editar su ingreso cuando quiera.",
+    dashboardContinue: "Editar ingreso",
     select: "Seleccione",
-    mainTitle: "Obtenga su plan de ID",
-    mainSubtitle: "Responda cada pregunta.",
+    mainTitle: "Edite su ingreso",
+    mainSubtitle: "Revise y actualice sus respuestas.",
     qBirth: "Tiene acta de nacimiento?",
     qSSN: "Tiene tarjeta de Seguro Social?",
     qID: "Tiene ID estatal?",
@@ -346,10 +340,9 @@ const uiText = {
     selectCity: "Seleccione una ciudad",
     yes: "Si",
     no: "No",
-    getPlan: "Obtener mi plan",
-    yourPlan: "Su plan",
+    getPlan: "Guardar ingreso",
+    yourPlan: "Resumen de su ingreso",
     transport: "Obtener ayuda de transporte",
-    planDashboard: "Continuar al panel",
     startOver: "Empezar de nuevo",
     helpButton: "Necesita ayuda?",
     helpTitle: "Necesita ayuda?",
@@ -366,9 +359,8 @@ async function translateText(text, targetLang) {
   if (targetLang === "en") return text;
 
   try {
-    const response = await fetch(getApiUrl("/api/translate"), {
+    const response = await fetch("/api/translate", {
       method: "POST",
-      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         text,
@@ -547,6 +539,22 @@ function formatLocalizedTime(timestampRaw) {
     hour: "numeric",
     minute: "2-digit"
   });
+}
+
+function getClientDeliveryMethodLabel(method, target = "") {
+  if (method === "sms") {
+    return state.lang === "es"
+      ? `Texto${target ? ` a ${target}` : ""}`
+      : `Text${target ? ` to ${target}` : ""}`;
+  }
+
+  if (method === "email") {
+    return state.lang === "es"
+      ? `Correo${target ? ` a ${target}` : ""}`
+      : `Email${target ? ` to ${target}` : ""}`;
+  }
+
+  return state.lang === "es" ? "Solo en la aplicacion" : "In app only";
 }
 
 function getYesNoLabel(value) {
@@ -826,7 +834,13 @@ function formatLocation(location) {
 }
 
 function openScreen(screenId) {
-  ["login-screen", "create-account-screen", "admin-dashboard-screen", "caseworker-client-screen", "caseworker-documents-screen", "client-documents-screen", "dashboard-screen", "questions-screen", "result-screen"].forEach((id) => {
+  if (!hasAuthenticatedClientUser() && ["dashboard-screen", "client-progress-screen", "client-chat-screen", "client-notifications-screen", "questions-screen", "result-screen", "client-documents-screen"].includes(screenId)) {
+    screenId = "login-screen";
+  } else if (userNeedsIntake() && ["dashboard-screen", "client-progress-screen", "client-chat-screen", "client-notifications-screen", "result-screen", "client-documents-screen"].includes(screenId)) {
+    screenId = "questions-screen";
+  }
+
+  ["login-screen", "create-account-screen", "admin-dashboard-screen", "caseworker-client-screen", "caseworker-documents-screen", "client-documents-screen", "dashboard-screen", "client-progress-screen", "client-chat-screen", "client-notifications-screen", "questions-screen", "result-screen"].forEach((id) => {
     document.getElementById(id).classList.toggle("hidden", id !== screenId);
   });
   document.getElementById("login-error").textContent = "";
@@ -855,9 +869,14 @@ function openScreen(screenId) {
     closeWorkerProfile();
   }
 
+  if (screenId !== "client-notifications-screen") {
+    closeClientNotificationPanel();
+  }
+
   syncAdminLayoutMode(screenId);
   syncCountyAutoRefresh();
   syncCountyAiAccess();
+  syncClientNotificationRefresh(screenId);
 }
 
 function syncAdminLayoutMode(screenId) {
@@ -928,9 +947,11 @@ function applyLanguage() {
   document.getElementById("admin-email-label").textContent = t.adminEmail;
   document.getElementById("admin-password-label").textContent = t.adminPassword;
   document.getElementById("admin-login-btn").textContent = t.adminLogin;
-  document.getElementById("admin-demo-copy").textContent = t.adminDemoCopy;
-  document.getElementById("admin-demo-caseworker-btn").textContent = t.adminDemoCaseworker;
-  document.getElementById("admin-demo-county-btn").textContent = t.adminDemoCounty;
+  document.getElementById("admin-demo-copy").textContent = state.lang === "es" ? "Acceso demo" : "Demo access";
+  document.getElementById("admin-demo-caseworker-label").textContent = state.lang === "es" ? "Seleccione trabajador social demo" : "Select demo case worker";
+  document.getElementById("admin-demo-caseworker-btn").textContent = state.lang === "es" ? "Entrar como trabajador" : "Demo Case Worker";
+  document.getElementById("admin-demo-county-btn").textContent = state.lang === "es" ? "Entrar como condado" : "Demo County";
+  renderAdminDemoCaseworkerOptions();
 
   const adminPortalBtn = document.getElementById("admin-portal-btn");
   if (adminPortalBtn) {
@@ -972,11 +993,38 @@ function applyLanguage() {
   document.getElementById("doc-birth-text").textContent = state.lang === "es" ? "Abra su conversacion" : "Open your conversation";
   document.getElementById("doc-passport-title").textContent = state.lang === "es" ? "Notificaciones" : "Notifications";
   document.getElementById("doc-passport-text").textContent = state.lang === "es" ? "Las actualizaciones apareceran aqui" : "Updates will appear here";
-  document.getElementById("doc-ssn-title").textContent = state.lang === "es" ? "Proximamente" : "Coming Soon";
-  document.getElementById("doc-ssn-text").textContent = state.lang === "es" ? "Vacio por ahora" : "Empty for now";
+  document.getElementById("doc-ssn-title").textContent = state.lang === "es" ? "Panel de progreso" : "Progress Dashboard";
+  document.getElementById("doc-ssn-text").textContent = state.lang === "es" ? "Vea lo completado y lo pendiente" : "See what is done and what is left";
+  document.getElementById("client-notification-bell-btn").setAttribute("aria-label", state.lang === "es" ? "Abrir pagina de notificaciones" : "Open notifications page");
+  document.getElementById("client-notification-page-eyebrow").textContent = state.lang === "es" ? "Notificaciones" : "Notifications";
+  document.getElementById("client-notification-page-title").textContent = state.lang === "es" ? "Sus actualizaciones" : "Your updates";
+  document.getElementById("client-notification-page-subtitle").textContent = state.lang === "es" ? "Las actualizaciones recientes del caso aparecen aqui." : "Recent case updates appear here.";
+  document.getElementById("client-notification-delivery-note").textContent = getClientDeliveryMethodLabel(
+    state.clientPortalData.deliveryMethod,
+    state.clientPortalData.deliveryTarget
+  );
+  document.getElementById("client-progress-eyebrow").textContent = state.lang === "es" ? "Progreso del caso" : "Case progress";
+  document.getElementById("client-progress-title").textContent = state.lang === "es" ? "Siga su caso de vivienda" : "Track your housing case";
+  document.getElementById("client-progress-subtitle").textContent = state.lang === "es"
+    ? "Vea lo que ya esta completo, lo que sigue pendiente y las siguientes acciones."
+    : "See what is complete, what still needs attention, and what to do next.";
+  document.getElementById("client-progress-score-label").textContent = state.lang === "es" ? "Progreso total" : "Overall progress";
+  document.getElementById("client-progress-metric-status-label").textContent = state.lang === "es" ? "Estado del caso" : "Case status";
+  document.getElementById("client-progress-metric-docs-label").textContent = state.lang === "es" ? "Pasos de documentos" : "Document steps";
+  document.getElementById("client-progress-metric-worker-label").textContent = state.lang === "es" ? "Trabajador social" : "Case worker";
+  document.getElementById("client-progress-metric-transport-label").textContent = state.lang === "es" ? "Transporte" : "Transportation";
+  document.getElementById("client-progress-stage-title").textContent = state.lang === "es" ? "Seguimiento del progreso" : "Progress tracker";
+  document.getElementById("client-progress-stage-subtitle").textContent = state.lang === "es" ? "Cada etapa cambia cuando su caso avanza." : "Each step updates as your case moves.";
+  document.getElementById("client-progress-next-title").textContent = state.lang === "es" ? "Proximas acciones" : "Next actions";
+  document.getElementById("client-progress-next-subtitle").textContent = state.lang === "es"
+    ? "Su dashboard mantiene los siguientes pasos utiles en un solo lugar."
+    : "Your dashboard keeps the next most useful steps in one place.";
   document.getElementById("dashboard-note").textContent = t.dashboardNote;
   document.getElementById("dashboard-continue-btn").textContent = t.dashboardContinue;
   document.getElementById("client-chat-title").textContent = state.lang === "es" ? "💬 Envie un mensaje a su trabajador social" : "💬 Message Your Case Worker";
+  document.getElementById("client-chat-subtitle").textContent = state.lang === "es"
+    ? "Mantengase en contacto, comparta imagenes y revise actualizaciones de su caso."
+    : "Stay in touch, share images, and review updates for your case.";
   document.getElementById("client-chat-upload-label").textContent = state.lang === "es" ? "Subir imagen" : "Upload Image";
 
   document.getElementById("main-title").textContent = t.mainTitle;
@@ -997,7 +1045,6 @@ function applyLanguage() {
   document.getElementById("plan-btn").textContent = t.getPlan;
   document.getElementById("result-page-title").textContent = t.yourPlan;
   document.getElementById("transport-btn").textContent = t.transport;
-  document.getElementById("plan-dashboard-btn").textContent = t.planDashboard;
   document.getElementById("start-over-btn").textContent = t.startOver;
   document.getElementById("help-float-btn").textContent = t.helpButton;
   document.getElementById("chat-title").textContent = t.helpTitle;
@@ -1069,7 +1116,19 @@ function applyLanguage() {
 
 function refreshLocalizedScreens() {
   if (!document.getElementById("dashboard-screen").classList.contains("hidden")) {
+    renderClientNotifications();
+  }
+
+  if (!document.getElementById("client-progress-screen").classList.contains("hidden")) {
+    renderClientProgressDashboard();
+  }
+
+  if (!document.getElementById("client-chat-screen").classList.contains("hidden")) {
     renderClientPortalChat();
+  }
+
+  if (!document.getElementById("client-notifications-screen").classList.contains("hidden")) {
+    renderClientNotifications();
   }
 
   if (!document.getElementById("admin-dashboard-screen").classList.contains("hidden")) {
@@ -1115,6 +1174,7 @@ function setAdminRole(role) {
   }
   document.getElementById("caseworker-role-btn").classList.toggle("active", role === "caseworker");
   document.getElementById("passaic-role-btn").classList.toggle("active", role === "passaic");
+  document.getElementById("admin-demo-caseworker-select").disabled = role !== "caseworker";
   document.getElementById("admin-case-view").classList.toggle("hidden", role !== "caseworker");
   document.getElementById("admin-county-view").classList.toggle("hidden", role !== "passaic");
   syncAdminLayoutMode(
@@ -1184,95 +1244,6 @@ function userNeedsIntake() {
   return hasAuthenticatedClientUser() && !state.clientPortalData.currentUser?.hasCompletedIntake;
 }
 
-function getClientEntryView() {
-  if (!hasAuthenticatedClientUser()) {
-    return "login";
-  }
-
-  return userNeedsIntake() ? "intake" : "dashboard";
-}
-
-function renderClientLoginPage({ reason = "manual" } = {}) {
-  state.authView = "user";
-  state.clientNavigation.currentView = "login";
-  openScreen("login-screen");
-}
-
-function renderClientCreateAccountPage({ reason = "manual" } = {}) {
-  state.authView = "user";
-  state.clientNavigation.currentView = "createAccount";
-  openScreen("create-account-screen");
-}
-
-function renderClientIntakePage({ reason = "manual", prefillFromSaved = false } = {}) {
-  console.log("[router] intake page render", { reason, prefillFromSaved });
-  state.clientNavigation.currentView = "intake";
-  document.getElementById("plan-error-box").textContent = "";
-  if (prefillFromSaved) {
-    loadIntakeFromCurrentUser();
-  }
-  openScreen("questions-screen");
-}
-
-function renderClientPlanPage({ reason = "manual" } = {}) {
-  console.log("[router] plan page render", { reason });
-  state.clientNavigation.currentView = "plan";
-  openScreen("result-screen");
-}
-
-function renderClientDashboardPage({ reason = "manual" } = {}) {
-  console.log("[router] dashboard page render", { reason });
-  state.clientNavigation.currentView = "dashboard";
-  loadClientPortalChat();
-  hideClientChatPanel();
-  applyLanguage();
-  openScreen("dashboard-screen");
-}
-
-function navigateTo(view, options = {}) {
-  const { reason = "manual", prefillFromSaved = false } = options;
-  let resolvedView = view;
-
-  if (!hasAuthenticatedClientUser() && !["login", "createAccount"].includes(view)) {
-    resolvedView = "login";
-  } else if (hasAuthenticatedClientUser() && userNeedsIntake() && view === "dashboard") {
-    resolvedView = "intake";
-  }
-
-  console.log("[router] navigate", {
-    requestedView: view,
-    resolvedView,
-    reason,
-    isLoggedIn: hasAuthenticatedClientUser(),
-    hasCompletedIntake: Boolean(state.clientPortalData.currentUser?.hasCompletedIntake)
-  });
-
-  if (resolvedView === "login") {
-    renderClientLoginPage({ reason });
-    return;
-  }
-
-  if (resolvedView === "createAccount") {
-    renderClientCreateAccountPage({ reason });
-    return;
-  }
-
-  if (resolvedView === "intake") {
-    renderClientIntakePage({
-      reason,
-      prefillFromSaved
-    });
-    return;
-  }
-
-  if (resolvedView === "plan") {
-    renderClientPlanPage({ reason });
-    return;
-  }
-
-  renderClientDashboardPage({ reason });
-}
-
 function resetPlanState() {
   state.answers.hasBirth = null;
   state.answers.hasSSN = null;
@@ -1316,51 +1287,32 @@ function loadIntakeFromCurrentUser() {
   state.lastPlan = user?.roadmapPlan || null;
 }
 
-function routeClientEntry(reason = "startup") {
-  const targetView = getClientEntryView();
+function routeClientAfterLogin() {
+  loadIntakeFromCurrentUser();
 
-  if (reason === "startup") {
-    console.log("[router] app startup route decision", { targetView });
-  } else {
-    console.log("[router] login success route decision", { targetView });
+  if (!userNeedsIntake()) {
+    showApp();
+    return;
   }
 
-  navigateTo(targetView, {
-    reason,
-    prefillFromSaved: targetView === "intake"
-  });
+  document.getElementById("plan-error-box").textContent = "";
+  openScreen("questions-screen");
 }
 
-async function loginAdminUser({ role, email, password }) {
-  const data = await fetchJson("/api/admin/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ role, email, password })
-  });
-
-  state.adminRole = role;
-  document.getElementById("caseworker-role-btn").classList.toggle("active", role === "caseworker");
-  document.getElementById("passaic-role-btn").classList.toggle("active", role === "passaic");
-  document.getElementById("admin-case-view").classList.toggle("hidden", role !== "caseworker");
-  document.getElementById("admin-county-view").classList.toggle("hidden", role !== "passaic");
-
-  if (role === "caseworker" && data.workerId) {
-    state.caseWorkerData.currentWorkerId = data.workerId;
-    await loadCaseWorkerDashboard();
+function routeClientEntry() {
+  if (!hasAuthenticatedClientUser()) {
+    state.authView = "user";
+    openScreen("login-screen");
+    return;
   }
 
-  if (role === "passaic") {
-    await loadCountyDashboard();
-  }
-
-  document.getElementById("login-error").textContent = "";
-  openScreen("admin-dashboard-screen");
+  routeClientAfterLogin();
 }
 
 function handleLoggedInUser(user) {
   state.clientPortalData.currentClientId = user.clientId;
   state.clientPortalData.currentUser = user;
-  routeClientEntry("login_success");
+  routeClientEntry();
 }
 
 async function restoreClientSession() {
@@ -1369,7 +1321,7 @@ async function restoreClientSession() {
     if (data && data.authenticated && data.user) {
       state.clientPortalData.currentClientId = data.user.clientId;
       state.clientPortalData.currentUser = data.user;
-      routeClientEntry("startup");
+      routeClientEntry();
       return true;
     }
   } catch (error) {
@@ -1388,9 +1340,16 @@ async function logoutClientUser() {
 
   state.clientPortalData.currentClientId = null;
   state.clientPortalData.currentUser = null;
+  state.clientPortalData.serviceRecommendations = {};
+  state.clientPortalData.notifications = [];
+  state.clientPortalData.unreadNotificationCount = 0;
+  state.clientPortalData.deliveryMethod = "in_app";
+  state.clientPortalData.deliveryTarget = "";
+  closeClientNotificationPanel();
+  stopClientNotificationRefresh();
   resetPlanState();
   hideClientChatPanel();
-  navigateTo("login", { reason: "logout" });
+  openScreen("login-screen");
 }
 
 async function createClientAccount() {
@@ -1439,7 +1398,7 @@ async function createClientAccount() {
     document.getElementById("create-account-password-input").value = "";
     document.getElementById("create-account-request-worker-input").checked = false;
     errorBox.textContent = "";
-    navigateTo("login", { reason: "account_created" });
+    openScreen("login-screen");
     document.getElementById("login-error").textContent =
       requestCaseWorker
         ? t.createAccountSuccessRequested
@@ -1468,13 +1427,9 @@ function getApiUrl(url) {
 
 async function fetchJson(url, options = {}) {
   let response;
-  const fetchOptions = {
-    credentials: "include",
-    ...options
-  };
 
   try {
-    response = await fetch(getApiUrl(url), fetchOptions);
+    response = await fetch(getApiUrl(url), options);
   } catch (error) {
     throw new Error("SERVER_OFFLINE");
   }
@@ -1497,6 +1452,66 @@ async function fetchJson(url, options = {}) {
   return response.json();
 }
 
+function renderAdminDemoCaseworkerOptions() {
+  const select = document.getElementById("admin-demo-caseworker-select");
+  if (!select) {
+    return;
+  }
+
+  const placeholder = state.lang === "es" ? "Seleccione trabajador social" : "Select case worker";
+  const workers = Array.isArray(state.adminDemoWorkers) ? state.adminDemoWorkers : [];
+  const currentValue = state.adminSelectedDemoWorkerId || select.value;
+  const fallbackValue = workers[0]?.workerId || "";
+  const selectedValue = workers.some((worker) => worker.workerId === currentValue)
+    ? currentValue
+    : fallbackValue;
+
+  select.innerHTML = `
+    <option value="">${escapeHtml(placeholder)}</option>
+    ${workers.map((worker) => `
+      <option value="${escapeHtml(worker.workerId || "")}" ${worker.workerId === selectedValue ? "selected" : ""}>${escapeHtml(`${worker.name} (${worker.workerId || ""})`)}</option>
+    `).join("")}
+  `;
+
+  if (workers.length && selectedValue) {
+    select.value = selectedValue;
+  }
+
+  state.adminSelectedDemoWorkerId = selectedValue;
+}
+
+function syncAdminDemoWorkerSelection() {
+  const select = document.getElementById("admin-demo-caseworker-select");
+  if (!select) {
+    return null;
+  }
+
+  const selectedWorkerId = select.value || state.adminSelectedDemoWorkerId;
+  state.adminSelectedDemoWorkerId = selectedWorkerId || "";
+  const selectedWorker = state.adminDemoWorkers.find((worker) => worker.workerId === selectedWorkerId) || null;
+
+  if (state.adminRole === "caseworker" && selectedWorker) {
+    document.getElementById("admin-email-input").value = selectedWorker.email || "";
+    document.getElementById("admin-password-input").value = "Demo login";
+  }
+
+  return selectedWorker;
+}
+
+async function loadAdminDemoCaseworkers() {
+  try {
+    const data = await fetchJson("/api/admin/demo-accounts?role=caseworker");
+    state.adminDemoWorkers = Array.isArray(data.accounts) && data.accounts.length
+      ? data.accounts
+      : DEFAULT_DEMO_CASEWORKERS.slice();
+  } catch (error) {
+    state.adminDemoWorkers = DEFAULT_DEMO_CASEWORKERS.slice();
+  }
+
+  renderAdminDemoCaseworkerOptions();
+  syncAdminDemoWorkerSelection();
+}
+
 async function loadClientMessages(clientId, workerId = null) {
   try {
     const query = new URLSearchParams({ client_id: clientId });
@@ -1508,6 +1523,132 @@ async function loadClientMessages(clientId, workerId = null) {
   } catch (error) {
     state.caseWorkerData.messagesByClient[clientId] = [];
   }
+}
+
+function renderClientNotifications() {
+  const list = document.getElementById("client-notification-list");
+  const badge = document.getElementById("client-notification-bell-count");
+  const unreadCount = state.clientPortalData.unreadNotificationCount || 0;
+  const notifications = state.clientPortalData.notifications || [];
+
+  badge.textContent = unreadCount > 99 ? "99+" : String(unreadCount);
+  badge.classList.toggle("hidden", unreadCount === 0);
+  document.getElementById("client-notification-delivery-note").textContent = getClientDeliveryMethodLabel(
+    state.clientPortalData.deliveryMethod,
+    state.clientPortalData.deliveryTarget
+  );
+
+  if (!notifications.length) {
+    list.innerHTML = `<div class="county-empty-state">${state.lang === "es" ? "Todavia no hay actualizaciones." : "No updates yet."}</div>`;
+    return;
+  }
+
+  list.innerHTML = notifications.map((item) => `
+    <article class="client-notification-item ${item.read ? "" : "unread"}">
+      <div class="client-notification-meta">
+        <strong>${escapeHtml(item.title || (state.lang === "es" ? "Actualizacion" : "Update"))}</strong>
+        <span class="small-text">${escapeHtml(formatLocalizedTime(item.timestamp))}</span>
+      </div>
+      <p class="small-text">${escapeHtml(item.message || "")}</p>
+      <span class="small-text client-notification-delivery">${escapeHtml(getClientDeliveryMethodLabel(item.delivery?.channel, ""))}</span>
+    </article>
+  `).join("");
+}
+
+async function loadClientNotifications() {
+  if (!hasAuthenticatedClientUser()) {
+    state.clientPortalData.notifications = [];
+    state.clientPortalData.unreadNotificationCount = 0;
+    renderClientNotifications();
+    return;
+  }
+
+  try {
+    const data = await fetchJson("/api/client-notifications");
+    state.clientPortalData.notifications = data.notifications || [];
+    state.clientPortalData.unreadNotificationCount = data.unread_count || 0;
+    state.clientPortalData.deliveryMethod = data.delivery_method || "in_app";
+    state.clientPortalData.deliveryTarget = data.delivery_target || "";
+    renderClientNotifications();
+  } catch (error) {
+    state.clientPortalData.notifications = [];
+    state.clientPortalData.unreadNotificationCount = 0;
+    state.clientPortalData.deliveryMethod = "in_app";
+    state.clientPortalData.deliveryTarget = "";
+    renderClientNotifications();
+  }
+}
+
+async function loadClientServiceRecommendations() {
+  if (!hasAuthenticatedClientUser()) {
+    state.clientPortalData.serviceRecommendations = {};
+    return;
+  }
+
+  try {
+    const data = await fetchJson("/api/client-service-recommendations");
+    state.clientPortalData.serviceRecommendations = data.recommendations || {};
+  } catch (error) {
+    state.clientPortalData.serviceRecommendations = {};
+  }
+}
+
+async function markAllClientNotificationsRead() {
+  if (!hasAuthenticatedClientUser() || state.clientPortalData.unreadNotificationCount === 0) {
+    return;
+  }
+
+  try {
+    await fetchJson("/api/client-notifications/read-all", { method: "POST" });
+    state.clientPortalData.notifications = state.clientPortalData.notifications.map((item) => ({
+      ...item,
+      read: true
+    }));
+    state.clientPortalData.unreadNotificationCount = 0;
+    renderClientNotifications();
+  } catch (error) {
+    // Keep the panel usable even if the server-side read state cannot be updated.
+  }
+}
+
+async function openClientNotificationPanel() {
+  state.clientPortalData.isNotificationPanelOpen = true;
+  openScreen("client-notifications-screen");
+  renderClientNotifications();
+  await markAllClientNotificationsRead();
+}
+
+function closeClientNotificationPanel() {
+  state.clientPortalData.isNotificationPanelOpen = false;
+}
+
+async function toggleClientNotificationPanel() {
+  await openClientNotificationPanel();
+}
+
+function stopClientNotificationRefresh() {
+  if (state.clientPortalData.notificationRefreshIntervalId) {
+    window.clearInterval(state.clientPortalData.notificationRefreshIntervalId);
+    state.clientPortalData.notificationRefreshIntervalId = null;
+  }
+}
+
+function syncClientNotificationRefresh(screenId) {
+  const shouldRefresh = hasAuthenticatedClientUser() &&
+    !["login-screen", "create-account-screen", "admin-dashboard-screen", "caseworker-client-screen", "caseworker-documents-screen"].includes(screenId);
+
+  if (!shouldRefresh) {
+    stopClientNotificationRefresh();
+    return;
+  }
+
+  if (!state.clientPortalData.notificationRefreshIntervalId) {
+    state.clientPortalData.notificationRefreshIntervalId = window.setInterval(() => {
+      loadClientNotifications();
+    }, 5000);
+  }
+
+  void loadClientNotifications();
 }
 
 function showServerOfflineMessage() {
@@ -2048,14 +2189,15 @@ function resetCodeEntry() {
 
 // Keep login success separate from the screen implementation.
 function showApp() {
-  renderClientDashboardPage({ reason: "show_app" });
+  loadClientNotifications();
+  loadClientPortalChat();
+  closeClientNotificationPanel();
+  hideClientChatPanel();
+  applyLanguage();
+  openScreen("dashboard-screen");
 }
 
 function hideClientChatPanel() {
-  const panel = document.getElementById("client-chat-panel");
-  if (panel) {
-    panel.classList.add("hidden");
-  }
   state.clientPortalData.isChatPanelOpen = false;
   if (state.clientPortalData.chatRefreshIntervalId) {
     window.clearInterval(state.clientPortalData.chatRefreshIntervalId);
@@ -2064,20 +2206,16 @@ function hideClientChatPanel() {
 }
 
 async function showClientChatPanel() {
-  const panel = document.getElementById("client-chat-panel");
-  if (panel) {
-    state.clientPortalData.isChatPanelOpen = true;
-    panel.classList.remove("hidden");
-    await loadClientPortalChat();
-    panel.scrollIntoView({ behavior: "smooth", block: "start" });
-    if (!state.clientPortalData.chatRefreshIntervalId) {
-      state.clientPortalData.chatRefreshIntervalId = window.setInterval(async () => {
-        if (!state.clientPortalData.isChatPanelOpen || document.getElementById("dashboard-screen").classList.contains("hidden")) {
-          return;
-        }
-        await loadClientPortalChat();
-      }, 4000);
-    }
+  state.clientPortalData.isChatPanelOpen = true;
+  openScreen("client-chat-screen");
+  await loadClientPortalChat();
+  if (!state.clientPortalData.chatRefreshIntervalId) {
+    state.clientPortalData.chatRefreshIntervalId = window.setInterval(async () => {
+      if (!state.clientPortalData.isChatPanelOpen || document.getElementById("client-chat-screen").classList.contains("hidden")) {
+        return;
+      }
+      await loadClientPortalChat();
+    }, 4000);
   }
 }
 
@@ -2123,7 +2261,7 @@ function buildMessageImageHtml(message) {
   `;
 }
 
-function buildChatMessagesHtml(messages, emptyLabel, viewerLabel) {
+function buildChatMessagesHtml(messages, emptyLabel, viewerLabel, workerLabel = "Case Worker") {
   if (!messages.length) {
     return `<div class="county-empty-state">${localizeText(emptyLabel)}</div>`;
   }
@@ -2131,13 +2269,423 @@ function buildChatMessagesHtml(messages, emptyLabel, viewerLabel) {
   return messages.map((message) => `
     <div class="worker-chat-message ${message.sender}">
       <div class="worker-chat-message-top">
-        <span class="worker-chat-sender">${message.sender === "worker" ? localizeText("Case Worker") : localizeText(viewerLabel)}</span>
+        <span class="worker-chat-sender">${message.sender === "worker" ? escapeHtml(workerLabel) : localizeText(viewerLabel)}</span>
         <span class="worker-chat-time">${escapeHtml(formatChatTime(message.timestamp))}</span>
       </div>
       ${message.text ? `<p>${escapeHtml(message.text)}</p>` : ""}
       ${buildMessageImageHtml(message)}
     </div>
   `).join("");
+}
+
+function getWorkerById(workerId) {
+  return state.caseWorkerData.workers.find((worker) => worker.id === workerId)
+    || state.countyData.workers.find((worker) => worker.id === workerId)
+    || null;
+}
+
+function getAssignedWorkerForClient(client) {
+  if (!client?.assigned_worker) {
+    return null;
+  }
+
+  return getWorkerById(client.assigned_worker);
+}
+
+function getCurrentClientCase() {
+  return state.caseWorkerData.clients.find((client) => client.id === state.clientPortalData.currentClientId) || null;
+}
+
+function getClientProgressStatus(client) {
+  if (!client) {
+    return state.lang === "es" ? "Comenzando" : "Getting started";
+  }
+
+  if (client.worker_status === "completed" || client.status === "completed") {
+    return state.lang === "es" ? "Completado" : "Completed";
+  }
+
+  if (client.worker_status === "active" || client.status === "active") {
+    return state.lang === "es" ? "Active" : "Active";
+  }
+
+  if (client.worker_status === "pending_approval") {
+    return state.lang === "es" ? "Pendiente de aprobacion" : "Pending approval";
+  }
+
+  if (client.assigned_worker) {
+    return state.lang === "es" ? "Asignado" : "Assigned";
+  }
+
+  return state.lang === "es" ? "Pendiente" : "Pending";
+}
+
+function buildClientProgressModel() {
+  const account = getCurrentClientAccount();
+  const client = getCurrentClientCase();
+  const worker = getAssignedWorkerForClient(client);
+  const missingDocuments = Array.isArray(client?.missing_documents) ? client.missing_documents : [];
+  const serviceRecommendations = state.clientPortalData.serviceRecommendations || {};
+  const documentAnswers = account?.documentAnswers || {};
+  const hasIntake = Boolean(account?.hasCompletedIntake);
+  const isAssigned = Boolean(client?.assigned_worker);
+  const isActive = client?.worker_status === "active" || client?.status === "active";
+  const isCompleted = client?.worker_status === "completed" || client?.status === "completed";
+  const transportNeeded = Boolean(client?.transportation_needed);
+  const allDocumentsReady = hasIntake && missingDocuments.length === 0;
+
+  const stages = [
+    {
+      key: "account",
+      title: state.lang === "es" ? "Cuenta creada" : "Account created",
+      note: state.lang === "es" ? "Su portal ya esta listo para recibir actualizaciones." : "Your portal is ready to receive updates.",
+      done: Boolean(account?.clientId)
+    },
+    {
+      key: "intake",
+      title: state.lang === "es" ? "Intake completado" : "Intake completed",
+      note: hasIntake
+        ? (state.lang === "es" ? "Sus respuestas y ubicacion ya estan guardadas." : "Your answers and locations are saved.")
+        : (state.lang === "es" ? "Complete su intake para desbloquear todo el plan." : "Finish your intake to unlock the full case plan."),
+      done: hasIntake
+    },
+    {
+      key: "assignment",
+      title: state.lang === "es" ? "Trabajador asignado" : "Case worker assigned",
+      note: worker
+        ? (state.lang === "es" ? `${worker.name} esta conectado a su caso.` : `${worker.name} is now connected to your case.`)
+        : (state.lang === "es" ? "El condado aun no asigna un trabajador social." : "The county has not assigned a case worker yet."),
+      done: isAssigned
+    },
+    {
+      key: "documents",
+      title: state.lang === "es" ? "Documentos en progreso" : "Documents in progress",
+      note: allDocumentsReady
+        ? (state.lang === "es" ? "No hay documentos faltantes en su intake actual." : "No missing documents are listed in your current intake.")
+        : (state.lang === "es" ? `${missingDocuments.length} pasos de documento siguen pendientes.` : `${missingDocuments.length} document steps are still pending.`),
+      done: allDocumentsReady
+    },
+    {
+      key: "case",
+      title: state.lang === "es" ? "Caso cerrado" : "Case completed",
+      note: isCompleted
+        ? (state.lang === "es" ? "Su caso fue marcado como completado." : "Your case has been marked complete.")
+        : (state.lang === "es" ? "Este paso se completa cuando termina todo el proceso." : "This step is completed when the full process is finished."),
+      done: isCompleted
+    }
+  ];
+
+  const completedCount = stages.filter((stage) => stage.done).length;
+  const progressPercent = Math.max(12, Math.round((completedCount / stages.length) * 100));
+  const activeKey = stages.find((stage) => !stage.done)?.key || "case";
+
+  const nextActions = [];
+
+  if (!hasIntake) {
+    nextActions.push({
+      title: state.lang === "es" ? "Completar intake" : "Complete intake",
+      detail: state.lang === "es" ? "Guarde sus respuestas para que el sistema pueda calcular sus siguientes pasos." : "Save your answers so the system can calculate your next steps."
+    });
+  }
+
+  if (missingDocuments.includes("birth_certificate")) {
+    const recommendation = serviceRecommendations.birth_certificate || null;
+    nextActions.push({
+      title: state.lang === "es" ? "Obtener acta de nacimiento" : "Get your birth certificate",
+      detail: recommendation?.detail || (state.lang === "es" ? "Este documento aun aparece como faltante." : "This document still appears as missing."),
+      officeName: recommendation?.officeName || "",
+      address: recommendation?.address || "",
+      links: Array.isArray(recommendation?.links) ? recommendation.links : []
+    });
+  }
+
+  if (missingDocuments.includes("ssn")) {
+    const recommendation = serviceRecommendations.ssn || null;
+    nextActions.push({
+      title: state.lang === "es" ? "Solicitar tarjeta de SSN" : "Request SSN card",
+      detail: recommendation?.detail || (state.lang === "es" ? "Su dashboard todavia muestra esta tarjeta como pendiente." : "Your dashboard still shows this card as pending."),
+      officeName: recommendation?.officeName || "",
+      address: recommendation?.address || "",
+      links: Array.isArray(recommendation?.links) ? recommendation.links : []
+    });
+  }
+
+  if (missingDocuments.includes("state_id")) {
+    const recommendation = serviceRecommendations.state_id || null;
+    nextActions.push({
+      title: state.lang === "es" ? "Terminar paso de ID estatal" : "Finish State ID step",
+      detail: recommendation?.detail || (state.lang === "es" ? "La mayoria de los casos necesitan este paso para seguir avanzando." : "Most cases need this step before they can move forward."),
+      officeName: recommendation?.officeName || "",
+      address: recommendation?.address || "",
+      links: Array.isArray(recommendation?.links) ? recommendation.links : []
+    });
+  }
+
+  if (!isAssigned) {
+    nextActions.push({
+      title: state.lang === "es" ? "Esperar asignacion del trabajador social" : "Wait for case worker assignment",
+      detail: state.lang === "es" ? "El condado le avisara cuando un trabajador sea asignado." : "The county will notify you when a worker is assigned.",
+      officeName: "",
+      address: "",
+      links: []
+    });
+  } else if (isAssigned && !isActive && !isCompleted) {
+    nextActions.push({
+      title: state.lang === "es" ? "Revisar aprobacion del caso" : "Watch for case approval",
+      detail: state.lang === "es" ? "Su trabajador ya fue asignado y el caso esta esperando activacion." : "Your worker is assigned and the case is waiting to become active.",
+      officeName: "",
+      address: "",
+      links: []
+    });
+  }
+
+  if (transportNeeded) {
+    nextActions.push({
+      title: state.lang === "es" ? "Seguir apoyo de transporte" : "Track transportation support",
+      detail: state.lang === "es" ? "Su caso puede necesitar ayuda para llegar a citas." : "Your case may need help getting to appointments.",
+      officeName: "",
+      address: "",
+      links: []
+    });
+  }
+
+  if (worker && !isCompleted) {
+    nextActions.push({
+      title: state.lang === "es" ? "Enviar mensaje a su trabajador" : "Message your case worker",
+      detail: state.lang === "es" ? "Use el chat para compartir avances, preguntas o documentos." : "Use chat to share updates, questions, or documents.",
+      officeName: "",
+      address: "",
+      links: []
+    });
+  }
+
+  if (!nextActions.length) {
+    nextActions.push({
+      title: state.lang === "es" ? "Todo va bien" : "Everything is on track",
+      detail: state.lang === "es" ? "Su dashboard no muestra pasos urgentes en este momento." : "Your dashboard does not show urgent next steps right now.",
+      officeName: "",
+      address: "",
+      links: []
+    });
+  }
+
+  return {
+    account,
+    client,
+    worker,
+    missingDocuments,
+    hasIntake,
+    transportNeeded,
+    progressPercent,
+    activeKey,
+    stages,
+    nextActions,
+    statusText: getClientProgressStatus(client),
+    documentsLeftText: state.lang === "es"
+      ? `${missingDocuments.length} pendientes`
+      : `${missingDocuments.length} left`,
+    transportText: transportNeeded
+      ? (state.lang === "es" ? "Apoyo necesario" : "Support needed")
+      : (state.lang === "es" ? "No urgente" : "Not urgent"),
+    workerNameText: worker ? worker.name : (state.lang === "es" ? "No asignado" : "Not assigned"),
+    notes: {
+      status: isCompleted
+        ? (state.lang === "es" ? "Todos los pasos principales del caso estan terminados." : "All major case steps are finished.")
+        : isActive
+          ? (state.lang === "es" ? "Su caso esta en movimiento y recibiendo apoyo activo." : "Your case is moving and receiving active support.")
+          : (state.lang === "es" ? "Su dashboard esta esperando la siguiente actualizacion del sistema." : "Your dashboard is waiting for the next system update."),
+      documents: hasIntake
+        ? (missingDocuments.length
+            ? (state.lang === "es" ? `Faltan ${missingDocuments.length} documentos o pasos de documento.` : `${missingDocuments.length} documents or document steps remain.`)
+            : (state.lang === "es" ? "No hay documentos faltantes en este momento." : "No missing documents right now."))
+        : (state.lang === "es" ? "Complete el intake para calcular los documentos faltantes." : "Complete intake to calculate missing documents."),
+      worker: worker
+        ? (state.lang === "es" ? `${worker.name} esta siguiendo su caso.` : `${worker.name} is following your case.`)
+        : (state.lang === "es" ? "Todavia no hay trabajador social conectado." : "There is no case worker connected yet."),
+      transport: transportNeeded
+        ? (state.lang === "es" ? "La ayuda de transporte puede ser importante para sus citas." : "Transportation help may be important for your appointments.")
+        : (state.lang === "es" ? "No hay barrera de transporte marcada ahora mismo." : "No transportation barrier is marked right now.")
+    },
+    planSummary: [
+      documentAnswers.hasBirth === false ? getDocumentTypeLabel("birth_certificate") : null,
+      documentAnswers.hasSSN === false ? getDocumentTypeLabel("ssn") : null,
+      documentAnswers.hasID === false ? getDocumentTypeLabel("state_id") : null
+    ].filter(Boolean)
+  };
+}
+
+function renderClientActionLinks(links = []) {
+  if (!Array.isArray(links) || !links.length) {
+    return "";
+  }
+
+  return `
+    <div class="client-action-links">
+      ${links.map((link) => `
+        <a
+          class="client-action-link"
+          href="${escapeHtml(link.url || "#")}"
+          target="_blank"
+          rel="noreferrer noopener"
+        >${escapeHtml(link.label || "Open link")}</a>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderClientProgressDashboard() {
+  const model = buildClientProgressModel();
+  const progressBar = document.getElementById("client-progress-score-bar");
+  document.getElementById("client-progress-score-value").textContent = `${model.progressPercent}%`;
+  progressBar.style.width = `${model.progressPercent}%`;
+  document.getElementById("client-progress-status").textContent = model.statusText;
+  document.getElementById("client-progress-doc-count").textContent = model.documentsLeftText;
+  document.getElementById("client-progress-worker-name").textContent = model.workerNameText;
+  document.getElementById("client-progress-transport-status").textContent = model.transportText;
+  document.getElementById("client-progress-status-note").textContent = model.notes.status;
+  document.getElementById("client-progress-doc-note").textContent = model.notes.documents;
+  document.getElementById("client-progress-worker-note").textContent = model.notes.worker;
+  document.getElementById("client-progress-transport-note").textContent = model.notes.transport;
+
+  const stageList = document.getElementById("client-stage-list");
+  stageList.innerHTML = model.stages.map((stage) => {
+    const stageState = stage.done ? "done" : (stage.key === model.activeKey ? "active" : "todo");
+    const pill = stage.done
+      ? (state.lang === "es" ? "Listo" : "Done")
+      : (stage.key === model.activeKey ? (state.lang === "es" ? "Actual" : "Current") : (state.lang === "es" ? "Sigue" : "Next"));
+    const icon = stage.done ? "✓" : (stage.key === model.activeKey ? "•" : "○");
+
+    return `
+      <article class="client-stage-item ${stageState}">
+        <span class="client-stage-icon" aria-hidden="true">${icon}</span>
+        <div>
+          <strong>${escapeHtml(stage.title)}</strong>
+          <p class="small-text">${escapeHtml(stage.note)}</p>
+        </div>
+        <span class="client-stage-pill">${escapeHtml(pill)}</span>
+      </article>
+    `;
+  }).join("");
+
+  const actionList = document.getElementById("client-action-list");
+  actionList.innerHTML = model.nextActions.map((action) => `
+    <article class="client-action-item">
+      <strong>${escapeHtml(action.title)}</strong>
+      <p class="small-text">${escapeHtml(action.detail)}</p>
+      ${action.officeName ? `<p class="small-text client-action-office"><strong>${escapeHtml(action.officeName)}</strong></p>` : ""}
+      ${action.address ? `<p class="small-text client-action-address">${escapeHtml(action.address)}</p>` : ""}
+      ${renderClientActionLinks(action.links)}
+    </article>
+  `).join("");
+}
+
+async function openClientProgressDashboard() {
+  const screen = document.getElementById("client-progress-screen");
+  if (!screen) {
+    return;
+  }
+
+  openScreen("client-progress-screen");
+  await loadClientServiceRecommendations();
+  renderClientProgressDashboard();
+}
+
+function getWorkerInitials(worker) {
+  const name = worker?.name || "Case Worker";
+
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+}
+
+function buildClientChatWorkerCard(worker, messages) {
+  const isEs = state.lang === "es";
+
+  if (!worker) {
+    return `
+      <div class="client-chat-profile-card empty">
+        <div class="client-chat-avatar muted">?</div>
+        <div>
+          <strong>${isEs ? "Aun no tiene trabajador social asignado" : "No case worker assigned yet"}</strong>
+          <p class="small-text">${isEs ? "Cuando se asigne uno, aqui vera su nombre, horario, contacto y perfil." : "Once one is assigned, you will see their name, schedule, contact details, and profile here."}</p>
+        </div>
+      </div>
+    `;
+  }
+
+  const lastMessage = messages[messages.length - 1] || null;
+  const languageList = Array.isArray(worker.languages) && worker.languages.length ? worker.languages.join(", ") : (isEs ? "Ingles" : "English");
+  const specialties = Array.isArray(worker.specialties) && worker.specialties.length
+    ? worker.specialties.map((item) => `<span class="client-chat-chip">${escapeHtml(item)}</span>`).join("")
+    : `<span class="client-chat-chip">${isEs ? "Apoyo general del caso" : "General case support"}</span>`;
+
+  return `
+    <div class="client-chat-profile-card">
+      <div class="client-chat-profile-top">
+        <div class="client-chat-avatar">${escapeHtml(getWorkerInitials(worker))}</div>
+        <div class="client-chat-profile-copy">
+          <strong>${escapeHtml(worker.name)}</strong>
+          <p>${escapeHtml(worker.title || (isEs ? "Trabajador social" : "Case Worker"))}</p>
+          <span class="client-chat-profile-meta">${escapeHtml(worker.office || "Passaic County Main Office")}</span>
+        </div>
+      </div>
+      <p class="small-text client-chat-bio">${escapeHtml(worker.bio || (isEs ? "Su trabajador social puede ayudar con documentos, pasos del caso y coordinacion." : "Your case worker can help with documents, case steps, and coordination."))}</p>
+      <button class="secondary-btn client-chat-profile-toggle" type="button" id="client-chat-profile-toggle-btn">
+        ${state.clientPortalData.showWorkerProfile ? (isEs ? "Ocultar perfil" : "Hide profile") : (isEs ? "Ver perfil completo" : "View full profile")}
+      </button>
+      ${state.clientPortalData.showWorkerProfile ? `
+        <div class="client-chat-profile-details">
+          <div class="client-chat-detail-row">
+            <span>${isEs ? "Disponibilidad" : "Availability"}</span>
+            <strong>${escapeHtml(worker.availability || (isEs ? "Lun-Vie, 9 AM - 5 PM" : "Mon-Fri, 9 AM - 5 PM"))}</strong>
+          </div>
+          <div class="client-chat-detail-row">
+            <span>${isEs ? "Idiomas" : "Languages"}</span>
+            <strong>${escapeHtml(languageList)}</strong>
+          </div>
+          <div class="client-chat-detail-row">
+            <span>${isEs ? "Contacto" : "Contact"}</span>
+            <strong>${escapeHtml(worker.phone || worker.email || (isEs ? "Disponible en el chat" : "Available in chat"))}</strong>
+          </div>
+          <div class="client-chat-detail-row">
+            <span>${isEs ? "Ultima actividad" : "Last update"}</span>
+            <strong>${escapeHtml(lastMessage ? formatChatTime(lastMessage.timestamp) : (isEs ? "Sin mensajes aun" : "No messages yet"))}</strong>
+          </div>
+          <div class="client-chat-specialties">
+            <span>${isEs ? "Especialidades" : "Specialties"}</span>
+            <div class="client-chat-chip-row">${specialties}</div>
+          </div>
+          <div class="client-chat-contact-links">
+            ${worker.phone ? `<a class="client-chat-contact-link" href="tel:${escapeHtml(worker.phone)}">${isEs ? "Llamar" : "Call"}</a>` : ""}
+            ${worker.email ? `<a class="client-chat-contact-link" href="mailto:${escapeHtml(worker.email)}">${isEs ? "Correo" : "Email"}</a>` : ""}
+          </div>
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function buildClientChatQuickActions(worker) {
+  const isEs = state.lang === "es";
+  const responseNote = worker
+    ? (isEs ? "Su trabajador social suele responder durante el horario de oficina." : "Your case worker usually replies during office hours.")
+    : (isEs ? "Esperando asignacion del trabajador social." : "Waiting for case worker assignment.");
+
+  return `
+    <button class="client-chat-quick-btn" type="button" data-chat-template="${escapeHtml(isEs ? "Hola, queria compartir una actualizacion de mi caso." : "Hi, I wanted to share a quick case update.")}">
+      ${isEs ? "Compartir actualizacion" : "Share update"}
+    </button>
+    <button class="client-chat-quick-btn" type="button" data-chat-template="${escapeHtml(isEs ? "Tengo una pregunta sobre mis documentos." : "I have a question about my documents.")}">
+      ${isEs ? "Preguntar sobre documentos" : "Ask about documents"}
+    </button>
+    <button class="client-chat-quick-btn" type="button" data-chat-template="${escapeHtml(isEs ? "Necesito ayuda con el siguiente paso de mi caso." : "I need help with the next step in my case.")}">
+      ${isEs ? "Siguiente paso" : "Next step"}
+    </button>
+    <span class="client-chat-response-note">${responseNote}</span>
+  `;
 }
 
 function getChatTranscript(client, messages) {
@@ -2547,7 +3095,7 @@ function renderClientDocumentsView() {
   `;
 
   document.getElementById("client-documents-back-btn").addEventListener("click", () => {
-    navigateTo("dashboard", { reason: "client_documents_back" });
+    openScreen("dashboard-screen");
   });
 
   container.querySelectorAll("[data-document-card]").forEach((button) => {
@@ -2620,18 +3168,56 @@ function renderClientDocumentsView() {
 
 function renderClientPortalChat() {
   const client = state.caseWorkerData.clients.find((item) => item.id === state.clientPortalData.currentClientId);
+  const worker = getAssignedWorkerForClient(client);
   const messages = getCaseMessages(state.clientPortalData.currentClientId, client?.assigned_worker || null);
   const isCompleted = client?.worker_status === "completed";
+  const workerCard = document.getElementById("client-chat-worker-card");
+  const quickActions = document.getElementById("client-chat-quick-actions");
   const history = document.getElementById("client-chat-history");
   const status = document.getElementById("client-chat-status");
   const input = document.getElementById("client-chat-input");
   const send = document.getElementById("client-chat-send-btn");
   const note = document.getElementById("client-chat-note");
   const preview = document.getElementById("client-chat-image-preview");
+  const subtitle = document.getElementById("client-chat-subtitle");
   const pendingImage = state.clientPortalData.pendingImage;
 
-  history.innerHTML = buildChatMessagesHtml(messages, "No messages yet.", "You");
+  if (workerCard) {
+    workerCard.innerHTML = buildClientChatWorkerCard(worker, messages);
+    const toggleButton = document.getElementById("client-chat-profile-toggle-btn");
+
+    if (toggleButton) {
+      toggleButton.addEventListener("click", () => {
+        state.clientPortalData.showWorkerProfile = !state.clientPortalData.showWorkerProfile;
+        renderClientPortalChat();
+      });
+    }
+  }
+
+  if (quickActions) {
+    quickActions.innerHTML = buildClientChatQuickActions(worker);
+    quickActions.querySelectorAll("[data-chat-template]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (input && !input.disabled) {
+          input.value = button.dataset.chatTemplate || "";
+          input.focus();
+        }
+      });
+    });
+  }
+
+  history.innerHTML = buildChatMessagesHtml(messages, "No messages yet.", "You", worker?.name || "Case Worker");
   history.scrollTop = history.scrollHeight;
+
+  if (subtitle) {
+    subtitle.textContent = worker
+      ? (state.lang === "es"
+        ? `${worker.name} puede ayudarle con documentos, imagenes y actualizaciones del caso.`
+        : `${worker.name} can help with documents, image sharing, and case updates.`)
+      : (state.lang === "es"
+        ? "El chat se activara en cuanto se le asigne un trabajador social."
+        : "Chat will activate as soon as a case worker is assigned.");
+  }
 
   status.textContent = isCompleted
     ? (state.lang === "es" ? "🔒 Caso completado - Chat cerrado" : "🔒 Case Completed - Chat Closed")
@@ -2640,8 +3226,12 @@ function renderClientPortalChat() {
   status.classList.toggle("active", !isCompleted);
   input.disabled = Boolean(isCompleted);
   send.disabled = Boolean(isCompleted);
-  input.placeholder = isCompleted ? localizeText("Case completed. Chat is closed.") : localizeText("Type a message");
-  note.textContent = isCompleted ? localizeText("Case completed. Chat is closed.") : "";
+  input.placeholder = isCompleted
+    ? localizeText("Case completed. Chat is closed.")
+    : (state.lang === "es" ? "Escriba un mensaje para su trabajador social" : "Type a message to your case worker");
+  note.textContent = isCompleted
+    ? localizeText("Case completed. Chat is closed.")
+    : (!worker ? localizeText("No case worker is assigned to this case yet.") : "");
 
   if (preview) {
     preview.innerHTML = pendingImage ? `
@@ -2666,15 +3256,27 @@ function renderClientPortalChat() {
 
 async function loadClientPortalChat() {
   try {
-    const clientsData = await fetchJson("/api/clients");
+    const [clientsData, workersData] = await Promise.all([
+      fetchJson("/api/clients"),
+      fetchJson("/api/workers")
+    ]);
     state.caseWorkerData.clients = clientsData.clients;
+    state.caseWorkerData.workers = workersData.workers || [];
+    state.countyData.workers = workersData.workers || state.countyData.workers;
     const currentClient = state.caseWorkerData.clients.find((item) => item.id === state.clientPortalData.currentClientId);
 
     await loadClientMessages(state.clientPortalData.currentClientId, currentClient?.assigned_worker || null);
+    await loadClientServiceRecommendations();
+    if (!document.getElementById("client-progress-screen").classList.contains("hidden")) {
+      renderClientProgressDashboard();
+    }
     if (state.clientPortalData.isChatPanelOpen) {
       renderClientPortalChat();
     }
   } catch (error) {
+    if (!document.getElementById("client-progress-screen").classList.contains("hidden")) {
+      renderClientProgressDashboard();
+    }
     if (state.clientPortalData.isChatPanelOpen) {
       document.getElementById("client-chat-history").innerHTML = `<div class="county-empty-state">${showServerOfflineMessage()}</div>`;
       document.getElementById("client-chat-note").textContent = showServerOfflineMessage();
@@ -3523,14 +4125,15 @@ async function sendMessage() {
 
 function showQuestionScreen(options = {}) {
   const { prefillFromSaved = false } = options;
-  navigateTo("intake", {
-    reason: "show_question_screen",
-    prefillFromSaved
-  });
+  document.getElementById("plan-error-box").textContent = "";
+  if (prefillFromSaved) {
+    loadIntakeFromCurrentUser();
+  }
+  openScreen("questions-screen");
 }
 
 function showResultScreen() {
-  navigateTo("plan", { reason: "show_result_screen" });
+  openScreen("result-screen");
 }
 
 function startOver() {
@@ -3556,7 +4159,7 @@ function startOver() {
   document.getElementById("current-city").value = "";
   document.getElementById("current-same-as-birth-input").checked = false;
   setupLocationDropdowns();
-  navigateTo("intake", { reason: "start_over" });
+  openScreen("questions-screen");
 }
 
 function attachChoiceHandlers() {
@@ -3576,91 +4179,83 @@ function attachChoiceHandlers() {
 
 async function showPlan() {
   const errorBox = document.getElementById("plan-error-box");
+  errorBox.textContent = "";
+
+  if (
+    state.answers.hasBirth === null ||
+    state.answers.hasSSN === null ||
+    state.answers.hasID === null
+  ) {
+    errorBox.textContent = uiText[state.lang].planError;
+    return;
+  }
+
+  const birthLocation = getSelectedLocation("birth");
+  const currentLocation = getSelectedLocation("current");
+
+  if (!isLocationComplete(birthLocation) || !isLocationComplete(currentLocation)) {
+    errorBox.textContent = uiText[state.lang].locationError;
+    return;
+  }
+
+  const birthPlace = formatLocation(birthLocation);
+  const currentPlace = formatLocation(currentLocation);
+
+  const plan = generatePlan(state.answers, birthPlace, currentPlace);
+  state.lastPlan = plan;
+  const translatedSteps = [];
+
+  for (const step of plan.steps) {
+    translatedSteps.push({
+      text: await translateText(step.text, state.lang),
+      description: step.description ? await translateText(step.description, state.lang) : "",
+      actionLabel: step.actionLabel ? await translateText(step.actionLabel, state.lang) : "",
+      actionLink: step.actionLink || "",
+      actionExternal: Boolean(step.actionExternal)
+    });
+  }
+
+  const list = document.getElementById("plan-steps");
+  list.innerHTML = "";
+
+  translatedSteps.forEach((step) => {
+    const li = document.createElement("li");
+    li.className = "plan-step-item";
+
+    const title = document.createElement("p");
+    title.className = "plan-step-text";
+    title.textContent = step.text;
+    li.appendChild(title);
+
+    if (step.description) {
+      const description = document.createElement("p");
+      description.className = "small-text plan-step-description";
+      description.textContent = step.description;
+      li.appendChild(description);
+    }
+
+    if (step.actionLink && step.actionLabel) {
+      const actionLink = document.createElement("a");
+      actionLink.className = "secondary-btn plan-step-link";
+      actionLink.href = step.actionLink;
+      if (step.actionExternal) {
+        actionLink.target = "_blank";
+        actionLink.rel = "noopener noreferrer";
+      }
+      actionLink.textContent = step.actionLabel;
+      li.appendChild(actionLink);
+    }
+
+    list.appendChild(li);
+  });
+
+  const transportButton = document.getElementById("transport-btn");
+  transportButton.classList.toggle("hidden", !plan.transportation_needed);
+  transportButton.onclick = () => {
+    window.location.href = "https://www.njtransit.com";
+  };
+
   try {
-    errorBox.textContent = "";
-    console.log("[intake] Get My Plan clicked");
-
-    if (
-      state.answers.hasBirth === null ||
-      state.answers.hasSSN === null ||
-      state.answers.hasID === null
-    ) {
-      errorBox.textContent = uiText[state.lang].planError;
-      return;
-    }
-
-    const birthLocation = getSelectedLocation("birth");
-    const currentLocation = getSelectedLocation("current");
-    console.log("[intake] Collected intake data", {
-      answers: { ...state.answers },
-      birthLocation,
-      currentLocation
-    });
-
-    if (!isLocationComplete(birthLocation) || !isLocationComplete(currentLocation)) {
-      errorBox.textContent = uiText[state.lang].locationError;
-      return;
-    }
-
-    const birthPlace = formatLocation(birthLocation);
-    const currentPlace = formatLocation(currentLocation);
-
-    const plan = generatePlan(state.answers, birthPlace, currentPlace);
-    state.lastPlan = plan;
-    console.log("[intake] Roadmap data generated", plan);
-
-    const translatedSteps = [];
-
-    for (const step of plan.steps) {
-      translatedSteps.push({
-        text: await translateText(step.text, state.lang),
-        description: step.description ? await translateText(step.description, state.lang) : "",
-        actionLabel: step.actionLabel ? await translateText(step.actionLabel, state.lang) : "",
-        actionLink: step.actionLink || "",
-        actionExternal: Boolean(step.actionExternal)
-      });
-    }
-
-    const list = document.getElementById("plan-steps");
-    list.innerHTML = "";
-
-    translatedSteps.forEach((step) => {
-      const li = document.createElement("li");
-      li.className = "plan-step-item";
-
-      const title = document.createElement("p");
-      title.className = "plan-step-text";
-      title.textContent = step.text;
-      li.appendChild(title);
-
-      if (step.description) {
-        const description = document.createElement("p");
-        description.className = "small-text plan-step-description";
-        description.textContent = step.description;
-        li.appendChild(description);
-      }
-
-      if (step.actionLink && step.actionLabel) {
-        const actionLink = document.createElement("a");
-        actionLink.className = "secondary-btn plan-step-link";
-        actionLink.href = step.actionLink;
-        if (step.actionExternal) {
-          actionLink.target = "_blank";
-          actionLink.rel = "noopener noreferrer";
-        }
-        actionLink.textContent = step.actionLabel;
-        li.appendChild(actionLink);
-      }
-
-      list.appendChild(li);
-    });
-
-    const transportButton = document.getElementById("transport-btn");
-    transportButton.classList.toggle("hidden", !plan.transportation_needed);
-    transportButton.onclick = () => {
-      window.location.href = "https://www.njtransit.com";
-    };
-
     const data = await fetchJson("/api/auth/intake", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -3679,17 +4274,13 @@ async function showPlan() {
     });
 
     state.clientPortalData.currentUser = data.user;
-    console.log("[intake] Intake data saved", data.user);
-    console.log("[router] intake completion route decision", { targetView: "plan" });
-    console.log("[intake] Rendering roadmap page");
-    navigateTo("plan", { reason: "intake_completed" });
   } catch (error) {
-    console.error("[intake] showPlan failed", error);
     errorBox.textContent =
-      error?.message === "SERVER_OFFLINE"
-        ? showServerOfflineMessage()
-        : (error?.message || "Could not create your plan.");
+      error.message === "SERVER_OFFLINE" ? showServerOfflineMessage() : error.message;
+    return;
   }
+
+  showResultScreen();
 }
 
 function addChatMessage(role, text) {
@@ -3745,6 +4336,35 @@ function closeHelpChat() {
   panel.hidden = true;
 }
 
+async function loginAdminWithRole(role, options = {}) {
+  const { demo = false, email = "", password = "", workerId = "", preferredWorkerId = "" } = options;
+  const endpoint = demo ? "/api/admin/demo-login" : "/api/admin/login";
+  const payload = demo ? { role, workerId } : { role, email, password };
+
+  const data = await fetchJson(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  state.adminRole = role;
+
+  if (role === "caseworker") {
+    state.caseWorkerData.currentWorkerId = preferredWorkerId || data.workerId || state.caseWorkerData.currentWorkerId;
+  }
+
+  if (role === "caseworker") {
+    await loadCaseWorkerDashboard();
+  }
+
+  if (role === "passaic") {
+    await loadCountyDashboard();
+  }
+
+  document.getElementById("login-error").textContent = "";
+  openScreen("admin-dashboard-screen");
+}
+
 async function handleUserChat() {
   const input = document.getElementById("chat-input");
   const text = input.value.trim();
@@ -3774,13 +4394,17 @@ function bindEvents() {
     setLoginView("worker");
   });
 
+  document.getElementById("client-notification-bell-btn").addEventListener("click", () => {
+    void toggleClientNotificationPanel();
+  });
+
   document.getElementById("create-account-toggle-btn").addEventListener("click", () => {
-    navigateTo("createAccount", { reason: "open_create_account" });
+    openScreen("create-account-screen");
     document.getElementById("create-account-name-input").focus();
   });
 
   document.getElementById("create-account-back-btn").addEventListener("click", () => {
-    navigateTo("login", { reason: "create_account_back" });
+    openScreen("login-screen");
   });
 
   document.getElementById("create-account-phone-mode-btn").addEventListener("click", () => {
@@ -3814,6 +4438,9 @@ function bindEvents() {
     adminPortalBtn.addEventListener("click", () => {
       setAuthView("admin");
       setAdminRole("caseworker");
+      if (!state.adminDemoWorkers.length) {
+        void loadAdminDemoCaseworkers();
+      }
       document.getElementById("admin-email-input").focus();
     });
   }
@@ -3829,6 +4456,14 @@ function bindEvents() {
 
   document.getElementById("passaic-role-btn").addEventListener("click", () => {
     setAdminRole("passaic");
+  });
+
+  document.getElementById("admin-demo-caseworker-select").addEventListener("change", () => {
+    state.adminSelectedDemoWorkerId = document.getElementById("admin-demo-caseworker-select").value;
+    if (state.adminRole !== "caseworker") {
+      setAdminRole("caseworker");
+    }
+    syncAdminDemoWorkerSelection();
   });
 
   document.getElementById("send-code-btn").addEventListener("click", () => {
@@ -3928,19 +4563,69 @@ function bindEvents() {
     const t = uiText[state.lang];
     const email = document.getElementById("admin-email-input").value.trim();
     const password = document.getElementById("admin-password-input").value.trim();
+    const selectedWorkerId = document.getElementById("admin-demo-caseworker-select").value || state.adminSelectedDemoWorkerId || "";
     
     try {
-      await loginAdminUser({
-        role: state.adminRole,
-        email,
-        password
-      });
+      if (state.adminRole === "caseworker" && password === "Demo login") {
+        const matchingDemoWorker = state.adminDemoWorkers.find((worker) => (
+          worker.workerId === selectedWorkerId
+        )) || DEFAULT_DEMO_CASEWORKERS.find((worker) => (
+          worker.workerId === selectedWorkerId
+        )) || state.adminDemoWorkers.find((worker) => (
+          String(worker.email || "").trim().toLowerCase() === email.toLowerCase()
+        )) || DEFAULT_DEMO_CASEWORKERS.find((worker) => (
+          String(worker.email || "").trim().toLowerCase() === email.toLowerCase()
+        )) || null;
+
+        if (!matchingDemoWorker?.workerId) {
+          throw new Error(state.lang === "es" ? "Seleccione un trabajador social demo valido." : "Select a valid demo case worker.");
+        }
+
+        state.adminSelectedDemoWorkerId = matchingDemoWorker.workerId;
+        document.getElementById("admin-demo-caseworker-select").value = matchingDemoWorker.workerId;
+        document.getElementById("admin-email-input").value = matchingDemoWorker.email || email;
+        await loginAdminWithRole("caseworker", {
+          demo: true,
+          workerId: matchingDemoWorker.workerId,
+          preferredWorkerId: matchingDemoWorker.workerId
+        });
+      } else if (state.adminRole === "passaic" && password === "Demo login" && email.toLowerCase() === "county@idhelp.org") {
+        await loginAdminWithRole("passaic", { demo: true });
+      } else {
+        await loginAdminWithRole(state.adminRole, { email, password });
+      }
     } catch (error) {
       document.getElementById("login-error").textContent =
         error.message === "SERVER_OFFLINE"
           ? showServerOfflineMessage()
           : (error.message || t.adminError);
     }
+  });
+
+  document.getElementById("admin-demo-caseworker-btn").addEventListener("click", async () => {
+    setAdminRole("caseworker");
+    state.adminSelectedDemoWorkerId = document.getElementById("admin-demo-caseworker-select").value || state.adminSelectedDemoWorkerId;
+    const selectedWorker = syncAdminDemoWorkerSelection() || state.adminDemoWorkers[0] || null;
+
+    if (!selectedWorker) {
+      document.getElementById("login-error").textContent = state.lang === "es"
+        ? "No hay trabajadores demo disponibles."
+        : "No demo case workers are available.";
+      return;
+    }
+
+    document.getElementById("admin-demo-caseworker-select").value = selectedWorker.workerId || "";
+    state.adminSelectedDemoWorkerId = selectedWorker.workerId || "";
+    document.getElementById("admin-email-input").value = selectedWorker.email || "";
+    document.getElementById("admin-password-input").value = "Demo login";
+    document.getElementById("admin-login-form").requestSubmit();
+  });
+
+  document.getElementById("admin-demo-county-btn").addEventListener("click", async () => {
+    setAdminRole("passaic");
+    document.getElementById("admin-email-input").value = "county@idhelp.org";
+    document.getElementById("admin-password-input").value = "Demo login";
+    document.getElementById("admin-login-form").requestSubmit();
   });
 
   document.querySelectorAll(".doc-card").forEach((card) => {
@@ -3955,18 +4640,42 @@ function bindEvents() {
         return;
       }
 
-      if (card.dataset.doc === "notifications" || card.dataset.doc === "empty") {
+      if (card.dataset.doc === "notifications") {
+        await openClientNotificationPanel();
+        return;
+      }
+
+      if (card.dataset.doc === "progress") {
+        await openClientProgressDashboard();
+        return;
+      }
+
+      if (card.dataset.doc === "empty") {
         return;
       }
     });
   });
 
   document.getElementById("dashboard-continue-btn").addEventListener("click", () => {
-    navigateTo("intake", { reason: "dashboard_continue", prefillFromSaved: true });
+    showQuestionScreen({ prefillFromSaved: true });
   });
 
   document.getElementById("dashboard-back-btn").addEventListener("click", () => {
     void logoutClientUser();
+  });
+
+  document.getElementById("client-progress-back-btn").addEventListener("click", () => {
+    openScreen("dashboard-screen");
+  });
+
+  document.getElementById("client-chat-back-btn").addEventListener("click", () => {
+    hideClientChatPanel();
+    openScreen("dashboard-screen");
+  });
+
+  document.getElementById("client-notifications-back-btn").addEventListener("click", () => {
+    closeClientNotificationPanel();
+    openScreen("dashboard-screen");
   });
 
   document.getElementById("admin-dashboard-back-btn").addEventListener("click", () => {
@@ -3975,62 +4684,30 @@ function bindEvents() {
 
   document.getElementById("questions-back-btn").addEventListener("click", () => {
     if (state.clientPortalData.currentUser?.hasCompletedIntake) {
-      navigateTo("dashboard", { reason: "questions_back_completed" });
+      openScreen("dashboard-screen");
       return;
     }
 
-    navigateTo("intake", { reason: "questions_back_incomplete", prefillFromSaved: false });
+    openScreen("questions-screen");
   });
 
   document.getElementById("questions-logout-btn").addEventListener("click", () => {
     void logoutClientUser();
   });
 
-  document.getElementById("admin-demo-caseworker-btn").addEventListener("click", async () => {
-    const demo = ADMIN_DEMO_ACCESS.caseworker;
-    setAdminRole(demo.role);
-    document.getElementById("admin-email-input").value = demo.email;
-    document.getElementById("admin-password-input").value = demo.password;
-
-    try {
-      await loginAdminUser(demo);
-    } catch (error) {
-      document.getElementById("login-error").textContent =
-        error.message === "SERVER_OFFLINE"
-          ? showServerOfflineMessage()
-          : error.message;
-    }
-  });
-
-  document.getElementById("admin-demo-county-btn").addEventListener("click", async () => {
-    const demo = ADMIN_DEMO_ACCESS.passaic;
-    setAdminRole(demo.role);
-    document.getElementById("admin-email-input").value = demo.email;
-    document.getElementById("admin-password-input").value = demo.password;
-
-    try {
-      await loginAdminUser(demo);
-    } catch (error) {
-      document.getElementById("login-error").textContent =
-        error.message === "SERVER_OFFLINE"
-          ? showServerOfflineMessage()
-          : error.message;
-    }
-  });
-
   document.getElementById("result-back-btn").addEventListener("click", () => {
-    navigateTo("intake", { reason: "plan_back", prefillFromSaved: true });
+    openScreen("questions-screen");
   });
 
   document.getElementById("plan-dashboard-btn").addEventListener("click", () => {
-    console.log("[router] Go to My Dashboard click");
-    navigateTo("dashboard", { reason: "plan_to_dashboard" });
+    openScreen("dashboard-screen");
   });
 
   document.getElementById("current-same-as-birth-input").addEventListener("change", (event) => {
     updateSameAsBirthState(Boolean(event.target.checked));
   });
 
+  document.getElementById("plan-btn").addEventListener("click", showPlan);
   document.getElementById("start-over-btn").addEventListener("click", startOver);
   document.getElementById("help-float-btn").addEventListener("click", openHelpChat);
   document.getElementById("chat-close-btn").addEventListener("click", closeHelpChat);
@@ -4082,15 +4759,6 @@ function bindEvents() {
     }
   });
 
-  document.addEventListener("click", (event) => {
-    const target = event.target instanceof Element ? event.target.closest("#plan-btn") : null;
-    if (!target) {
-      return;
-    }
-
-    event.preventDefault();
-    void showPlan();
-  });
 }
 
 bindLocationGroup("birth");
@@ -4105,6 +4773,7 @@ async function initializeApp() {
   setAuthView("user");
   setAdminRole("caseworker");
   setLoginView("phone");
+  await loadAdminDemoCaseworkers();
   applyLanguage();
   const restored = await restoreClientSession();
   if (!restored) {

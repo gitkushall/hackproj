@@ -327,6 +327,10 @@
 }
 
 .dashboard-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
   margin-bottom: 18px;
 }
 
