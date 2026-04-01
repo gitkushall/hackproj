@@ -1934,7 +1934,13 @@ app.post("/api/admin-chat", async (req, res) => {
   });
 });
 
-app.get("*", (_req, res) => {
+app.get("*", (req, res) => {
+  // Do not return HTML for missing asset files. Let missing CSS/JS/image requests fail clearly.
+  if (path.extname(req.path)) {
+    res.status(404).type("text/plain").send("Not found");
+    return;
+  }
+
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
