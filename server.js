@@ -385,6 +385,14 @@ function saveClientDocuments() {
   saveJsonArray(clientDocumentsFilePath, clientDocuments, { key: "client-documents" });
 }
 
+function removeItemsInPlace(items, predicate) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    if (predicate(items[index], index)) {
+      items.splice(index, 1);
+    }
+  }
+}
+
 const clients = loadJsonArray(clientsFilePath, defaultClients, { key: "clients" });
 const workers = loadJsonArray(workersFilePath, defaultWorkers, { key: "workers" }).map(enrichWorkerProfile);
 const notifications = loadJsonArray(notificationsFilePath, defaultNotifications, { key: "notifications" });
@@ -398,14 +406,24 @@ const authSessions = new Map();
 let mailTransporter = null;
 let smsClient = null;
 
+function syncWorkerActiveCaseCounts() {
+  workers.forEach((worker) => {
+    worker.active_cases = clients.filter((client) => (
+      client.assigned_worker === worker.id && client.worker_status === "active"
+    )).length;
+  });
+}
+
 migrateClientAccounts();
 migrateClientNotificationStore();
+syncWorkerActiveCaseCounts();
 saveJsonArray(workersFilePath, workers, { key: "workers" });
 
 const runtimeStorage = getRuntimeStorageInfo();
 console.log(`Runtime storage mode: ${runtimeStorage.mode}. Writable target: ${runtimeStorage.writableRoot}.`);
 
 function getRecommendedWorker() {
+  syncWorkerActiveCaseCounts();
   return workers.reduce((lowest, worker) => (
     worker.active_cases < lowest.active_cases ? worker : lowest
   ), workers[0]);
@@ -697,6 +715,28 @@ function ensureClientRecordForAccount(account, requestCaseWorker) {
     };
     clients.unshift(client);
   }
+}
+
+function removeClientFromSystem(clientId) {
+  removeItemsInPlace(clients, (item) => item.id === clientId);
+  removeItemsInPlace(clientAccounts, (item) => item.clientId === clientId);
+  removeItemsInPlace(clientNotifications, (item) => item.client_id === clientId);
+  removeItemsInPlace(messages, (item) => item.client_id === clientId);
+  removeItemsInPlace(clientDocuments, (item) => item.client_id === clientId);
+  removeItemsInPlace(transportRequests, (item) => item.client_id === clientId);
+
+  for (const [sessionId, session] of authSessions.entries()) {
+    if (session?.clientId === clientId) {
+      authSessions.delete(sessionId);
+    }
+  }
+
+  syncWorkerActiveCaseCounts();
+  saveClientAccounts(clientAccounts);
+  saveClientNotifications();
+  saveMessages();
+  saveClientDocuments();
+  saveCountyState();
 }
 
 function getMissingDocumentsFromAnswers(answers = {}) {
@@ -1063,6 +1103,7 @@ function createInsightResponse(questionRaw) {
 }
 
 app.get("/api/clients", (_req, res) => {
+  syncWorkerActiveCaseCounts();
   res.json({
     clients,
     recommended_worker_id: getRecommendedWorker().id
@@ -1070,6 +1111,7 @@ app.get("/api/clients", (_req, res) => {
 });
 
 app.get("/api/workers", (_req, res) => {
+  syncWorkerActiveCaseCounts();
   res.json({
     workers,
     recommended_worker_id: getRecommendedWorker().id
@@ -1559,17 +1601,10 @@ app.post("/api/assign", async (req, res) => {
     return;
   }
 
-  if (client.assigned_worker && client.assigned_worker !== workerId) {
-    const previousWorker = workers.find((item) => item.id === client.assigned_worker);
-    if (previousWorker && previousWorker.active_cases > 0) {
-      previousWorker.active_cases -= 1;
-    }
-  }
-
   client.assigned_worker = workerId;
   client.status = "pending";
   client.worker_status = "pending_approval";
-  worker.active_cases += 1;
+  syncWorkerActiveCaseCounts();
 
   notifications.unshift({
     id: `NT-${Date.now()}`,
@@ -1605,6 +1640,7 @@ app.post("/api/case-status", async (req, res) => {
   if (action === "accept") {
     client.status = "active";
     client.worker_status = "active";
+    syncWorkerActiveCaseCounts();
     notifications.unshift({
       id: `NT-${Date.now()}`,
       message: `${worker.name} accepted ${client.name}`,
@@ -1617,32 +1653,18 @@ app.post("/api/case-status", async (req, res) => {
       category: "status"
     });
   } else if (action === "complete") {
-    client.status = "completed";
-    client.worker_status = "completed";
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      if (messages[index].client_id === clientId) {
-        messages.splice(index, 1);
-      }
-    }
-    saveMessages();
     notifications.unshift({
       id: `NT-${Date.now()}`,
       message: `${worker.name} completed ${client.name}`,
       worker_id: worker.id,
       timestamp: new Date().toISOString()
     });
-    await createClientNotification(client.id, {
-      title: "Case completed",
-      message: `${worker.name} marked your case as completed.`,
-      category: "status"
-    });
+    removeClientFromSystem(clientId);
   } else if (action === "reject") {
     client.worker_status = "rejected";
     client.status = "pending";
     client.assigned_worker = null;
-    if (worker.active_cases > 0) {
-      worker.active_cases -= 1;
-    }
+    syncWorkerActiveCaseCounts();
     notifications.unshift({
       id: `NT-${Date.now()}`,
       message: `${worker.name} rejected ${client.name}`,
@@ -1662,7 +1684,7 @@ app.post("/api/case-status", async (req, res) => {
 
   res.json({
     success: true,
-    client,
+    client: action === "complete" ? null : client,
     worker,
     recommended_worker_id: getRecommendedWorker().id
   });

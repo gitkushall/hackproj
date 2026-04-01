@@ -972,7 +972,7 @@ function applyLanguage() {
       state.adminRole === "caseworker" ? t.adminRoleCaseworker : t.adminRolePassaic
     );
   document.getElementById("admin-role-subtitle").textContent =
-    state.adminRole === "caseworker" && currentWorker ? formatCountLabel(currentWorker.active_cases, "active case", "active cases", "caso activo", "casos activos") : (
+    state.adminRole === "caseworker" && currentWorker ? formatCountLabel(getActiveCases().length, "active case", "active cases", "caso activo", "casos activos") : (
       state.adminRole === "caseworker" ? t.adminSummaryCases : t.adminSummaryCounty
     );
   document.getElementById("county-users-number").textContent = String(passaicCountyMetrics.totalUsers);
@@ -1659,7 +1659,7 @@ function showServerOfflineMessage() {
 
 function renderCountyMetrics() {
   const assignedCount = state.countyData.clients.filter((client) => client.status === "assigned").length;
-  const openCount = state.countyData.clients.filter((client) => client.status !== "assigned").length;
+  const openCount = state.countyData.clients.filter((client) => client.status !== "assigned" && client.status !== "completed" && client.worker_status !== "completed").length;
 
   document.getElementById("county-users-number").textContent = String(systemData.total_users);
   document.getElementById("county-housed-number").textContent = String(assignedCount || systemData.completed);
@@ -1910,10 +1910,11 @@ function renderCountyHousingAvailability() {
 
 function renderClients() {
   const list = document.getElementById("client-request-list");
-  const pendingCount = state.countyData.clients.filter((client) => client.status !== "assigned").length;
+  const visibleClients = state.countyData.clients.filter((client) => client.status !== "completed" && client.worker_status !== "completed");
+  const pendingCount = visibleClients.filter((client) => client.status !== "assigned").length;
   document.getElementById("county-client-count").textContent = formatCountLabel(pendingCount, "open", "open", "abierto", "abiertos");
   const workerNameById = Object.fromEntries(state.countyData.workers.map((worker) => [worker.id, worker.name]));
-  const sortedClients = [...state.countyData.clients].sort((left, right) => {
+  const sortedClients = [...visibleClients].sort((left, right) => {
     const getPriority = (client) => {
       const hasAssignedWorker = Boolean(client.assigned_worker);
       const isPending = client.status === "pending" || client.worker_status === "pending_approval";
@@ -3342,9 +3343,17 @@ function getPendingCases() {
   ));
 }
 
-function getCurrentCases() {
+function getActiveCases() {
   return state.caseWorkerData.clients.filter((client) => (
-    isAssignedToCurrentWorker(client) && client.worker_status !== "completed" && client.worker_status !== "rejected"
+    isAssignedToCurrentWorker(client) && client.worker_status === "active"
+  ));
+}
+
+function getVisibleWorkerCases() {
+  return state.caseWorkerData.clients.filter((client) => (
+    isAssignedToCurrentWorker(client) &&
+    client.worker_status !== "completed" &&
+    client.worker_status !== "rejected"
   ));
 }
 
@@ -3377,7 +3386,11 @@ function renderWorkerClientList(clients) {
         ${client.missing_documents.map((doc) => `<span class="document-tag">${escapeHtml(formatDocumentLabel(doc))}</span>`).join("")}
       </div>
       <div class="worker-client-actions">
-        <button class="secondary-btn worker-select-btn" type="button" data-client-id="${escapeHtml(client.id)}">${localizeText("Open")}</button>
+        <button class="secondary-btn worker-select-btn" type="button" data-client-id="${escapeHtml(client.id)}">${client.worker_status === "pending_approval" ? localizeText("Review") : localizeText("Open")}</button>
+        ${client.worker_status === "pending_approval" ? `
+          <button class="secondary-btn worker-approve-btn accept" type="button" data-approval-action="accept" data-client-id="${escapeHtml(client.id)}">${localizeText("Accept")}</button>
+          <button class="secondary-btn worker-approve-btn reject" type="button" data-approval-action="reject" data-client-id="${escapeHtml(client.id)}">${localizeText("Reject")}</button>
+        ` : ""}
       </div>
     </article>
   `).join("");
@@ -3385,6 +3398,12 @@ function renderWorkerClientList(clients) {
   list.querySelectorAll(".worker-select-btn").forEach((button) => {
     button.addEventListener("click", async () => {
       await openCase(button.dataset.clientId);
+    });
+  });
+
+  list.querySelectorAll("[data-approval-action]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await updateCaseApproval(button.dataset.clientId, button.dataset.approvalAction);
     });
   });
 }
@@ -3816,6 +3835,8 @@ function renderCaseFileView() {
     return;
   }
 
+  const isPendingApproval = selectedClient.worker_status === "pending_approval";
+
   container.innerHTML = `
     <div class="caseworker-file-shell">
       <div class="screen-top-row caseworker-file-top">
@@ -3846,18 +3867,22 @@ function renderCaseFileView() {
             </div>
             <div class="caseworker-workspace-placeholder-grid">
               <button class="worker-detail-block workspace-launch-card" type="button" data-panel="documents">
+                ${isPendingApproval ? '<span class="document-tag">Accept case first</span>' : ""}
                 <strong>Document Uploads</strong>
                 <p class="small-text">Review required documents and attach image or file selections.</p>
               </button>
               <button class="worker-detail-block workspace-launch-card" type="button" data-panel="chat">
+                ${isPendingApproval ? '<span class="document-tag">Accept case first</span>' : ""}
                 <strong>Client Chat</strong>
                 <p class="small-text">Open the live chat popup for saved messages and shared images.</p>
               </button>
               <button class="worker-detail-block workspace-launch-card" type="button" data-panel="notes">
+                ${isPendingApproval ? '<span class="document-tag">Accept case first</span>' : ""}
                 <strong>Case Notes</strong>
                 <p class="small-text">Track internal notes, blockers, and next steps for this client.</p>
               </button>
               <button class="worker-detail-block workspace-launch-card" type="button" data-panel="activity">
+                ${isPendingApproval ? '<span class="document-tag">Accept case first</span>' : ""}
                 <strong>Case Activity</strong>
                 <p class="small-text">See recent movement across messages, transport, and status changes.</p>
               </button>
@@ -3871,7 +3896,14 @@ function renderCaseFileView() {
             <p class="small-text">Current status: ${selectedClient.worker_status === "pending_approval" ? "Pending approval" : (selectedClient.worker_status === "completed" ? "Completed" : "Active")}</p>
             <p class="small-text">Transportation needed: ${selectedClient.transportation_needed ? "Yes" : "No"}</p>
             <p class="small-text">Missing documents: ${selectedClient.missing_documents.length ? escapeHtml(selectedClient.missing_documents.map(formatDocumentLabel).join(", ")) : "None listed"}</p>
-            <button class="secondary-btn worker-complete-btn" type="button" id="caseworker-complete-case-btn" ${selectedClient.worker_status === "completed" ? "disabled" : ""}>Mark Case Completed</button>
+            ${isPendingApproval ? `
+              <p class="small-text">This case is assigned to you, but you need to accept it before you can start working on documents, chat, or notes.</p>
+              <div class="worker-client-actions">
+                <button class="secondary-btn worker-approve-btn accept" type="button" id="caseworker-accept-case-btn">Accept Case</button>
+                <button class="secondary-btn worker-approve-btn reject" type="button" id="caseworker-reject-case-btn">Reject Case</button>
+              </div>
+            ` : ""}
+            <button class="secondary-btn worker-complete-btn" type="button" id="caseworker-complete-case-btn" ${(selectedClient.worker_status === "completed" || isPendingApproval) ? "disabled" : ""}>Mark Case Completed</button>
           </div>
 
           <div class="caseworker-panel">
@@ -3897,6 +3929,10 @@ function renderCaseFileView() {
 
   container.querySelectorAll(".workspace-launch-card").forEach((button) => {
     button.addEventListener("click", async () => {
+      if (isPendingApproval) {
+        return;
+      }
+
       if (button.dataset.panel === "documents") {
         await openCaseworkerDocumentsPage(selectedClient.id, state.clientPortalData.selectedDocumentType);
         return;
@@ -3913,6 +3949,22 @@ function renderCaseFileView() {
       state.caseWorkerData.activeWorkspacePanel = null;
       state.caseWorkerData.messagesByClient[selectedClient.id] = [];
       renderCaseFileView();
+    });
+  }
+
+  const acceptButton = document.getElementById("caseworker-accept-case-btn");
+  if (acceptButton) {
+    acceptButton.addEventListener("click", async () => {
+      await updateCaseApproval(selectedClient.id, "accept");
+      renderCaseFileView();
+    });
+  }
+
+  const rejectButton = document.getElementById("caseworker-reject-case-btn");
+  if (rejectButton) {
+    rejectButton.addEventListener("click", async () => {
+      await updateCaseApproval(selectedClient.id, "reject");
+      closeCaseFileView();
     });
   }
 
@@ -4001,22 +4053,24 @@ function renderCaseFileView() {
 }
 
 function renderCaseWorkerDashboard() {
-  const currentCases = getCurrentCases();
+  const pendingCases = getPendingCases();
+  const activeCases = getActiveCases();
+  const visibleCases = getVisibleWorkerCases();
   const currentWorker = getCurrentWorker();
 
-  document.getElementById("worker-case-count").textContent = formatCountLabel(currentCases.length, "case", "cases", "caso", "casos");
+  document.getElementById("worker-case-count").textContent = formatCountLabel(activeCases.length, "case", "cases", "caso", "casos");
 
   if (!state.caseWorkerData.selectedClientId) {
-    const firstClient = currentCases[0];
+    const firstClient = pendingCases[0] || activeCases[0] || visibleCases[0];
     state.caseWorkerData.selectedClientId = firstClient ? firstClient.id : null;
   }
 
   if (currentWorker) {
     document.getElementById("admin-role-title").textContent = currentWorker.name;
-    document.getElementById("admin-role-subtitle").textContent = `${currentWorker.active_cases} active cases`;
+    document.getElementById("admin-role-subtitle").textContent = `${activeCases.length} active cases`;
   }
 
-  renderWorkerClientList(currentCases);
+  renderWorkerClientList(visibleCases);
   renderWorkerNotifications();
 }
 
@@ -4037,9 +4091,10 @@ async function loadCaseWorkerDashboard() {
       state.caseWorkerData.selectedClientId = null;
     }
 
-    const currentCases = getCurrentCases();
-    if (!state.caseWorkerData.selectedClientId && currentCases.length) {
-      state.caseWorkerData.selectedClientId = currentCases[0].id;
+    const visibleCases = getVisibleWorkerCases();
+    if (!state.caseWorkerData.selectedClientId && visibleCases.length) {
+      const pendingCases = getPendingCases();
+      state.caseWorkerData.selectedClientId = (pendingCases[0] || visibleCases[0]).id;
     }
 
     if (state.caseWorkerData.selectedClientId) {
@@ -4069,7 +4124,15 @@ async function updateCaseApproval(clientId, action) {
     if (action === "complete") {
       state.caseWorkerData.messagesByClient[clientId] = [];
       state.caseWorkerData.chatNotices[clientId] = "";
+      state.caseWorkerData.selectedClientId = null;
+      state.caseWorkerData.fullCaseViewId = null;
+      state.caseWorkerData.activeWorkspacePanel = null;
       clearPendingChatImage("worker");
+    }
+
+    if (action === "reject" && state.caseWorkerData.fullCaseViewId === clientId) {
+      state.caseWorkerData.fullCaseViewId = null;
+      state.caseWorkerData.activeWorkspacePanel = null;
     }
 
     await loadCaseWorkerDashboard();

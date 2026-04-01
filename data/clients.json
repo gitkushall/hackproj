@@ -5,9 +5,9 @@
     "city": "Passaic",
     "missing_documents": [],
     "transportation_needed": false,
-    "status": "pending",
-    "assigned_worker": null,
-    "worker_status": null
+    "status": "completed",
+    "assigned_worker": "WK-01",
+    "worker_status": "completed"
   },
   {
     "id": "CL-1014",
@@ -19,9 +19,9 @@
       "state_id"
     ],
     "transportation_needed": true,
-    "status": "pending",
+    "status": "completed",
     "assigned_worker": "WK-02",
-    "worker_status": "pending_approval"
+    "worker_status": "completed"
   },
   {
     "id": "CL-1013",
@@ -34,8 +34,8 @@
     ],
     "transportation_needed": true,
     "status": "active",
-    "assigned_worker": null,
-    "worker_status": null
+    "assigned_worker": "WK-02",
+    "worker_status": "active"
   },
   {
     "id": "CL-1012",
@@ -47,9 +47,9 @@
       "state_id"
     ],
     "transportation_needed": true,
-    "status": "pending",
+    "status": "completed",
     "assigned_worker": "WK-03",
-    "worker_status": "pending_approval"
+    "worker_status": "completed"
   },
   {
     "id": "CL-1011",
@@ -57,9 +57,9 @@
     "city": "Passaic",
     "missing_documents": [],
     "transportation_needed": false,
-    "status": "pending",
+    "status": "completed",
     "assigned_worker": "WK-04",
-    "worker_status": "pending_approval"
+    "worker_status": "completed"
   },
   {
     "id": "CL-1010",
@@ -67,9 +67,9 @@
     "city": "Passaic",
     "missing_documents": [],
     "transportation_needed": false,
-    "status": "pending",
+    "status": "completed",
     "assigned_worker": "WK-01",
-    "worker_status": "pending_approval"
+    "worker_status": "completed"
   },
   {
     "id": "CL-1009",
@@ -77,9 +77,9 @@
     "city": "Passaic",
     "missing_documents": [],
     "transportation_needed": false,
-    "status": "active",
+    "status": "completed",
     "assigned_worker": "WK-01",
-    "worker_status": "active"
+    "worker_status": "completed"
   },
   {
     "id": "CL-1008",
@@ -100,9 +100,9 @@
       "state_id"
     ],
     "transportation_needed": true,
-    "status": "pending",
-    "assigned_worker": "WK-02",
-    "worker_status": "pending_approval"
+    "status": "completed",
+    "assigned_worker": "WK-01",
+    "worker_status": "completed"
   },
   {
     "id": "CL-1002",
@@ -112,9 +112,9 @@
       "ssn"
     ],
     "transportation_needed": false,
-    "status": "pending",
-    "assigned_worker": "WK-02",
-    "worker_status": "pending_approval"
+    "status": "completed",
+    "assigned_worker": "WK-01",
+    "worker_status": "completed"
   },
   {
     "id": "CL-1003",
@@ -150,9 +150,9 @@
       "birth_certificate"
     ],
     "transportation_needed": false,
-    "status": "pending",
+    "status": "completed",
     "assigned_worker": "WK-04",
-    "worker_status": "pending_approval"
+    "worker_status": "completed"
   },
   {
     "id": "CL-1006",
@@ -163,8 +163,8 @@
       "state_id"
     ],
     "transportation_needed": false,
-    "status": "active",
+    "status": "completed",
     "assigned_worker": "WK-03",
-    "worker_status": "active"
+    "worker_status": "completed"
   }
 ]

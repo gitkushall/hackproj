@@ -1,27 +1,5 @@
 [
   {
-    "id": "MSG-00",
-    "client_id": "CL-1001",
-    "worker_id": "WK-01",
-    "sender": "worker",
-    "text": "Hi Maria, I can help with your birth certificate and State ID.",
-    "image_name": null,
-    "image_data": null,
-    "image_type": null,
-    "timestamp": "2026-03-26T00:25:02.929Z"
-  },
-  {
-    "id": "MSG-00B",
-    "client_id": "CL-1002",
-    "worker_id": "WK-02",
-    "sender": "client",
-    "text": "I still need help with my SSN card.",
-    "image_name": null,
-    "image_data": null,
-    "image_type": null,
-    "timestamp": "2026-03-26T00:35:02.929Z"
-  },
-  {
     "id": "MSG-01",
     "client_id": "CL-1003",
     "worker_id": "WK-03",
@@ -53,27 +31,5 @@
     "image_data": null,
     "image_type": null,
     "timestamp": "2026-03-26T01:25:02.929Z"
-  },
-  {
-    "id": "MSG-1774996586885",
-    "client_id": "CL-1012",
-    "worker_id": "WK-03",
-    "sender": "client",
-    "text": "hellp",
-    "image_name": null,
-    "image_data": null,
-    "image_type": null,
-    "timestamp": "2026-03-31T22:36:26.885Z"
-  },
-  {
-    "id": "MSG-1775002929877",
-    "client_id": "CL-1012",
-    "worker_id": "WK-03",
-    "sender": "client",
-    "text": "hello",
-    "image_name": null,
-    "image_data": null,
-    "image_type": null,
-    "timestamp": "2026-04-01T00:22:09.877Z"
   }
 ]

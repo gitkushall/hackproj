@@ -948,6 +948,21 @@ textarea:focus {
   min-height: 620px;
 }
 
+#admin-dashboard-screen.county-mode #client-request-list {
+  max-height: 760px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+#admin-dashboard-screen.county-mode #client-request-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+#admin-dashboard-screen.county-mode #client-request-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.22);
+}
+
 #admin-dashboard-screen.county-mode .county-workers-panel {
   border-top: 4px solid #59779f;
 }

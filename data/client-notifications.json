@@ -1,5 +1,125 @@
 [
   {
+    "id": "CNT-1775016389888-8546a9",
+    "client_id": "CL-1013",
+    "title": "Case accepted",
+    "message": "Daniel Kim accepted your case and started working on it.",
+    "category": "status",
+    "read": false,
+    "timestamp": "2026-04-01T04:06:29.888Z",
+    "delivery": {
+      "channel": "sms",
+      "recipient": "4444444444",
+      "provider": "console-simulated-sms",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1775016379374-6c07fc",
+    "client_id": "CL-1013",
+    "title": "Case worker assigned",
+    "message": "Daniel Kim has been assigned to your case.",
+    "category": "assignment",
+    "read": false,
+    "timestamp": "2026-04-01T04:06:19.374Z",
+    "delivery": {
+      "channel": "sms",
+      "recipient": "4444444444",
+      "provider": "console-simulated-sms",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1775015937639-3bdde1",
+    "client_id": "CL-1015",
+    "title": "Case completed",
+    "message": "Sarah Ahmed marked your case as completed.",
+    "category": "status",
+    "read": false,
+    "timestamp": "2026-04-01T03:58:57.639Z",
+    "delivery": {
+      "channel": "sms",
+      "recipient": "9999999999",
+      "provider": "console-simulated-sms",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1775015831219-62d559",
+    "client_id": "CL-1013",
+    "title": "Case worker assigned",
+    "message": "Priya Shah has been assigned to your case.",
+    "category": "assignment",
+    "read": false,
+    "timestamp": "2026-04-01T03:57:11.219Z",
+    "delivery": {
+      "channel": "sms",
+      "recipient": "4444444444",
+      "provider": "console-simulated-sms",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1775015821843-a129ca",
+    "client_id": "CL-1015",
+    "title": "Case worker assigned",
+    "message": "Sarah Ahmed has been assigned to your case.",
+    "category": "assignment",
+    "read": false,
+    "timestamp": "2026-04-01T03:57:01.843Z",
+    "delivery": {
+      "channel": "sms",
+      "recipient": "9999999999",
+      "provider": "console-simulated-sms",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1775015795122-5719fb",
+    "client_id": "CL-1012",
+    "title": "Case completed",
+    "message": "Priya Shah marked your case as completed.",
+    "category": "status",
+    "read": false,
+    "timestamp": "2026-04-01T03:56:35.122Z",
+    "delivery": {
+      "channel": "sms",
+      "recipient": "8883334444",
+      "provider": "console-simulated-sms",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1775015779922-dfde39",
+    "client_id": "CL-1011",
+    "title": "Case completed",
+    "message": "Marcus Hill marked your case as completed.",
+    "category": "status",
+    "read": false,
+    "timestamp": "2026-04-01T03:56:19.922Z",
+    "delivery": {
+      "channel": "sms",
+      "recipient": "4454454455",
+      "provider": "console-simulated-sms",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1775015749908-7e8cd7",
+    "client_id": "CL-1014",
+    "title": "Case completed",
+    "message": "Daniel Kim marked your case as completed.",
+    "category": "status",
+    "read": false,
+    "timestamp": "2026-04-01T03:55:49.908Z",
+    "delivery": {
+      "channel": "email",
+      "recipient": "kushallsub123@gmail.com",
+      "provider": "console-simulated-email",
+      "status": "simulated"
+    }
+  },
+  {
     "id": "CNT-1775010184580-43a788",
     "client_id": "CL-1014",
     "title": "Case worker assigned",
