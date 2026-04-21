@@ -41,6 +41,8 @@ const clientNotificationsFilePath = path.join(dataDirectory, "client-notificatio
 const transportRequestsFilePath = path.join(dataDirectory, "transport-requests.json");
 const messagesFilePath = path.join(dataDirectory, "messages.json");
 const clientDocumentsFilePath = path.join(dataDirectory, "client-documents.json");
+const COUNTY_ADMIN_ID = "PASSAIC-COUNTY";
+const COUNTY_ADMIN_NAME = "Passaic County";
 
 const systemData = {
   total_users: 284,
@@ -366,7 +368,58 @@ function saveClientAccounts(accounts) {
   saveJsonArray(clientAccountsFilePath, accounts, { key: "client-accounts" });
 }
 
+function getTimestamp() {
+  return new Date().toISOString();
+}
+
+function pushCountyNotification(message, workerId = "system", timestamp = getTimestamp()) {
+  notifications.unshift({
+    id: `NT-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
+    message,
+    worker_id: workerId,
+    timestamp
+  });
+}
+
+function syncClientRelationships(client) {
+  if (!client) {
+    return null;
+  }
+
+  const linkedAccount = clientAccounts.find((account) => account.clientId === client.id) || null;
+  const assignedWorker = workers.find((worker) => worker.id === client.assigned_worker) || null;
+
+  client.county_id = COUNTY_ADMIN_ID;
+  client.county_name = COUNTY_ADMIN_NAME;
+  client.linked_account_id = linkedAccount?.clientId || client.linked_account_id || client.id;
+  client.account_linked = Boolean(linkedAccount);
+  client.account_name = linkedAccount?.name || client.name || "";
+  client.assigned_worker_name = assignedWorker?.name || "";
+  client.assigned_worker_email = assignedWorker?.email || "";
+  client.updated_at = client.updated_at || getTimestamp();
+
+  return client;
+}
+
+function touchClientRelationship(client, actor) {
+  if (!client) {
+    return;
+  }
+
+  client.last_updated_by = actor;
+  client.updated_at = getTimestamp();
+  syncClientRelationships(client);
+}
+
+function syncAllClientRelationships() {
+  clients.forEach((client) => {
+    syncClientRelationships(client);
+  });
+}
+
 function saveCountyState() {
+  syncAllClientRelationships();
+  syncWorkerActiveCaseCounts();
   saveJsonArray(clientsFilePath, clients, { key: "clients" });
   saveJsonArray(workersFilePath, workers, { key: "workers" });
   saveJsonArray(notificationsFilePath, notifications, { key: "notifications" });
@@ -416,8 +469,10 @@ function syncWorkerActiveCaseCounts() {
 
 migrateClientAccounts();
 migrateClientNotificationStore();
+migrateClientStore();
+syncAllClientRelationships();
 syncWorkerActiveCaseCounts();
-saveJsonArray(workersFilePath, workers, { key: "workers" });
+saveCountyState();
 
 const runtimeStorage = getRuntimeStorageInfo();
 console.log(`Runtime storage mode: ${runtimeStorage.mode}. Writable target: ${runtimeStorage.writableRoot}.`);
@@ -711,10 +766,17 @@ function ensureClientRecordForAccount(account, requestCaseWorker) {
       transportation_needed: false,
       status: requestCaseWorker ? "pending" : "active",
       assigned_worker: null,
-      worker_status: null
+      worker_status: null,
+      created_at: getTimestamp(),
+      case_worker_requested: requestCaseWorker
     };
     clients.unshift(client);
   }
+
+  client.name = account.name || client.name;
+  client.linked_account_id = account.clientId;
+  client.case_worker_requested = requestCaseWorker;
+  touchClientRelationship(client, requestCaseWorker ? "client_signup_request" : "client_signup");
 }
 
 function removeClientFromSystem(clientId) {
@@ -908,6 +970,7 @@ function saveClientIntake(account, payload = {}) {
     client.missing_documents = getMissingDocumentsFromAnswers(documentAnswers);
     client.transportation_needed = documentAnswers.hasID === false;
     client.city = intakeLocations.current?.city || client.city;
+    touchClientRelationship(client, "client_intake");
   }
 
   saveClientAccounts(clientAccounts);
@@ -1000,17 +1063,40 @@ function migrateClientNotificationStore() {
   }
 }
 
-function addAccountCreationNotification(account, requestCaseWorker) {
-  const message = requestCaseWorker
-    ? `Client ${account.name} created an account and requested a case worker`
-    : `New account created in Passaic County: client ${account.name}`;
+function migrateClientStore() {
+  let changed = false;
 
-  notifications.unshift({
-    id: `NT-${Date.now()}`,
-    message,
-    worker_id: "system",
-    timestamp: new Date().toISOString()
+  clients.forEach((client) => {
+    const snapshot = JSON.stringify(client);
+
+    if (!client.created_at) {
+      client.created_at = getTimestamp();
+    }
+
+    if (!client.linked_account_id) {
+      client.linked_account_id = client.id;
+    }
+
+    if (!("case_worker_requested" in client)) {
+      client.case_worker_requested = client.status === "pending" && !client.assigned_worker;
+    }
+
+    syncClientRelationships(client);
+
+    if (JSON.stringify(client) !== snapshot) {
+      changed = true;
+    }
   });
+
+  if (changed) {
+    saveCountyState();
+  }
+}
+
+function addAccountCreationNotification(account, requestCaseWorker) {
+  const message = `New portal account: ${account.name}. Case worker requested: ${requestCaseWorker ? "Yes" : "No"}.`;
+
+  pushCountyNotification(message);
 }
 
 function markClientNotificationsAsRead(clientId) {
@@ -1488,6 +1574,14 @@ app.post("/api/auth/intake", (req, res) => {
   }
 
   saveClientIntake(account, { documentAnswers, intakeLocations, roadmapPlan });
+  const client = clients.find((item) => item.id === account.clientId);
+  if (client) {
+    const missingCount = Array.isArray(client.missing_documents) ? client.missing_documents.length : 0;
+    pushCountyNotification(
+      `${client.name} updated intake. ${missingCount} document step${missingCount === 1 ? "" : "s"} still open.`,
+      client.assigned_worker || "system"
+    );
+  }
 
   res.json({
     success: true,
@@ -1604,14 +1698,11 @@ app.post("/api/assign", async (req, res) => {
   client.assigned_worker = workerId;
   client.status = "pending";
   client.worker_status = "pending_approval";
+  client.case_worker_requested = true;
+  touchClientRelationship(client, "county_assignment");
   syncWorkerActiveCaseCounts();
 
-  notifications.unshift({
-    id: `NT-${Date.now()}`,
-    message: `${worker.name} assigned to ${client.name}`,
-    worker_id: worker.id,
-    timestamp: new Date().toISOString()
-  });
+  pushCountyNotification(`${worker.name} assigned to ${client.name}`, worker.id);
   saveCountyState();
   await createClientNotification(client.id, {
     title: "Case worker assigned",
@@ -1640,37 +1731,26 @@ app.post("/api/case-status", async (req, res) => {
   if (action === "accept") {
     client.status = "active";
     client.worker_status = "active";
+    client.case_worker_requested = true;
+    touchClientRelationship(client, "caseworker_accept");
     syncWorkerActiveCaseCounts();
-    notifications.unshift({
-      id: `NT-${Date.now()}`,
-      message: `${worker.name} accepted ${client.name}`,
-      worker_id: worker.id,
-      timestamp: new Date().toISOString()
-    });
+    pushCountyNotification(`${worker.name} accepted ${client.name}`, worker.id);
     await createClientNotification(client.id, {
       title: "Case accepted",
       message: `${worker.name} accepted your case and started working on it.`,
       category: "status"
     });
   } else if (action === "complete") {
-    notifications.unshift({
-      id: `NT-${Date.now()}`,
-      message: `${worker.name} completed ${client.name}`,
-      worker_id: worker.id,
-      timestamp: new Date().toISOString()
-    });
+    pushCountyNotification(`${worker.name} completed ${client.name}`, worker.id);
     removeClientFromSystem(clientId);
   } else if (action === "reject") {
     client.worker_status = "rejected";
     client.status = "pending";
     client.assigned_worker = null;
+    client.case_worker_requested = true;
+    touchClientRelationship(client, "caseworker_reject");
     syncWorkerActiveCaseCounts();
-    notifications.unshift({
-      id: `NT-${Date.now()}`,
-      message: `${worker.name} rejected ${client.name}`,
-      worker_id: worker.id,
-      timestamp: new Date().toISOString()
-    });
+    pushCountyNotification(`${worker.name} rejected ${client.name}`, worker.id);
     await createClientNotification(client.id, {
       title: "Assignment changed",
       message: `${worker.name} declined this case. A new worker can be assigned next.`,
@@ -1762,6 +1842,14 @@ app.post("/api/messages", async (req, res) => {
   };
 
   messages.push(message);
+  touchClientRelationship(client, message.sender === "client" ? "client_message" : "caseworker_message");
+  pushCountyNotification(
+    message.sender === "client"
+      ? `${client.name} sent a message${message.worker_id ? ` to ${client.assigned_worker_name || message.worker_id}` : ""}`
+      : `${client.assigned_worker_name || "Case worker"} sent a case update to ${client.name}`,
+    message.worker_id || "system"
+  );
+  saveCountyState();
   saveMessages();
   if (message.sender === "worker") {
     await createClientNotification(clientId, {
@@ -1826,6 +1914,14 @@ app.post("/api/client-documents", async (req, res) => {
   };
 
   clientDocuments.unshift(documentRecord);
+  touchClientRelationship(client, documentRecord.uploaded_by === "client" ? "client_document" : "caseworker_document");
+  pushCountyNotification(
+    documentRecord.uploaded_by === "client"
+      ? `${client.name} uploaded ${getDocumentLabel(documentRecord.document_type)}`
+      : `${client.assigned_worker_name || "Case worker"} uploaded ${getDocumentLabel(documentRecord.document_type)} for ${client.name}`,
+    documentRecord.worker_id || "system"
+  );
+  saveCountyState();
   saveClientDocuments();
   if (documentRecord.uploaded_by === "worker") {
     await createClientNotification(clientId, {
@@ -1887,12 +1983,8 @@ app.post("/api/transport-request", async (req, res) => {
   };
 
   transportRequests.unshift(request);
-  notifications.unshift({
-    id: `NT-${Date.now() + 1}`,
-    message: request.message,
-    worker_id: worker.id,
-    timestamp: request.timestamp
-  });
+  touchClientRelationship(client, "caseworker_transport_request");
+  pushCountyNotification(request.message, worker.id, request.timestamp);
   saveCountyState();
   await createClientNotification(client.id, {
     title: "Transportation requested",

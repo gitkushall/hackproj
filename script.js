@@ -34,6 +34,7 @@ const state = {
     pendingDocumentByType: {},
     chatRefreshIntervalId: null,
     notificationRefreshIntervalId: null,
+    caseRefreshIntervalId: null,
     isChatPanelOpen: false,
     isNotificationPanelOpen: false,
     showWorkerProfile: true
@@ -57,7 +58,8 @@ const state = {
     openUploadPanels: {},
     pendingChatImage: null,
     activeWorkspacePanel: null,
-    showChatImagesOnly: false
+    showChatImagesOnly: false,
+    refreshIntervalId: null
   },
   answers: {
     hasBirth: null,
@@ -876,6 +878,8 @@ function openScreen(screenId) {
   syncAdminLayoutMode(screenId);
   syncCountyAutoRefresh();
   syncCountyAiAccess();
+  syncCaseWorkerAutoRefresh(screenId);
+  syncClientCaseRefresh(screenId);
   syncClientNotificationRefresh(screenId);
 }
 
@@ -1347,6 +1351,8 @@ async function logoutClientUser() {
   state.clientPortalData.deliveryTarget = "";
   closeClientNotificationPanel();
   stopClientNotificationRefresh();
+  stopClientCaseRefresh();
+  stopCaseWorkerAutoRefresh();
   resetPlanState();
   hideClientChatPanel();
   openScreen("login-screen");
@@ -1939,6 +1945,9 @@ function renderClients() {
     const tags = client.missing_documents.map((doc) => (
       `<span class="document-tag">${escapeHtml(formatDocumentLabel(doc))}</span>`
     )).join("");
+    const requestLabel = client.case_worker_requested
+      ? (state.lang === "es" ? "Solicito trabajador social" : "Case worker requested")
+      : (state.lang === "es" ? "No solicito trabajador social" : "No case worker requested");
 
     return `
       <article class="client-request-card">
@@ -1950,7 +1959,10 @@ function renderClients() {
           <span class="client-status-pill ${client.status}">${escapeHtml(getStatusText(client.status))}</span>
         </div>
 
-        <div class="client-tag-row">${tags}</div>
+        <div class="client-tag-row">
+          <span class="document-tag">${escapeHtml(requestLabel)}</span>
+          ${tags}
+        </div>
 
         <div class="client-request-meta">
           <span class="transport-flag ${client.transportation_needed ? "needed" : "clear"}">
@@ -2069,6 +2081,52 @@ function syncCountyAutoRefresh() {
   state.countyData.refreshIntervalId = window.setInterval(() => {
     loadCountyDashboard();
   }, 5000);
+}
+
+function stopCaseWorkerAutoRefresh() {
+  if (state.caseWorkerData.refreshIntervalId) {
+    window.clearInterval(state.caseWorkerData.refreshIntervalId);
+    state.caseWorkerData.refreshIntervalId = null;
+  }
+}
+
+function syncCaseWorkerAutoRefresh(screenId) {
+  const shouldRefresh = state.adminRole === "caseworker" &&
+    ["admin-dashboard-screen", "caseworker-client-screen", "caseworker-documents-screen"].includes(screenId);
+
+  if (!shouldRefresh) {
+    stopCaseWorkerAutoRefresh();
+    return;
+  }
+
+  if (!state.caseWorkerData.refreshIntervalId) {
+    state.caseWorkerData.refreshIntervalId = window.setInterval(() => {
+      loadCaseWorkerDashboard();
+    }, 5000);
+  }
+}
+
+function stopClientCaseRefresh() {
+  if (state.clientPortalData.caseRefreshIntervalId) {
+    window.clearInterval(state.clientPortalData.caseRefreshIntervalId);
+    state.clientPortalData.caseRefreshIntervalId = null;
+  }
+}
+
+function syncClientCaseRefresh(screenId) {
+  const shouldRefresh = hasAuthenticatedClientUser() &&
+    ["dashboard-screen", "client-progress-screen", "client-documents-screen"].includes(screenId);
+
+  if (!shouldRefresh) {
+    stopClientCaseRefresh();
+    return;
+  }
+
+  if (!state.clientPortalData.caseRefreshIntervalId) {
+    state.clientPortalData.caseRefreshIntervalId = window.setInterval(() => {
+      loadClientPortalChat();
+    }, 5000);
+  }
 }
 
 function openCountyAiPanel() {
