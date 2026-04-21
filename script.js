@@ -13,6 +13,7 @@ const state = {
     transportRequests: [],
     recommendedWorkerId: null,
     highlightNotificationId: null,
+    clearedNotificationCutoff: null,
     refreshIntervalId: null,
     isLoading: false,
     isAiPanelOpen: false,
@@ -1843,12 +1844,14 @@ function renderNotifications() {
 }
 
 function clearCountyNotifications() {
-  const importantNotification = state.countyData.notifications.find(
-    (item) => item.id === state.countyData.highlightNotificationId
-  ) || state.countyData.notifications[0] || null;
+  const latestTimestamp = state.countyData.notifications.reduce((latest, item) => {
+    const timestamp = new Date(item.timestamp).getTime();
+    return Number.isNaN(timestamp) ? latest : Math.max(latest, timestamp);
+  }, Date.now());
 
-  state.countyData.notifications = importantNotification ? [importantNotification] : [];
-  state.countyData.highlightNotificationId = importantNotification ? importantNotification.id : null;
+  state.countyData.clearedNotificationCutoff = latestTimestamp;
+  state.countyData.notifications = [];
+  state.countyData.highlightNotificationId = null;
   renderNotifications();
 }
 
@@ -1948,6 +1951,9 @@ function renderClients() {
     const requestLabel = client.case_worker_requested
       ? (state.lang === "es" ? "Solicito trabajador social" : "Case worker requested")
       : (state.lang === "es" ? "No solicito trabajador social" : "No case worker requested");
+    const workflowLabel = client.case_worker_requested
+      ? (state.lang === "es" ? "Esperando asignacion del condado" : "Waiting for county assignment")
+      : (state.lang === "es" ? "Trabajando individualmente" : "Working individually");
 
     return `
       <article class="client-request-card">
@@ -1976,6 +1982,7 @@ function renderClients() {
               : (state.lang === "es" ? "Todavia no asignado" : "Not assigned yet")}
           </span>
         </div>
+        <p class="small-text">${escapeHtml(workflowLabel)}</p>
 
         <div class="assign-row">
           <select class="assign-worker-select" data-client-id="${escapeHtml(client.id)}">
@@ -2023,13 +2030,24 @@ async function loadCountyDashboard() {
 
     state.countyData.clients = clientsData.clients;
     state.countyData.workers = workersData.workers;
-    state.countyData.notifications = notificationsData.notifications;
+    state.countyData.notifications = (notificationsData.notifications || []).filter((item) => {
+      if (!state.countyData.clearedNotificationCutoff) {
+        return true;
+      }
+
+      const timestamp = new Date(item.timestamp).getTime();
+      if (Number.isNaN(timestamp)) {
+        return true;
+      }
+
+      return timestamp > state.countyData.clearedNotificationCutoff;
+    });
     state.countyData.transportRequests = transportRequestsData.transport_requests;
     state.countyData.recommendedWorkerId =
       clientsData.recommended_worker_id || workersData.recommended_worker_id || null;
     state.countyData.highlightNotificationId =
-      previousLatestNotificationId && notificationsData.notifications[0]?.id !== previousLatestNotificationId
-        ? notificationsData.notifications[0].id
+      previousLatestNotificationId && state.countyData.notifications[0]?.id !== previousLatestNotificationId
+        ? state.countyData.notifications[0].id
         : null;
 
     renderCountyDashboard();
