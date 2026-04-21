@@ -24,6 +24,7 @@ const state = {
   clientPortalData: {
     currentClientId: null,
     currentUser: null,
+    sessionToken: "",
     serviceRecommendations: {},
     notifications: [],
     unreadNotificationCount: 0,
@@ -522,6 +523,18 @@ function getStatusText(status) {
   }
   if (status === "pending") {
     return state.lang === "es" ? "Pendiente" : "Pending";
+  }
+  if (status === "working_individually") {
+    return state.lang === "es" ? "Individual" : "Individual";
+  }
+  if (status === "awaiting_assignment") {
+    return state.lang === "es" ? "Esperando asignacion" : "Awaiting assignment";
+  }
+  if (status === "awaiting_caseworker_response") {
+    return state.lang === "es" ? "Esperando respuesta" : "Awaiting response";
+  }
+  if (status === "assigned_active") {
+    return state.lang === "es" ? "Activo" : "Active";
   }
   if (status === "assigned" || status === "active") {
     return state.lang === "es" ? "Activo" : "Active";
@@ -1320,6 +1333,31 @@ function handleLoggedInUser(user) {
   routeClientEntry();
 }
 
+function storeClientSessionToken(token) {
+  state.clientPortalData.sessionToken = token || "";
+  try {
+    if (token) {
+      window.localStorage.setItem("client_session_token", token);
+    } else {
+      window.localStorage.removeItem("client_session_token");
+    }
+  } catch (error) {
+    // Ignore localStorage failures.
+  }
+}
+
+function getStoredClientSessionToken() {
+  if (state.clientPortalData.sessionToken) {
+    return state.clientPortalData.sessionToken;
+  }
+
+  try {
+    return window.localStorage.getItem("client_session_token") || "";
+  } catch (error) {
+    return "";
+  }
+}
+
 async function restoreClientSession() {
   try {
     const data = await fetchJson("/api/auth/me");
@@ -1345,6 +1383,7 @@ async function logoutClientUser() {
 
   state.clientPortalData.currentClientId = null;
   state.clientPortalData.currentUser = null;
+  storeClientSessionToken("");
   state.clientPortalData.serviceRecommendations = {};
   state.clientPortalData.notifications = [];
   state.clientPortalData.unreadNotificationCount = 0;
@@ -1434,9 +1473,19 @@ function getApiUrl(url) {
 
 async function fetchJson(url, options = {}) {
   let response;
+  const requestOptions = { ...options };
+  const headers = new Headers(requestOptions.headers || {});
+  const sessionToken = getStoredClientSessionToken();
+
+  if (typeof url === "string" && url.startsWith("/api/") && sessionToken) {
+    headers.set("x-session-id", sessionToken);
+  }
+
+  requestOptions.headers = headers;
+  requestOptions.credentials = "include";
 
   try {
-    response = await fetch(getApiUrl(url), options);
+    response = await fetch(getApiUrl(url), requestOptions);
   } catch (error) {
     throw new Error("SERVER_OFFLINE");
   }
@@ -1665,8 +1714,8 @@ function showServerOfflineMessage() {
 }
 
 function renderCountyMetrics() {
-  const assignedCount = state.countyData.clients.filter((client) => client.status === "assigned").length;
-  const openCount = state.countyData.clients.filter((client) => client.status !== "assigned" && client.status !== "completed" && client.worker_status !== "completed").length;
+  const assignedCount = state.countyData.clients.filter((client) => client.queue_state === "assigned_active").length;
+  const openCount = state.countyData.clients.filter((client) => !client.is_completed && client.queue_state !== "assigned_active").length;
 
   document.getElementById("county-users-number").textContent = String(systemData.total_users);
   document.getElementById("county-housed-number").textContent = String(assignedCount || systemData.completed);
@@ -1919,20 +1968,21 @@ function renderCountyHousingAvailability() {
 
 function renderClients() {
   const list = document.getElementById("client-request-list");
-  const visibleClients = state.countyData.clients.filter((client) => client.status !== "completed" && client.worker_status !== "completed");
-  const pendingCount = visibleClients.filter((client) => client.status !== "assigned").length;
+  const visibleClients = state.countyData.clients.filter((client) => !client.is_completed);
+  const pendingCount = visibleClients.filter((client) => client.queue_state !== "assigned_active").length;
   document.getElementById("county-client-count").textContent = formatCountLabel(pendingCount, "open", "open", "abierto", "abiertos");
   const workerNameById = Object.fromEntries(state.countyData.workers.map((worker) => [worker.id, worker.name]));
   const sortedClients = [...visibleClients].sort((left, right) => {
     const getPriority = (client) => {
-      const hasAssignedWorker = Boolean(client.assigned_worker);
-      const isPending = client.status === "pending" || client.worker_status === "pending_approval";
-      const isActiveAssigned = client.status === "active" && hasAssignedWorker;
+      const priorities = {
+        awaiting_assignment: 0,
+        working_individually: 1,
+        awaiting_caseworker_response: 2,
+        assigned_active: 3,
+        completed: 4
+      };
 
-      if (!hasAssignedWorker) return 0;
-      if (isPending) return 1;
-      if (isActiveAssigned) return 3;
-      return 2;
+      return priorities[client.queue_state] ?? 9;
     };
 
     const priorityDiff = getPriority(left) - getPriority(right);
@@ -1951,9 +2001,14 @@ function renderClients() {
     const requestLabel = client.case_worker_requested
       ? (state.lang === "es" ? "Solicito trabajador social" : "Case worker requested")
       : (state.lang === "es" ? "No solicito trabajador social" : "No case worker requested");
-    const workflowLabel = client.case_worker_requested
-      ? (state.lang === "es" ? "Esperando asignacion del condado" : "Waiting for county assignment")
-      : (state.lang === "es" ? "Trabajando individualmente" : "Working individually");
+    const workflowLabel = client.queue_state === "assigned_active"
+      ? (state.lang === "es" ? "Caso activo con trabajador social" : "Case active with case worker")
+      : client.queue_state === "awaiting_caseworker_response"
+        ? (state.lang === "es" ? "Esperando aceptacion o rechazo del trabajador social" : "Waiting for case worker accept or reject")
+        : client.case_worker_requested
+          ? (state.lang === "es" ? "Esperando asignacion del condado" : "Waiting for county assignment")
+          : (state.lang === "es" ? "Trabajando individualmente" : "Working individually");
+    const statusClass = client.queue_state || client.status;
 
     return `
       <article class="client-request-card">
@@ -1962,7 +2017,7 @@ function renderClients() {
             <strong>${escapeHtml(client.name)}</strong>
             <p class="small-text">${escapeHtml(client.city)} • ${escapeHtml(client.id)}</p>
           </div>
-          <span class="client-status-pill ${client.status}">${escapeHtml(getStatusText(client.status))}</span>
+          <span class="client-status-pill ${escapeHtml(statusClass)}">${escapeHtml(getStatusText(statusClass))}</span>
         </div>
 
         <div class="client-tag-row">
@@ -4659,6 +4714,7 @@ function bindEvents() {
         });
         resetCodeEntry();
         document.getElementById("login-error").textContent = "";
+        storeClientSessionToken(data.sessionToken || "");
         handleLoggedInUser(data.user);
       } catch (error) {
         document.getElementById("login-error").textContent =
@@ -4688,6 +4744,7 @@ function bindEvents() {
           body: JSON.stringify({ email, password })
         });
         document.getElementById("login-error").textContent = "";
+        storeClientSessionToken(data.sessionToken || "");
         handleLoggedInUser(data.user);
       } catch (error) {
         document.getElementById("login-error").textContent =

@@ -401,6 +401,61 @@ function syncClientRelationships(client) {
   return client;
 }
 
+function isClientCompleted(client) {
+  return client?.worker_status === "completed" || client?.status === "completed";
+}
+
+function getClientQueueState(client) {
+  if (isClientCompleted(client)) {
+    return "completed";
+  }
+
+  if (client?.assigned_worker && client?.worker_status === "pending_approval") {
+    return "awaiting_caseworker_response";
+  }
+
+  if (client?.assigned_worker && client?.worker_status === "active") {
+    return "assigned_active";
+  }
+
+  if (client?.case_worker_requested) {
+    return "awaiting_assignment";
+  }
+
+  return "working_individually";
+}
+
+function syncClientsFromAccounts() {
+  clientAccounts.forEach((account) => {
+    const existingClient = clients.find((item) => item.id === account.clientId) || null;
+
+    if (!existingClient) {
+      ensureClientRecordForAccount(account, Boolean(account.requestedCaseWorker));
+      return;
+    }
+
+    existingClient.name = account.name || existingClient.name;
+    existingClient.linked_account_id = account.clientId;
+
+    if (typeof existingClient.case_worker_requested !== "boolean") {
+      existingClient.case_worker_requested = Boolean(account.requestedCaseWorker);
+    }
+
+    syncClientRelationships(existingClient);
+  });
+}
+
+function buildClientView(client) {
+  const queueState = getClientQueueState(client);
+
+  return {
+    ...client,
+    queue_state: queueState,
+    case_worker_requested: Boolean(client.case_worker_requested),
+    is_completed: queueState === "completed"
+  };
+}
+
 function touchClientRelationship(client, actor) {
   if (!client) {
     return;
@@ -418,6 +473,7 @@ function syncAllClientRelationships() {
 }
 
 function saveCountyState() {
+  syncClientsFromAccounts();
   syncAllClientRelationships();
   syncWorkerActiveCaseCounts();
   saveJsonArray(clientsFilePath, clients, { key: "clients" });
@@ -672,6 +728,7 @@ function sanitizeClientAccount(account) {
     name: account.name,
     phone: account.phone || "",
     email: account.email || "",
+    requestedCaseWorker: Boolean(account.requestedCaseWorker),
     hasCompletedIntake: Boolean(account.hasCompletedIntake),
     documentAnswers: account.documentAnswers || null,
     intakeLocations: account.intakeLocations || null,
@@ -716,6 +773,8 @@ function createAuthSession(res, account) {
     res,
     `auth_session=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 7}`
   );
+
+  return sessionId;
 }
 
 function clearAuthSession(req, res) {
@@ -729,7 +788,8 @@ function clearAuthSession(req, res) {
 
 function getAuthenticatedAccount(req) {
   const cookies = parseCookies(req.headers.cookie || "");
-  const sessionId = cookies.auth_session;
+  const headerSessionId = String(req.headers["x-session-id"] || "").trim();
+  const sessionId = headerSessionId || cookies.auth_session;
 
   if (!sessionId) {
     return null;
@@ -756,6 +816,7 @@ function findClientAccountByEmail(email) {
 
 function ensureClientRecordForAccount(account, requestCaseWorker) {
   let client = clients.find((item) => item.id === account.clientId);
+  const wantsCaseWorker = Boolean(requestCaseWorker ?? account?.requestedCaseWorker);
 
   if (!client) {
     client = {
@@ -764,19 +825,19 @@ function ensureClientRecordForAccount(account, requestCaseWorker) {
       city: "Passaic",
       missing_documents: [],
       transportation_needed: false,
-      status: requestCaseWorker ? "pending" : "active",
+      status: wantsCaseWorker ? "pending" : "active",
       assigned_worker: null,
       worker_status: null,
       created_at: getTimestamp(),
-      case_worker_requested: requestCaseWorker
+      case_worker_requested: wantsCaseWorker
     };
     clients.unshift(client);
   }
 
   client.name = account.name || client.name;
   client.linked_account_id = account.clientId;
-  client.case_worker_requested = requestCaseWorker;
-  touchClientRelationship(client, requestCaseWorker ? "client_signup_request" : "client_signup");
+  client.case_worker_requested = wantsCaseWorker;
+  touchClientRelationship(client, wantsCaseWorker ? "client_signup_request" : "client_signup");
 }
 
 function removeClientFromSystem(clientId) {
@@ -1007,6 +1068,11 @@ function migrateClientAccounts() {
       changed = true;
     }
 
+    if (!("requestedCaseWorker" in account)) {
+      account.requestedCaseWorker = false;
+      changed = true;
+    }
+
     if (!("hasCompletedIntake" in account)) {
       account.hasCompletedIntake = false;
       changed = true;
@@ -1189,14 +1255,17 @@ function createInsightResponse(questionRaw) {
 }
 
 app.get("/api/clients", (_req, res) => {
+  syncClientsFromAccounts();
+  syncAllClientRelationships();
   syncWorkerActiveCaseCounts();
   res.json({
-    clients,
+    clients: clients.map(buildClientView),
     recommended_worker_id: getRecommendedWorker().id
   });
 });
 
 app.get("/api/workers", (_req, res) => {
+  syncClientsFromAccounts();
   syncWorkerActiveCaseCounts();
   res.json({
     workers,
@@ -1271,6 +1340,7 @@ app.post("/api/auth/signup/phone", async (req, res) => {
     passwordHash: "",
     passwordSalt: "",
     authMethods: ["phone"],
+    requestedCaseWorker: requestCaseWorker,
     hasCompletedIntake: false,
     documentAnswers: null,
     intakeLocations: null,
@@ -1323,6 +1393,7 @@ app.post("/api/auth/signup/email", async (req, res) => {
     passwordHash: hash,
     passwordSalt: salt,
     authMethods: ["email"],
+    requestedCaseWorker: requestCaseWorker,
     hasCompletedIntake: false,
     documentAnswers: null,
     intakeLocations: null,
@@ -1407,11 +1478,12 @@ app.post("/api/auth/login/phone/verify-otp", (req, res) => {
   }
 
   phoneOtpStore.delete(normalizedPhone);
-  createAuthSession(res, account);
+  const sessionToken = createAuthSession(res, account);
 
   res.json({
     success: true,
-    user: sanitizeClientAccount(account)
+    user: sanitizeClientAccount(account),
+    sessionToken
   });
 });
 
@@ -1430,11 +1502,12 @@ app.post("/api/auth/login/email", (req, res) => {
     return;
   }
 
-  createAuthSession(res, account);
+  const sessionToken = createAuthSession(res, account);
 
   res.json({
     success: true,
-    user: sanitizeClientAccount(account)
+    user: sanitizeClientAccount(account),
+    sessionToken
   });
 });
 
@@ -1581,6 +1654,7 @@ app.post("/api/auth/intake", (req, res) => {
       `${client.name} updated intake. ${missingCount} document step${missingCount === 1 ? "" : "s"} still open.`,
       client.assigned_worker || "system"
     );
+    saveCountyState();
   }
 
   res.json({

@@ -1,9 +1,11 @@
 const fs = require("fs");
 const path = require("path");
+const { DatabaseSync } = require("node:sqlite");
 
 const TMP_ROOT = path.join("/tmp", "passaic-county-housing-portal");
 const cache = new Map();
 const warnedMessages = new Set();
+const dbCache = new Map();
 
 function cloneValue(value) {
   return JSON.parse(JSON.stringify(value));
@@ -60,6 +62,73 @@ function writeArrayToFile(filePath, value) {
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
 }
 
+function getDatabasePath(mode, filePath) {
+  if (mode === "tmp") {
+    return path.join(TMP_ROOT, "runtime.sqlite");
+  }
+
+  return path.join(path.dirname(filePath), "runtime.sqlite");
+}
+
+function getDatabase(mode, filePath) {
+  const dbPath = getDatabasePath(mode, filePath);
+
+  if (dbCache.has(dbPath)) {
+    return dbCache.get(dbPath);
+  }
+
+  ensureDirectoryForFile(dbPath);
+  const db = new DatabaseSync(dbPath);
+  db.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA synchronous = NORMAL;
+    CREATE TABLE IF NOT EXISTS json_store (
+      store_key TEXT PRIMARY KEY,
+      source_file TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  dbCache.set(dbPath, db);
+  return db;
+}
+
+function loadArrayFromDatabase(db, key) {
+  const row = db.prepare(`
+    SELECT payload
+    FROM json_store
+    WHERE store_key = ?
+  `).get(key);
+
+  if (!row) {
+    return null;
+  }
+
+  const parsed = JSON.parse(row.payload);
+  if (!Array.isArray(parsed)) {
+    throw new Error("Database payload must contain an array.");
+  }
+
+  return parsed;
+}
+
+function saveArrayToDatabase(db, key, filePath, value) {
+  db.prepare(`
+    INSERT INTO json_store (store_key, source_file, payload, updated_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(store_key) DO UPDATE SET
+      source_file = excluded.source_file,
+      payload = excluded.payload,
+      updated_at = excluded.updated_at
+  `).run(
+    key,
+    path.basename(filePath),
+    JSON.stringify(value),
+    new Date().toISOString()
+  );
+}
+
 function loadJsonArray(filePath, fallbackValue, options = {}) {
   const key = options.key || filePath;
   const mode = getStorageMode();
@@ -70,45 +139,33 @@ function loadJsonArray(filePath, fallbackValue, options = {}) {
 
   const fallbackClone = cloneValue(fallbackValue);
 
-  if (mode === "filesystem") {
-    try {
-      if (!fs.existsSync(filePath)) {
-        writeArrayToFile(filePath, fallbackClone);
-      }
-
-      const parsed = readArrayFromFile(filePath);
-      cache.set(key, parsed);
-      return parsed;
-    } catch (error) {
-      warnOnce(`Failed to load ${path.basename(filePath)} from the local filesystem. Using defaults instead.`, error);
-      try {
-        writeArrayToFile(filePath, fallbackClone);
-      } catch (writeError) {
-        warnOnce(`Failed to recreate ${path.basename(filePath)} on the local filesystem.`, writeError);
-      }
-      cache.set(key, fallbackClone);
-      return fallbackClone;
-    }
-  }
-
-  if (mode === "tmp") {
-    const tmpFilePath = getTmpFilePath(filePath);
+  if (mode === "filesystem" || mode === "tmp") {
+    const db = getDatabase(mode, filePath);
 
     try {
-      if (fs.existsSync(tmpFilePath)) {
-        const parsed = readArrayFromFile(tmpFilePath);
-        cache.set(key, parsed);
-        return parsed;
+      const persisted = loadArrayFromDatabase(db, key);
+      if (persisted) {
+        cache.set(key, persisted);
+        return persisted;
       }
 
       const seeded = fs.existsSync(filePath) ? readArrayFromFile(filePath) : fallbackClone;
-      writeArrayToFile(tmpFilePath, seeded);
+      saveArrayToDatabase(db, key, filePath, seeded);
       cache.set(key, seeded);
       return seeded;
     } catch (error) {
-      warnOnce(`Failed to load ${path.basename(filePath)} from /tmp storage. Falling back to in-memory data.`, error);
-      cache.set(key, fallbackClone);
-      return fallbackClone;
+      const sourceLabel = mode === "tmp" ? "/tmp SQLite storage" : "SQLite storage";
+      warnOnce(`Failed to load ${path.basename(filePath)} from ${sourceLabel}. Falling back to file or defaults.`, error);
+
+      try {
+        const seeded = fs.existsSync(filePath) ? readArrayFromFile(filePath) : fallbackClone;
+        cache.set(key, seeded);
+        return seeded;
+      } catch (fileError) {
+        warnOnce(`Failed to read legacy fallback ${path.basename(filePath)}. Using defaults instead.`, fileError);
+        cache.set(key, fallbackClone);
+        return fallbackClone;
+      }
     }
   }
 
@@ -129,20 +186,13 @@ function saveJsonArray(filePath, value, options = {}) {
 
   cache.set(key, value);
 
-  if (mode === "filesystem") {
+  if (mode === "filesystem" || mode === "tmp") {
     try {
-      writeArrayToFile(filePath, value);
+      const db = getDatabase(mode, filePath);
+      saveArrayToDatabase(db, key, filePath, value);
     } catch (error) {
-      warnOnce(`Failed to persist ${path.basename(filePath)} to the local filesystem. Changes remain in memory only.`, error);
-    }
-    return;
-  }
-
-  if (mode === "tmp") {
-    try {
-      writeArrayToFile(getTmpFilePath(filePath), value);
-    } catch (error) {
-      warnOnce(`Failed to persist ${path.basename(filePath)} to /tmp storage. Changes remain in memory only.`, error);
+      const sourceLabel = mode === "tmp" ? "/tmp SQLite storage" : "SQLite storage";
+      warnOnce(`Failed to persist ${path.basename(filePath)} to ${sourceLabel}. Changes remain in memory only.`, error);
     }
     return;
   }
@@ -152,9 +202,13 @@ function saveJsonArray(filePath, value, options = {}) {
 
 function getRuntimeStorageInfo() {
   const mode = getStorageMode();
+  const writableRoot = mode === "filesystem"
+    ? "SQLite database in project data/runtime.sqlite"
+    : (mode === "tmp" ? path.join(TMP_ROOT, "runtime.sqlite") : "memory only");
+
   return {
     mode,
-    writableRoot: mode === "filesystem" ? "project filesystem" : (mode === "tmp" ? TMP_ROOT : "memory only"),
+    writableRoot,
     persistent: mode === "filesystem"
   };
 }
