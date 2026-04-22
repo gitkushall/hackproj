@@ -924,6 +924,9 @@ function openScreen(screenId) {
   syncCaseWorkerAutoRefresh(screenId);
   syncClientCaseRefresh(screenId);
   syncClientNotificationRefresh(screenId);
+  if (screenId === "auth-screen") {
+    enforcePortalAuthScreen();
+  }
   renderGuidedNavigatorPanels();
   void refreshCurrentScreenData(screenId);
 }
@@ -1259,6 +1262,7 @@ function applyLanguage() {
 
   refreshLocalizedScreens();
   renderGuidedNavigatorPanels();
+  syncAuthPortalMode();
 
 }
 
@@ -1309,7 +1313,102 @@ function setAuthView(view) {
 
   document.getElementById("user-login-panel").classList.toggle("hidden", !showUser);
   document.getElementById("admin-login-panel").classList.toggle("hidden", !showAdmin);
+  document.getElementById("user-login-panel").hidden = !showUser;
+  document.getElementById("admin-login-panel").hidden = !showAdmin;
+  syncAuthPortalMode();
   document.getElementById("login-error").textContent = "";
+}
+
+function enforcePortalAuthScreen() {
+  if (state.loginPortal === "client") {
+    setAuthView("user");
+    setLoginView(state.loginView === "worker" ? "worker" : "phone");
+    return;
+  }
+
+  setAuthView("admin");
+  setAdminRole(state.loginPortal === "passaic" ? "passaic" : "caseworker");
+}
+
+function syncAuthPortalMode() {
+  const isClientPortal = state.loginPortal === "client";
+  const isCaseworkerPortal = state.loginPortal === "caseworker";
+  const isCountyPortal = state.loginPortal === "passaic";
+
+  const userLoginPanel = document.getElementById("user-login-panel");
+  const adminLoginPanel = document.getElementById("admin-login-panel");
+  const createAccountButton = document.getElementById("create-account-toggle-btn");
+  const adminRoleRow = document.getElementById("admin-role-row");
+  const adminDemoRow = document.getElementById("admin-demo-row");
+  const adminDemoCopy = document.getElementById("admin-demo-copy");
+  const adminDemoCaseworkerStack = document.querySelector(".admin-demo-worker-stack");
+  const adminDemoCountyButton = document.getElementById("admin-demo-county-btn");
+  const adminDemoCaseworkerButton = document.getElementById("admin-demo-caseworker-btn");
+  const adminDemoCaseworkerLabel = document.getElementById("admin-demo-caseworker-label");
+  const adminDemoCaseworkerSelect = document.getElementById("admin-demo-caseworker-select");
+  const adminMark = document.getElementById("admin-google-mark");
+
+  userLoginPanel.classList.toggle("hidden", !isClientPortal);
+  userLoginPanel.hidden = !isClientPortal;
+  userLoginPanel.style.display = isClientPortal ? "" : "none";
+
+  adminLoginPanel.classList.toggle("hidden", isClientPortal);
+  adminLoginPanel.hidden = isClientPortal;
+  adminLoginPanel.style.display = isClientPortal ? "none" : "";
+
+  createAccountButton.classList.toggle("hidden", !isClientPortal);
+  createAccountButton.hidden = !isClientPortal;
+
+  if (adminRoleRow) {
+    adminRoleRow.classList.toggle("hidden", true);
+    adminRoleRow.hidden = true;
+    adminRoleRow.style.display = "none";
+  }
+
+  if (adminDemoCopy) {
+    adminDemoCopy.classList.toggle("hidden", isClientPortal);
+    adminDemoCopy.hidden = isClientPortal;
+    adminDemoCopy.style.display = isClientPortal ? "none" : "";
+  }
+
+  if (adminDemoRow) {
+    adminDemoRow.classList.toggle("hidden", isClientPortal);
+    adminDemoRow.hidden = isClientPortal;
+    adminDemoRow.style.display = isClientPortal ? "none" : "";
+  }
+
+  if (adminDemoCaseworkerStack) {
+    adminDemoCaseworkerStack.classList.toggle("hidden", isCountyPortal);
+    adminDemoCaseworkerStack.hidden = isCountyPortal;
+  }
+
+  if (adminDemoCountyButton) {
+    adminDemoCountyButton.classList.toggle("hidden", isCaseworkerPortal);
+    adminDemoCountyButton.hidden = isCaseworkerPortal;
+  }
+
+  if (adminDemoCaseworkerButton) {
+    adminDemoCaseworkerButton.classList.toggle("hidden", isCountyPortal);
+    adminDemoCaseworkerButton.hidden = isCountyPortal;
+  }
+
+  if (adminDemoCaseworkerLabel) {
+    adminDemoCaseworkerLabel.classList.toggle("hidden", isCountyPortal);
+    adminDemoCaseworkerLabel.hidden = isCountyPortal;
+  }
+
+  if (adminDemoCaseworkerSelect) {
+    adminDemoCaseworkerSelect.classList.toggle("hidden", isCountyPortal);
+    adminDemoCaseworkerSelect.hidden = isCountyPortal;
+  }
+
+  if (adminMark) {
+    adminMark.textContent = isCountyPortal
+      ? (state.lang === "es" ? "Ingreso del condado" : "County Login")
+      : (isCaseworkerPortal
+          ? (state.lang === "es" ? "Ingreso del trabajador social" : "Case Worker Login")
+          : (state.lang === "es" ? "Ingreso del portal" : "Portal Login"));
+  }
 }
 
 function setAdminRole(role) {
@@ -1341,6 +1440,7 @@ function setAdminRole(role) {
     document.getElementById("admin-password-input").value = "";
   }
   applyLanguage();
+  syncAuthPortalMode();
 }
 
 function setCreateAccountMode(mode) {
@@ -1365,6 +1465,7 @@ function setLoginView(view) {
   document.getElementById("create-account-error").textContent = "";
   resetCodeEntry();
   applyLanguage();
+  syncAuthPortalMode();
 }
 
 function formatDocumentLabel(value) {
