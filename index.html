@@ -741,17 +741,28 @@
       </section>
     </main>
 
-    <button class="help-side-btn hidden" id="help-float-btn" type="button" hidden>Need Help?</button>
+    <button class="help-side-btn hidden" id="help-float-btn" type="button" hidden>Portal Help</button>
     <button class="help-side-btn county-ai-toggle hidden" id="county-ai-float-btn" type="button" hidden>AI Chat Bot</button>
 
     <aside class="help-chat-panel hidden" id="help-chat-panel" aria-live="polite" hidden>
       <div class="chat-head">
-        <h2 id="chat-title">Need Help?</h2>
+        <div class="help-chat-head-copy">
+          <span class="help-chat-badge" id="help-chat-badge">Portal Assistant</span>
+          <h2 id="chat-title">Portal Help</h2>
+          <p class="small-text help-chat-subtitle" id="chat-subtitle">Get quick help with login, documents, and portal steps. For case-specific questions, message your case worker.</p>
+          <button class="secondary-btn help-chat-link-btn" id="help-chat-caseworker-btn" type="button">Chat with your case worker</button>
+        </div>
         <button class="chat-close-btn" id="chat-close-btn" type="button">X</button>
+      </div>
+      <div class="help-chat-quick-actions" id="help-chat-quick-actions">
+        <button class="help-chat-chip" type="button" data-help-prompt="How do I log in?" data-help-prompt-key="helpPromptLogin" data-help-prompt-message-key="helpPromptLoginMessage">Login help</button>
+        <button class="help-chat-chip" type="button" data-help-prompt="How do I get document help?" data-help-prompt-key="helpPromptDocuments" data-help-prompt-message-key="helpPromptDocumentsMessage">Document help</button>
+        <button class="help-chat-chip" type="button" data-help-prompt="How do transportation requests work?" data-help-prompt-key="helpPromptTransport" data-help-prompt-message-key="helpPromptTransportMessage">Transportation</button>
+        <button class="help-chat-chip" type="button" data-help-prompt="What does each portal screen do?" data-help-prompt-key="helpPromptPortal" data-help-prompt-message-key="helpPromptPortalMessage">Portal steps</button>
       </div>
       <div class="chat-body" id="chat-body"></div>
       <div class="chat-input-row">
-        <input id="chat-input" type="text" placeholder="Ask a basic question" />
+        <input id="chat-input" type="text" placeholder="Ask about login, documents, or portal steps" />
         <button id="chat-send-btn" type="button">Send</button>
       </div>
     </aside>

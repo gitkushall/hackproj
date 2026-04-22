@@ -6,7 +6,7 @@ const path = require("path");
 const nodemailer = require("nodemailer");
 const twilio = require("twilio");
 const { getDemoAdminAccount, getDemoCaseworkerAccounts, loadAdminAccounts, saveAdminAccounts, verifyAdminLogin } = require("./backend/auth/adminAuthStore");
-const { generateAdminInsight } = require("./backend/services/openaiService");
+const { generateAdminInsight, generatePortalHelpReply } = require("./backend/services/openaiService");
 const { getRuntimeStorageInfo, loadJsonArray, saveJsonArray } = require("./backend/storage/runtimeJsonStore");
 
 const app = express();
@@ -932,6 +932,21 @@ function removeClientFromSystem(clientId) {
   saveCountyState();
 }
 
+function markClientCaseCompleted(client, worker) {
+  if (!client || !worker) {
+    return;
+  }
+
+  client.status = "completed";
+  client.worker_status = "completed";
+  client.case_worker_requested = true;
+  client.completed_at = getTimestamp();
+  client.completed_by_worker_id = worker.id;
+  client.completed_by_worker_name = worker.name;
+  touchClientRelationship(client, "caseworker_complete");
+  syncWorkerActiveCaseCounts();
+}
+
 function getMissingDocumentsFromAnswers(answers = {}) {
   const missing = [];
 
@@ -1322,6 +1337,33 @@ function createInsightResponse(questionRaw) {
   }
 
   return "Most delays are happening at the State ID step. This is driven by appointments and transportation barriers. You should focus on faster scheduling and travel support.";
+}
+
+function createPortalHelpFallback(questionRaw, language = "en") {
+  const question = String(questionRaw || "").toLowerCase();
+  const isSpanish = language === "es";
+
+  if (question.includes("login") || question.includes("sign") || question.includes("code") || question.includes("otp")) {
+    return isSpanish
+      ? "Puedo ayudar con el acceso al portal. Si usa telefono, primero solicite el codigo y luego ingreselo para entrar. Si su pregunta es sobre su caso, escriba a su trabajador social."
+      : "I can help with portal login. If you use phone login, request the code first and then enter it to sign in. For questions about your case, message your case worker.";
+  }
+
+  if (question.includes("birth") || question.includes("acta") || question.includes("ssn") || question.includes("social") || question.includes("id") || question.includes("mvc") || question.includes("dmv")) {
+    return isSpanish
+      ? "Puedo explicar los pasos generales para documentos y donde encontrar los enlaces oficiales del portal. Para saber que falta en su caso, use el chat con su trabajador social."
+      : "I can explain general document steps and point you to the portal's official links. If you need to know what is missing in your case, use the case worker chat.";
+  }
+
+  if (question.includes("transport") || question.includes("ride") || question.includes("bus")) {
+    return isSpanish
+      ? "Puedo ayudar con preguntas generales sobre transporte. Si necesita apoyo para una cita concreta, hable con su trabajador social para que envie la solicitud correcta."
+      : "I can help with general transportation questions. If you need help for a specific appointment, ask your case worker so they can send the right request.";
+  }
+
+  return isSpanish
+    ? "Soy Ayuda del Portal. Puedo ayudar con acceso, documentos, transporte, notificaciones y pasos del portal. Para preguntas o cambios sobre su caso, use el chat con su trabajador social."
+    : "I'm Portal Help. I can help with login, documents, transportation, notifications, and portal steps. For questions or changes about your case, use the case worker chat.";
 }
 
 app.get("/api/clients", (_req, res) => {
@@ -1846,6 +1888,38 @@ app.post("/api/translate", async (req, res) => {
   }
 });
 
+app.post("/api/help-chat", async (req, res) => {
+  const question = String(req.body?.question || "").trim();
+  const language = String(req.body?.language || "en").trim().toLowerCase() === "es" ? "es" : "en";
+
+  if (!question) {
+    res.status(400).json({ error: "Question is required." });
+    return;
+  }
+
+  try {
+    const response = await generatePortalHelpReply({
+      question,
+      language
+    });
+
+    res.json({
+      success: true,
+      provider: "openai",
+      response: response || createPortalHelpFallback(question, language)
+    });
+    return;
+  } catch (error) {
+    console.error("Portal help chat failed. Falling back to local response.", error.message);
+  }
+
+  res.json({
+    success: true,
+    provider: "local-fallback",
+    response: createPortalHelpFallback(question, language)
+  });
+});
+
 app.get("/api/worker-notifications", (req, res) => {
   const workerId = String(req.query.worker_id || "").trim();
 
@@ -1954,7 +2028,12 @@ app.post("/api/case-status", async (req, res) => {
   } else if (action === "complete") {
     pushCountyNotification(`${worker.name} completed ${client.name}`, worker.id);
     recordCompletedWorkerCase(client, worker);
-    removeClientFromSystem(clientId);
+    markClientCaseCompleted(client, worker);
+    await createClientNotification(client.id, {
+      title: "Case completed",
+      message: `${worker.name} marked your case as completed. You can still log in to review your documents and message history.`,
+      category: "status"
+    });
   } else if (action === "reject") {
     client.worker_status = "rejected";
     client.status = "pending";
@@ -1976,7 +2055,7 @@ app.post("/api/case-status", async (req, res) => {
 
   res.json({
     success: true,
-    client: action === "complete" ? null : client,
+    client,
     worker,
     recommended_worker_id: getRecommendedWorker().id
   });

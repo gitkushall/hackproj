@@ -75,6 +75,8 @@ const state = {
   lastPlan: null
 };
 
+let activeScreenId = "login-screen";
+
 const adminCases = {
   caseworker: [
     { name: "Maria Lopez", detail: "ID and SSN", status: "Waiting for SSN" },
@@ -243,12 +245,23 @@ const uiText = {
     yourPlan: "Your intake summary",
     transport: "Get Transportation Help",
     startOver: "Start over",
-    helpButton: "Need Help?",
-    helpTitle: "Need Help?",
-    helpPlaceholder: "Ask a basic question",
+    helpButton: "Portal Help",
+    helpTitle: "Portal Help",
+    helpPlaceholder: "Ask about login, documents, or portal steps",
     helpSend: "Send",
-    helpWelcome: "Hi. I can help with login, documents, transportation, and basic housing portal questions.",
-    helpMessageDefault: "I can help with login, birth certificate, Social Security card, State ID, and transportation questions.",
+    helpWelcome: "Hi. I am Portal Help. I can answer quick questions about login, documents, transportation, notifications, and how to use this portal. For case-specific updates, message your case worker.",
+    helpMessageDefault: "I can help with login, portal steps, birth certificate, Social Security card, State ID, and transportation questions. For questions about your case, use the case worker chat.",
+    helpSubtitle: "Get quick help with login, documents, and portal steps. For case-specific questions, message your case worker.",
+    helpCaseworkerShortcut: "Chat with your case worker",
+    helpBadge: "Portal Assistant",
+    helpPromptLogin: "Login help",
+    helpPromptDocuments: "Document help",
+    helpPromptTransport: "Transportation",
+    helpPromptPortal: "Portal steps",
+    helpPromptLoginMessage: "How do I log in?",
+    helpPromptDocumentsMessage: "How do I get document help?",
+    helpPromptTransportMessage: "How do transportation requests work?",
+    helpPromptPortalMessage: "What does each portal screen do?",
     planError: "Please answer all 3 yes/no questions.",
     locationError: "Please select a state, county, and city for both birthplace and current location."
   },
@@ -354,12 +367,23 @@ const uiText = {
     yourPlan: "Resumen de su ingreso",
     transport: "Obtener ayuda de transporte",
     startOver: "Empezar de nuevo",
-    helpButton: "Necesita ayuda?",
-    helpTitle: "Necesita ayuda?",
-    helpPlaceholder: "Haga una pregunta basica",
+    helpButton: "Ayuda Del Portal",
+    helpTitle: "Ayuda Del Portal",
+    helpPlaceholder: "Pregunte sobre acceso, documentos o pasos del portal",
     helpSend: "Enviar",
-    helpWelcome: "Hola. Puedo ayudar con inicio de sesion, documentos, transporte y preguntas basicas del portal.",
-    helpMessageDefault: "Puedo ayudar con inicio de sesion, acta de nacimiento, tarjeta de Seguro Social, ID estatal y transporte.",
+    helpWelcome: "Hola. Soy Ayuda del Portal. Puedo responder preguntas rapidas sobre inicio de sesion, documentos, transporte, notificaciones y como usar este portal. Para actualizaciones especificas de su caso, envie un mensaje a su trabajador social.",
+    helpMessageDefault: "Puedo ayudar con inicio de sesion, pasos del portal, acta de nacimiento, tarjeta de Seguro Social, ID estatal y transporte. Para preguntas sobre su caso, use el chat con su trabajador social.",
+    helpSubtitle: "Obtenga ayuda rapida con acceso, documentos y pasos del portal. Para preguntas especificas de su caso, envie un mensaje a su trabajador social.",
+    helpCaseworkerShortcut: "Chatear con su trabajador social",
+    helpBadge: "Asistente Del Portal",
+    helpPromptLogin: "Acceso",
+    helpPromptDocuments: "Documentos",
+    helpPromptTransport: "Transporte",
+    helpPromptPortal: "Pasos del portal",
+    helpPromptLoginMessage: "Como inicio sesion?",
+    helpPromptDocumentsMessage: "Como obtengo ayuda con documentos?",
+    helpPromptTransportMessage: "Como funcionan las solicitudes de transporte?",
+    helpPromptPortalMessage: "Que hace cada pantalla del portal?",
     planError: "Responda las 3 preguntas de si o no.",
     locationError: "Seleccione estado, condado y ciudad para el lugar de nacimiento y la ubicacion actual."
   }
@@ -865,6 +889,7 @@ function openScreen(screenId) {
   ["login-screen", "portal-select-screen", "auth-screen", "create-account-screen", "admin-dashboard-screen", "caseworker-client-screen", "caseworker-documents-screen", "client-documents-screen", "dashboard-screen", "client-progress-screen", "client-chat-screen", "client-notifications-screen", "questions-screen", "result-screen"].forEach((id) => {
     document.getElementById(id).classList.toggle("hidden", id !== screenId);
   });
+  activeScreenId = screenId;
   document.getElementById("login-error").textContent = "";
   document.getElementById("create-account-error").textContent = "";
 
@@ -900,6 +925,63 @@ function openScreen(screenId) {
   syncClientCaseRefresh(screenId);
   syncClientNotificationRefresh(screenId);
   renderGuidedNavigatorPanels();
+  void refreshCurrentScreenData(screenId);
+}
+
+async function refreshCurrentScreenData(screenId = activeScreenId) {
+  if (document.hidden) {
+    return;
+  }
+
+  if (state.adminRole === "passaic" && screenId === "admin-dashboard-screen") {
+    await loadCountyDashboard();
+    return;
+  }
+
+  if (state.adminRole === "caseworker" && ["admin-dashboard-screen", "caseworker-client-screen", "caseworker-documents-screen"].includes(screenId)) {
+    await loadCaseWorkerDashboard();
+    return;
+  }
+
+  if (!hasAuthenticatedClientUser()) {
+    return;
+  }
+
+  if (["dashboard-screen", "client-progress-screen", "client-documents-screen"].includes(screenId)) {
+    await Promise.all([
+      loadClientPortalChat(),
+      loadClientNotifications(),
+      loadClientServiceRecommendations()
+    ]);
+
+    if (screenId === "client-progress-screen") {
+      renderClientProgressDashboard();
+    }
+
+    if (screenId === "client-documents-screen") {
+      await loadClientDocuments(state.clientPortalData.currentClientId, "client");
+      renderClientDocumentsView();
+    }
+
+    return;
+  }
+
+  if (screenId === "client-chat-screen") {
+    await Promise.all([
+      loadClientPortalChat(),
+      loadClientNotifications()
+    ]);
+    return;
+  }
+
+  if (screenId === "client-notifications-screen") {
+    await loadClientNotifications();
+    return;
+  }
+
+  if (screenId === "questions-screen") {
+    await loadClientServiceRecommendations();
+  }
 }
 
 function syncAdminLayoutMode(screenId) {
@@ -1099,9 +1181,22 @@ function applyLanguage() {
   document.getElementById("transport-btn").textContent = t.transport;
   document.getElementById("start-over-btn").textContent = t.startOver;
   document.getElementById("help-float-btn").textContent = t.helpButton;
+  document.getElementById("help-chat-badge").textContent = t.helpBadge;
   document.getElementById("chat-title").textContent = t.helpTitle;
+  document.getElementById("chat-subtitle").textContent = t.helpSubtitle;
+  document.getElementById("help-chat-caseworker-btn").textContent = t.helpCaseworkerShortcut;
   document.getElementById("chat-input").placeholder = t.helpPlaceholder;
   document.getElementById("chat-send-btn").textContent = t.helpSend;
+  document.querySelectorAll("[data-help-prompt-key]").forEach((button) => {
+    const labelKey = button.dataset.helpPromptKey;
+    const messageKey = button.dataset.helpPromptMessageKey;
+    if (t[labelKey]) {
+      button.textContent = t[labelKey];
+    }
+    if (t[messageKey]) {
+      button.dataset.helpPrompt = t[messageKey];
+    }
+  });
   document.getElementById("county-ai-float-btn").textContent = t.countyAiButton;
   document.getElementById("county-ai-title").textContent = t.countyAiTitle;
   document.getElementById("county-ai-subtitle").textContent = t.countyAiSubtitle;
@@ -4886,28 +4981,39 @@ function addChatMessage(role, text) {
 
 function getBotReply(userTextRaw) {
   const userText = userTextRaw.toLowerCase();
+  const isEs = state.lang === "es";
 
   if (userText.includes("login") || userText.includes("sign")) {
-    return "Use phone login first. If needed, staff can use username login.";
+    return isEs
+      ? "Puedo ayudar con el acceso al portal. Si usa telefono, primero solicite el codigo y luego ingreselo para entrar."
+      : "I can help with portal login. If you use phone login, request the code first and then enter it to sign in.";
   }
 
   if (userText.includes("birth") || userText.includes("acta")) {
-    return "If you do not have a birth certificate, your plan will tell you to visit Vital Records and request a copy.";
+    return isEs
+      ? "Si no tiene acta de nacimiento, su plan le mostrara los pasos generales y los enlaces oficiales para pedir una copia."
+      : "If you do not have a birth certificate, your plan will show the general steps and official links to request a copy.";
   }
 
   if (userText.includes("ssn") || userText.includes("social")) {
-    return "If you need a Social Security card, your plan will point you to the SSA office.";
+    return isEs
+      ? "Si necesita una tarjeta de Seguro Social, su plan le mostrara los pasos generales y el enlace oficial de SSA."
+      : "If you need a Social Security card, your plan will show the general steps and the official SSA link.";
   }
 
   if (userText.includes("id") || userText.includes("dmv") || userText.includes("mvc")) {
-    return "If you need a State ID, your plan will direct you to the DMV or MVC and list the needed steps.";
+    return isEs
+      ? "Si necesita una ID estatal, su plan le indicara los pasos generales para MVC o DMV y que revisar despues."
+      : "If you need a State ID, your plan will point you to the general MVC or DMV steps and what to review next.";
   }
 
   if (userText.includes("bus") || userText.includes("ride") || userText.includes("transport")) {
-    return "Use the transportation button in your plan if you need travel help.";
+    return isEs
+      ? "Para preguntas generales sobre transporte, revise su plan. Si necesita ayuda para una cita especifica, escriba a su trabajador social."
+      : "For general transportation questions, check your plan. If you need help for a specific appointment, message your case worker.";
   }
 
-  return uiText.en.helpMessageDefault;
+  return uiText[state.lang].helpMessageDefault;
 }
 
 function openHelpChat() {
@@ -4926,6 +5032,17 @@ function closeHelpChat() {
   const panel = document.getElementById("help-chat-panel");
   panel.classList.add("hidden");
   panel.hidden = true;
+}
+
+async function openCaseworkerChatFromHelp() {
+  closeHelpChat();
+
+  if (!hasAuthenticatedClientUser() || !state.clientPortalData.currentClientId) {
+    openScreen("auth-screen");
+    return;
+  }
+
+  await showClientChatPanel();
 }
 
 async function loginAdminWithRole(role, options = {}) {
@@ -4965,9 +5082,22 @@ async function handleUserChat() {
   addChatMessage("user", text);
   input.value = "";
 
-  const rawReply = getBotReply(text);
-  const finalReply = state.lang === "en" ? rawReply : await translateText(rawReply, state.lang);
-  addChatMessage("bot", finalReply);
+  try {
+    const data = await fetchJson("/api/help-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: text,
+        language: state.lang
+      })
+    });
+
+    addChatMessage("bot", data.response || uiText[state.lang].helpMessageDefault);
+    return;
+  } catch (error) {
+    const rawReply = getBotReply(text);
+    addChatMessage("bot", rawReply);
+  }
 }
 
 function bindEvents() {
@@ -5329,6 +5459,16 @@ function bindEvents() {
   document.getElementById("plan-btn").addEventListener("click", showPlan);
   document.getElementById("start-over-btn").addEventListener("click", startOver);
   document.getElementById("help-float-btn").addEventListener("click", openHelpChat);
+  document.getElementById("help-chat-caseworker-btn").addEventListener("click", () => {
+    void openCaseworkerChatFromHelp();
+  });
+  document.querySelectorAll("[data-help-prompt]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const input = document.getElementById("chat-input");
+      input.value = button.dataset.helpPrompt || "";
+      void handleUserChat();
+    });
+  });
   document.getElementById("chat-close-btn").addEventListener("click", closeHelpChat);
   document.getElementById("chat-send-btn").addEventListener("click", handleUserChat);
   document.getElementById("chat-input").addEventListener("keydown", (event) => {
@@ -5381,6 +5521,16 @@ function bindEvents() {
     if (event.key === "Escape" && state.countyData.selectedWorkerId) {
       closeWorkerProfile();
     }
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      void refreshCurrentScreenData();
+    }
+  });
+
+  window.addEventListener("focus", () => {
+    void refreshCurrentScreenData();
   });
 
 }

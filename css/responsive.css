@@ -196,6 +196,24 @@
     height: min(460px, calc(100vh - 120px));
   }
 
+  .chat-head {
+    padding: 10px 12px 8px;
+    gap: 8px;
+  }
+
+  .help-chat-subtitle {
+    max-width: none;
+  }
+
+  .help-chat-link-btn {
+    width: 100%;
+    min-height: 34px;
+  }
+
+  .help-chat-quick-actions {
+    padding: 8px 12px 0;
+  }
+
   .county-ai-panel {
     bottom: 148px;
   }
