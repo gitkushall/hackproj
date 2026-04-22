@@ -8,6 +8,7 @@ const twilio = require("twilio");
 const { getDemoAdminAccount, getDemoCaseworkerAccounts, loadAdminAccounts, saveAdminAccounts, verifyAdminLogin } = require("./backend/auth/adminAuthStore");
 const { generateAdminInsight, generatePortalHelpReply } = require("./backend/services/openaiService");
 const { getRuntimeStorageInfo, loadJsonArray, saveJsonArray } = require("./backend/storage/runtimeJsonStore");
+const { DOCUMENT_GUIDANCE, MVC_OFFICES, PASSAIC_LOCAL_BIRTH_OFFICES, PRIMARY_RESOURCES, SSA_OFFICES } = require("./data/documentGuidance");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -986,92 +987,195 @@ function isNewJerseyLocation(location = {}) {
   return normalizeLocationValue(location.state) === "new jersey";
 }
 
+function createGuideLinkItems(items = []) {
+  return items
+    .filter(Boolean)
+    .map((item) => ({
+      label: item.label || "",
+      detail: item.detail || "",
+      phone: item.phone || "",
+      url: item.url || ""
+    }));
+}
+
+function createOfficeOption(option = {}, overrides = {}) {
+  return {
+    label: overrides.label || option.label || "",
+    address: overrides.address || option.address || "",
+    phone: overrides.phone || option.phone || "",
+    note: overrides.note || option.note || ""
+  };
+}
+
+function buildRecommendationPayload(documentType, extras = {}) {
+  const guide = DOCUMENT_GUIDANCE[documentType] || {};
+
+  return {
+    documentType,
+    title: extras.title || guide.title || "Document step",
+    summary: extras.summary || guide.summary || "",
+    officeName: extras.primaryOption?.label || "",
+    address: extras.primaryOption?.address || "",
+    detail: extras.detail || guide.summary || "",
+    applicationSteps: Array.isArray(guide.applicationSteps) ? guide.applicationSteps : [],
+    timeline: guide.timeline || "",
+    appointment: guide.appointment || { required: false, note: "" },
+    requiredItems: Array.isArray(guide.requiredItems) ? guide.requiredItems : [],
+    alternateProof: Array.isArray(guide.alternateProof) ? guide.alternateProof : [],
+    feeWaiver: guide.feeWaiver || "",
+    supportNote: guide.supportNote || "",
+    primaryOption: extras.primaryOption || null,
+    alternateOptions: Array.isArray(extras.alternateOptions) ? extras.alternateOptions : [],
+    supportResources: Array.isArray(extras.supportResources) ? extras.supportResources : [],
+    links: Array.isArray(extras.links) ? extras.links : []
+  };
+}
+
 function getBirthCertificateRecommendation(account) {
   const birthLocation = account?.intakeLocations?.birth || {};
   const birthCityKey = normalizeLocationValue(birthLocation.city);
-  const cityRecommendation = njBirthOfficeDirectory[birthCityKey] || null;
+  const localOffice = PASSAIC_LOCAL_BIRTH_OFFICES[birthCityKey] || null;
 
   if (isNewJerseyLocation(birthLocation)) {
-    return {
-      documentType: "birth_certificate",
+    const primaryOption = createOfficeOption({
+      label: "New Jersey State Walk-In Vital Records Office",
+      address: "140 E. Front Street, Trenton, NJ",
+      phone: "1-866-649-8726",
+      note: "Best default option for most New Jersey births. It handles records for births anywhere in New Jersey and often supports same-day service without an appointment."
+    });
+
+    const alternateOptions = [
+      localOffice ? createOfficeOption(localOffice) : null,
+      createOfficeOption({
+        label: "VitalChek online order",
+        address: "Online ordering",
+        phone: "1-888-434-2587",
+        note: "Use this if mailing or online ordering is easier than travel."
+      })
+    ].filter(Boolean);
+
+    return buildRecommendationPayload("birth_certificate", {
       title: "Get your birth certificate",
-      officeName: cityRecommendation?.officeName || `${birthLocation.city || "Local"} Registrar of Vital Statistics`,
-      address: cityRecommendation?.address || `${birthLocation.city || "Birth city"}, ${birthLocation.county || "local county"} County, New Jersey`,
-      detail: cityRecommendation?.detail || "Use the local registrar if you were born in this municipality, or order online through New Jersey Vital Records.",
-      links: cityRecommendation?.links || [
-        { label: "Find local registrar", url: NJ_LOCAL_VITAL_RECORDS_URL },
-        { label: "Order online", url: NJ_BIRTH_ORDER_URL }
-      ]
-    };
+      detail: "Start with your birth certificate first. For most New Jersey births, the Trenton state office is the strongest default option.",
+      primaryOption,
+      alternateOptions,
+      supportResources: createGuideLinkItems([
+        PRIMARY_RESOURCES.helpline211,
+        PRIMARY_RESOURCES.njVitalRecords
+      ]),
+      links: createGuideLinkItems([
+        PRIMARY_RESOURCES.njVitalRecords,
+        PRIMARY_RESOURCES.vitalChek
+      ])
+    });
   }
 
-  return {
-    documentType: "birth_certificate",
+  return buildRecommendationPayload("birth_certificate", {
     title: "Get your birth certificate",
-    officeName: birthLocation.city
-      ? `${birthLocation.city}, ${birthLocation.state || "birth state"} records office`
-      : "Birth records office",
-    address: birthLocation.city
-      ? `${birthLocation.city}, ${birthLocation.county || ""}${birthLocation.county ? " County, " : ""}${birthLocation.state || ""}`.trim()
-      : "Use the records office in the state where you were born.",
-    detail: "Birth certificates usually must be requested from the state or city where you were born.",
-    links: [
-      { label: "Start NJ online order", url: NJ_BIRTH_ORDER_URL }
-    ]
-  };
+    detail: "Birth certificates usually must be requested from the state or city where you were born. Start with that state's vital records office.",
+    primaryOption: createOfficeOption({
+      label: birthLocation.city
+        ? `${birthLocation.city}, ${birthLocation.state || "birth state"} records office`
+        : "Birth records office",
+      address: birthLocation.city
+        ? `${birthLocation.city}, ${birthLocation.county || ""}${birthLocation.county ? " County, " : ""}${birthLocation.state || ""}`.trim()
+        : "Use the records office in the state where you were born.",
+      phone: "",
+      note: "If you were not born in New Jersey, start with the official vital records office in your birth state."
+    }),
+    alternateOptions: [
+      createOfficeOption({
+        label: "VitalChek online order",
+        address: "Online ordering",
+        phone: "1-888-434-2587",
+        note: "Helpful for many states when you need a mailed request option."
+      })
+    ],
+    supportResources: createGuideLinkItems([
+      PRIMARY_RESOURCES.helpline211
+    ]),
+    links: createGuideLinkItems([
+      PRIMARY_RESOURCES.vitalChek
+    ])
+  });
 }
 
 function getSsnRecommendation(account) {
   const currentLocation = account?.intakeLocations?.current || {};
-  const city = currentLocation.city || "your area";
-  const stateName = currentLocation.state || "";
-  const replacementAvailableOnline = true;
+  const cityKey = normalizeLocationValue(currentLocation.city);
+  const preferredOffice = SSA_OFFICES[cityKey] || SSA_OFFICES.passaic_default;
 
-  return {
-    documentType: "ssn",
-    title: "Request SSN card",
-    officeName: `Social Security office near ${city}`,
-    address: stateName ? `${city}, ${stateName}` : city,
-    detail: replacementAvailableOnline
-      ? "Start online if you qualify, or use the official SSA locator to find the office that serves your address."
-      : "Use the official SSA locator to find the office that serves your address.",
-    links: [
-      { label: "Replace card online", url: SSA_CARD_URL },
-      { label: "Find local SSA office", url: SSA_OFFICE_LOCATOR_URL }
-    ]
-  };
+  return buildRecommendationPayload("ssn", {
+    title: "Request your Social Security card",
+    detail: "After your birth certificate, use SSA to request or replace your Social Security card. Start online if you can, then visit the office if SSA asks you to.",
+    primaryOption: createOfficeOption(preferredOffice),
+    alternateOptions: [
+      createOfficeOption(SSA_OFFICES.clifton),
+      createOfficeOption({
+        label: "SSA online replacement flow",
+        address: "Online service",
+        phone: "1-800-772-1213",
+        note: "Useful if you qualify to start the card replacement online before visiting an office."
+      })
+    ],
+    supportResources: createGuideLinkItems([
+      PRIMARY_RESOURCES.helpline211,
+      PRIMARY_RESOURCES.ssaMain
+    ]),
+    links: createGuideLinkItems([
+      PRIMARY_RESOURCES.ssaMain,
+      PRIMARY_RESOURCES.ssaLocator
+    ])
+  });
 }
 
 function getStateIdRecommendation(account) {
   const currentLocation = account?.intakeLocations?.current || {};
   const cityKey = normalizeLocationValue(currentLocation.city);
-  const office = njMvcOfficeDirectory[cityKey] || njMvcOfficeDirectory.default;
+  const office = cityKey === "paterson" || cityKey === "passaic"
+    ? MVC_OFFICES.paterson
+    : (cityKey === "wayne" || cityKey === "clifton" || cityKey === "totowa"
+        ? MVC_OFFICES.wayne
+        : MVC_OFFICES.oakland);
 
   if (isNewJerseyLocation(currentLocation)) {
-    return {
-      documentType: "state_id",
-      title: "Finish State ID step",
-      officeName: office.officeName,
-      address: office.address,
-      detail: "New Jersey non-driver IDs are handled through MVC licensing centers and usually require an appointment.",
-      links: [
-        { label: "Book MVC appointment", url: NJ_MVC_APPOINTMENT_URL },
-        { label: "State ID requirements", url: NJ_MVC_ID_URL },
-        { label: "View MVC locations", url: NJ_MVC_LOCATIONS_URL }
-      ]
-    };
+    return buildRecommendationPayload("state_id", {
+      title: "Finish your State ID step",
+      detail: "New Jersey non-driver IDs usually require an MVC appointment. Bring your birth certificate and supporting identity information before you go.",
+      primaryOption: createOfficeOption(office),
+      alternateOptions: [
+        createOfficeOption(MVC_OFFICES.paterson),
+        createOfficeOption(MVC_OFFICES.wayne),
+        createOfficeOption(MVC_OFFICES.oakland)
+      ].filter((item, index, items) => item.label && items.findIndex((entry) => entry.label === item.label) === index),
+      supportResources: createGuideLinkItems([
+        PRIMARY_RESOURCES.helpline211,
+        PRIMARY_RESOURCES.njMvc
+      ]),
+      links: createGuideLinkItems([
+        PRIMARY_RESOURCES.njMvcAppointment,
+        PRIMARY_RESOURCES.njMvc
+      ])
+    });
   }
 
-  return {
-    documentType: "state_id",
-    title: "Finish State ID step",
-    officeName: `${currentLocation.state || "State"} ID office`,
-    address: currentLocation.city
-      ? `${currentLocation.city}, ${currentLocation.state || ""}`.trim()
-      : "Use your current state's motor vehicle or identification agency.",
-    detail: "State ID rules depend on your current state, so use the local motor vehicle agency for the next appointment.",
+  return buildRecommendationPayload("state_id", {
+    title: "Finish your State ID step",
+    detail: "State ID rules depend on your current state, so use your local motor vehicle or identification agency for the next appointment.",
+    primaryOption: createOfficeOption({
+      label: `${currentLocation.state || "State"} ID office`,
+      address: currentLocation.city
+        ? `${currentLocation.city}, ${currentLocation.state || ""}`.trim()
+        : "Use your current state's motor vehicle or identification agency.",
+      phone: "",
+      note: "Look for your state's official non-driver ID or identification card process."
+    }),
+    alternateOptions: [],
+    supportResources: createGuideLinkItems([
+      PRIMARY_RESOURCES.helpline211
+    ]),
     links: []
-  };
+  });
 }
 
 function buildClientServiceRecommendations(account, client) {

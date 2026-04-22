@@ -2663,7 +2663,10 @@ async function showClientChatPanel() {
 
 async function showClientDocuments(documentType) {
   try {
-    await loadClientDocuments(state.clientPortalData.currentClientId, "client");
+    await Promise.all([
+      loadClientDocuments(state.clientPortalData.currentClientId, "client"),
+      loadClientServiceRecommendations()
+    ]);
   } catch (error) {
     state.clientPortalData.documents = [];
   }
@@ -2993,6 +2996,7 @@ function buildClientProgressModel() {
   const activeKey = stages.find((stage) => !stage.done)?.key || "case";
 
   const nextActions = [];
+  const documentGuidance = [];
 
   if (!hasIntake) {
     nextActions.push({
@@ -3003,6 +3007,9 @@ function buildClientProgressModel() {
 
   if (missingDocuments.includes("birth_certificate")) {
     const recommendation = serviceRecommendations.birth_certificate || null;
+    if (recommendation) {
+      documentGuidance.push(recommendation);
+    }
     nextActions.push({
       title: state.lang === "es" ? "Obtener acta de nacimiento" : "Get your birth certificate",
       detail: recommendation?.detail || (state.lang === "es" ? "Este documento aun aparece como faltante." : "This document still appears as missing."),
@@ -3014,6 +3021,9 @@ function buildClientProgressModel() {
 
   if (missingDocuments.includes("ssn")) {
     const recommendation = serviceRecommendations.ssn || null;
+    if (recommendation) {
+      documentGuidance.push(recommendation);
+    }
     nextActions.push({
       title: state.lang === "es" ? "Solicitar tarjeta de SSN" : "Request SSN card",
       detail: recommendation?.detail || (state.lang === "es" ? "Su dashboard todavia muestra esta tarjeta como pendiente." : "Your dashboard still shows this card as pending."),
@@ -3025,6 +3035,9 @@ function buildClientProgressModel() {
 
   if (missingDocuments.includes("state_id")) {
     const recommendation = serviceRecommendations.state_id || null;
+    if (recommendation) {
+      documentGuidance.push(recommendation);
+    }
     nextActions.push({
       title: state.lang === "es" ? "Terminar paso de ID estatal" : "Finish State ID step",
       detail: recommendation?.detail || (state.lang === "es" ? "La mayoria de los casos necesitan este paso para seguir avanzando." : "Most cases need this step before they can move forward."),
@@ -3062,16 +3075,6 @@ function buildClientProgressModel() {
     });
   }
 
-  if (worker && !isCompleted) {
-    nextActions.push({
-      title: state.lang === "es" ? "Enviar mensaje a su trabajador" : "Message your case worker",
-      detail: state.lang === "es" ? "Use el chat para compartir avances, preguntas o documentos." : "Use chat to share updates, questions, or documents.",
-      officeName: "",
-      address: "",
-      links: []
-    });
-  }
-
   if (!nextActions.length) {
     nextActions.push({
       title: state.lang === "es" ? "Todo va bien" : "Everything is on track",
@@ -3093,6 +3096,7 @@ function buildClientProgressModel() {
     activeKey,
     stages,
     nextActions,
+    documentGuidance,
     statusText: getClientProgressStatus(client),
     documentsLeftText: state.lang === "es"
       ? `${missingDocuments.length} pendientes`
@@ -3127,6 +3131,77 @@ function buildClientProgressModel() {
   };
 }
 
+function buildProgressGuidanceCardsHtml(recommendations = []) {
+  const isEs = state.lang === "es";
+
+  if (!Array.isArray(recommendations) || !recommendations.length) {
+    return `
+      <div class="county-empty-state">
+        ${isEs ? "No hay una guia de oficinas pendiente en este momento." : "There is no pending office guidance right now."}
+      </div>
+    `;
+  }
+
+  return recommendations.map((recommendation) => {
+    const resourceLinks = mergeUniqueGuideLinks(recommendation.links || [], recommendation.supportResources || []);
+    const applicationSteps = Array.isArray(recommendation.applicationSteps)
+      ? recommendation.applicationSteps.filter(Boolean).slice(0, 4)
+      : [];
+    const nearbyOptions = Array.isArray(recommendation.alternateOptions)
+      ? recommendation.alternateOptions.filter((option) => option && option.address).slice(0, 2)
+      : [];
+
+    return `
+      <article class="client-guidance-card">
+        <div class="client-guidance-card-head">
+          <div>
+            <strong>${escapeHtml(recommendation.title || "Document step")}</strong>
+            <p class="small-text">${escapeHtml(recommendation.summary || recommendation.detail || "")}</p>
+          </div>
+          <span class="client-stage-pill">${recommendation.appointment?.required ? (isEs ? "Cita requerida" : "Appointment needed") : (isEs ? "Sin cita fija" : "Flexible visit")}</span>
+        </div>
+        <div class="client-guidance-detail-grid">
+          ${recommendation.primaryOption ? `
+            <div class="client-guidance-office">
+              <span class="panel-kicker">${isEs ? "Oficina principal" : "Nearest office"}</span>
+              <strong>${escapeHtml(recommendation.primaryOption.label || "")}</strong>
+              ${recommendation.primaryOption.address ? `<p class="small-text">${escapeHtml(recommendation.primaryOption.address)}</p>` : ""}
+              ${recommendation.primaryOption.note ? `<p class="small-text">${escapeHtml(recommendation.primaryOption.note)}</p>` : ""}
+              ${recommendation.primaryOption.phone ? `<p class="small-text"><strong>${escapeHtml(recommendation.primaryOption.phone)}</strong></p>` : ""}
+              ${nearbyOptions.length ? `
+                <div class="client-guidance-nearby">
+                  <span class="panel-kicker">${isEs ? "Otras oficinas" : "Other nearby offices"}</span>
+                  <div class="client-guidance-nearby-list">
+                    ${nearbyOptions.map((option) => `
+                      <div class="client-guidance-nearby-item">
+                        <strong>${escapeHtml(option.label || "")}</strong>
+                        ${option.address ? `<p class="small-text">${escapeHtml(option.address)}</p>` : ""}
+                      </div>
+                    `).join("")}
+                  </div>
+                </div>
+              ` : ""}
+            </div>
+          ` : ""}
+          <div class="client-guidance-requirements client-guidance-requirements-inline">
+            <span class="panel-kicker">${isEs ? "Que llevar" : "What to bring"}</span>
+            ${Array.isArray(recommendation.requiredItems) && recommendation.requiredItems.length
+              ? renderSimpleGuideList(recommendation.requiredItems.slice(0, 4))
+              : `<p class="small-text">${escapeHtml(isEs ? "Revise los requisitos oficiales antes de ir a la oficina." : "Review the official requirements before going to the office.")}</p>`}
+          </div>
+        </div>
+        <div class="client-guidance-next-step">
+          <span class="panel-kicker">${isEs ? "Como aplicar" : "How to apply"}</span>
+          ${applicationSteps.length
+            ? renderSimpleGuideList(applicationSteps)
+            : `<p class="small-text">${escapeHtml(isEs ? "Siga la oficina principal y revise los requisitos antes de aplicar." : "Use the main office shown and review the requirements before applying.")}</p>`}
+        </div>
+        ${resourceLinks.length ? renderClientActionLinks(resourceLinks) : ""}
+      </article>
+    `;
+  }).join("");
+}
+
 function renderClientActionLinks(links = []) {
   if (!Array.isArray(links) || !links.length) {
     return "";
@@ -3140,8 +3215,171 @@ function renderClientActionLinks(links = []) {
           href="${escapeHtml(link.url || "#")}"
           target="_blank"
           rel="noreferrer noopener"
-        >${escapeHtml(link.label || "Open link")}</a>
+        >
+          <span>${escapeHtml(link.label || "Open link")}</span>
+          ${link.phone ? `<small>${escapeHtml(link.phone)}</small>` : ""}
+        </a>
       `).join("")}
+    </div>
+  `;
+}
+
+function renderSimpleGuideList(items = []) {
+  if (!Array.isArray(items) || !items.length) {
+    return `<div class="document-guide-empty">${localizeText("No guidance added yet.")}</div>`;
+  }
+
+  return `
+    <ul class="document-guide-list">
+      ${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+    </ul>
+  `;
+}
+
+function mergeUniqueGuideLinks(...groups) {
+  const seen = new Set();
+  return groups
+    .flat()
+    .filter(Boolean)
+    .filter((item) => {
+      const key = `${item.label || ""}::${item.url || ""}::${item.phone || ""}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+}
+
+function renderGuideOfficeCard(option, tone = "primary") {
+  if (!option || !option.label) {
+    return "";
+  }
+
+  return `
+    <article class="document-guide-office ${tone}">
+      <div class="document-guide-office-top">
+        <strong>${escapeHtml(option.label)}</strong>
+        ${option.phone ? `<span class="county-count-pill">${escapeHtml(option.phone)}</span>` : ""}
+      </div>
+      ${option.address ? `<p class="small-text">${escapeHtml(option.address)}</p>` : ""}
+      ${option.note ? `<p class="small-text">${escapeHtml(option.note)}</p>` : ""}
+    </article>
+  `;
+}
+
+function buildDocumentGuideHtml(documentType, recommendation, documentCount = 0) {
+  const isEs = state.lang === "es";
+  const selectedLabel = getDocumentTypeLabel(documentType);
+
+  if (!recommendation) {
+    return `
+      <div class="document-guide-shell">
+        <div class="document-guide-hero">
+          <div>
+            <p class="eyebrow">${escapeHtml(selectedLabel)}</p>
+            <h3>${escapeHtml(selectedLabel)}</h3>
+            <p class="small-text">${isEs ? "Este documento no aparece como faltante ahora mismo, pero puede guardar archivos aqui si los necesita." : "This document is not currently marked missing, but you can still save files here if needed."}</p>
+          </div>
+          <div class="document-guide-stat-card">
+            <span class="small-text">${isEs ? "Archivos guardados" : "Saved files"}</span>
+            <strong>${documentCount}</strong>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="document-guide-shell">
+      <div class="document-guide-hero">
+        <div>
+          <p class="eyebrow">${escapeHtml(recommendation.title || selectedLabel)}</p>
+          <h3>${escapeHtml(recommendation.title || selectedLabel)}</h3>
+          <p class="small-text">${escapeHtml(recommendation.summary || recommendation.detail || "")}</p>
+        </div>
+        <div class="document-guide-stat-grid">
+          <article class="document-guide-stat-card">
+            <span class="small-text">${isEs ? "Cita" : "Appointment"}</span>
+            <strong>${recommendation.appointment?.required ? (isEs ? "Necesaria" : "Required") : (isEs ? "No siempre" : "Often not needed")}</strong>
+          </article>
+          <article class="document-guide-stat-card">
+            <span class="small-text">${isEs ? "Archivos guardados" : "Saved files"}</span>
+            <strong>${documentCount}</strong>
+          </article>
+        </div>
+      </div>
+
+      <div class="document-guide-grid">
+        <section class="document-guide-panel accent">
+          <div class="document-guide-panel-head">
+            <div>
+              <span class="panel-kicker">${isEs ? "Mejor opcion" : "Best option"}</span>
+              <strong>${isEs ? "Donde empezar" : "Where to start"}</strong>
+            </div>
+          </div>
+          ${renderGuideOfficeCard(recommendation.primaryOption, "primary")}
+          ${recommendation.timeline ? `<p class="small-text document-guide-note"><strong>${isEs ? "Tiempo estimado:" : "Estimated timing:"}</strong> ${escapeHtml(recommendation.timeline)}</p>` : ""}
+          ${recommendation.appointment?.note ? `<p class="small-text document-guide-note">${escapeHtml(recommendation.appointment.note)}</p>` : ""}
+        </section>
+
+        <section class="document-guide-panel">
+          <div class="document-guide-panel-head">
+            <div>
+              <span class="panel-kicker">${isEs ? "Preparacion" : "Preparation"}</span>
+              <strong>${isEs ? "Que llevar" : "What to bring"}</strong>
+            </div>
+          </div>
+          ${renderSimpleGuideList(recommendation.requiredItems || [])}
+        </section>
+
+        <section class="document-guide-panel">
+          <div class="document-guide-panel-head">
+            <div>
+              <span class="panel-kicker">${isEs ? "Sin ID" : "No ID yet"}</span>
+              <strong>${isEs ? "Pruebas alternativas" : "Alternate proof"}</strong>
+            </div>
+          </div>
+          ${renderSimpleGuideList(recommendation.alternateProof || [])}
+          ${recommendation.supportNote ? `<p class="small-text document-guide-note">${escapeHtml(recommendation.supportNote)}</p>` : ""}
+        </section>
+
+        <section class="document-guide-panel">
+          <div class="document-guide-panel-head">
+            <div>
+              <span class="panel-kicker">${isEs ? "Ayuda extra" : "Extra help"}</span>
+              <strong>${isEs ? "Apoyo y exenciones" : "Support and waivers"}</strong>
+            </div>
+          </div>
+          ${recommendation.feeWaiver ? `<p class="small-text document-guide-note">${escapeHtml(recommendation.feeWaiver)}</p>` : `<div class="document-guide-empty">${isEs ? "No se agregaron notas de exencion para este paso." : "No waiver notes added for this step."}</div>`}
+        </section>
+      </div>
+
+      ${Array.isArray(recommendation.alternateOptions) && recommendation.alternateOptions.length ? `
+        <section class="document-guide-panel alternate">
+          <div class="document-guide-panel-head">
+            <div>
+              <span class="panel-kicker">${isEs ? "Opciones extra" : "Alternate options"}</span>
+              <strong>${isEs ? "Otros lugares o caminos utiles" : "Other useful locations or paths"}</strong>
+            </div>
+          </div>
+          <div class="document-guide-office-list">
+            ${recommendation.alternateOptions.map((option) => renderGuideOfficeCard(option, "secondary")).join("")}
+          </div>
+        </section>
+      ` : ""}
+
+      ${(Array.isArray(recommendation.links) && recommendation.links.length) || (Array.isArray(recommendation.supportResources) && recommendation.supportResources.length) ? `
+        <section class="document-guide-panel resource">
+          <div class="document-guide-panel-head">
+            <div>
+              <span class="panel-kicker">${isEs ? "Recursos oficiales" : "Official resources"}</span>
+              <strong>${isEs ? "Enlaces y apoyo directo" : "Links and direct support"}</strong>
+            </div>
+          </div>
+          ${renderClientActionLinks(mergeUniqueGuideLinks(recommendation.links || [], recommendation.supportResources || []))}
+        </section>
+      ` : ""}
     </div>
   `;
 }
@@ -3181,7 +3419,9 @@ function renderClientProgressDashboard() {
   }).join("");
 
   const actionList = document.getElementById("client-action-list");
-  actionList.innerHTML = model.nextActions.map((action) => `
+  actionList.innerHTML = model.documentGuidance.length
+    ? buildProgressGuidanceCardsHtml(model.documentGuidance)
+    : model.nextActions.map((action) => `
     <article class="client-action-item">
       <strong>${escapeHtml(action.title)}</strong>
       <p class="small-text">${escapeHtml(action.detail)}</p>
@@ -3644,6 +3884,7 @@ function renderClientDocumentsView() {
   const selectedLabel = selectedType ? getDocumentTypeLabel(selectedType) : (state.lang === "es" ? "Documento" : "Document");
   const selectedDocuments = selectedType ? getDocumentsForType(state.clientPortalData.documents, selectedType) : [];
   const pendingFile = selectedType ? state.clientPortalData.pendingDocumentByType[selectedType] : null;
+  const recommendation = selectedType ? state.clientPortalData.serviceRecommendations?.[selectedType] || null : null;
 
   container.innerHTML = `
     <div class="document-page-shell">
@@ -3665,10 +3906,14 @@ function renderClientDocumentsView() {
         </div>
       </div>
       <div class="caseworker-panel">
-        <div class="document-page-empty">
-          <strong>${localizeText("Select one of the 4 document cards.")}</strong>
-          <p class="small-text">${localizeText("Click a card to reveal that document section.")}</p>
-        </div>
+        ${selectedType
+          ? buildDocumentGuideHtml(selectedType, recommendation, selectedDocuments.length)
+          : `
+            <div class="document-page-empty">
+              <strong>${localizeText("Select one of the 4 document cards.")}</strong>
+              <p class="small-text">${localizeText("Click a card to reveal that document section.")}</p>
+            </div>
+          `}
       </div>
       ${selectedType ? `
         <div class="workspace-overlay">
