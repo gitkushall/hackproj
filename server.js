@@ -5,7 +5,7 @@ const crypto = require("crypto");
 const path = require("path");
 const nodemailer = require("nodemailer");
 const twilio = require("twilio");
-const { getDemoAdminAccount, getDemoCaseworkerAccounts, loadAdminAccounts, saveAdminAccounts, verifyAdminLogin } = require("./backend/auth/adminAuthStore");
+const { getDemoAdminAccount, getDemoCaseworkerAccounts, getOrganizationAdminAccounts, loadAdminAccounts, saveAdminAccounts, verifyAdminLogin } = require("./backend/auth/adminAuthStore");
 const { generateAdminInsight, generatePortalHelpReply } = require("./backend/services/openaiService");
 const { getRuntimeStorageInfo, loadJsonArray, saveJsonArray } = require("./backend/storage/runtimeJsonStore");
 const { DOCUMENT_GUIDANCE, MVC_OFFICES, PASSAIC_LOCAL_BIRTH_OFFICES, PRIMARY_RESOURCES, SSA_OFFICES } = require("./data/documentGuidance");
@@ -43,8 +43,11 @@ const transportRequestsFilePath = path.join(dataDirectory, "transport-requests.j
 const messagesFilePath = path.join(dataDirectory, "messages.json");
 const clientDocumentsFilePath = path.join(dataDirectory, "client-documents.json");
 const workerCaseHistoryFilePath = path.join(dataDirectory, "worker-case-history.json");
+const agenciesFilePath = path.join(dataDirectory, "agencies.json");
 const COUNTY_ADMIN_ID = "PASSAIC-COUNTY";
 const COUNTY_ADMIN_NAME = "Passaic County";
+const COUNTY_ORGANIZATION_ID = "ORG-COUNTY";
+const COUNTY_ORGANIZATION_NAME = "Passaic County Housing Coordination";
 
 const systemData = {
   total_users: 284,
@@ -128,7 +131,9 @@ const defaultWorkerProfiles = {
     specialties: ["State ID", "Birth certificate recovery", "Court-ready document prep"],
     bio: "Sarah helps clients organize missing identity documents and keeps case steps easy to follow.",
     availability: "Mon-Fri, 9:00 AM - 5:00 PM",
-    pronouns: "She/Her"
+    pronouns: "She/Her",
+    organization_id: COUNTY_ORGANIZATION_ID,
+    organization_name: COUNTY_ORGANIZATION_NAME
   },
   "WK-02": {
     title: "Benefits and Records Coordinator",
@@ -139,7 +144,9 @@ const defaultWorkerProfiles = {
     specialties: ["SSN replacement", "Agency coordination", "Document follow-ups"],
     bio: "Daniel focuses on benefits paperwork, replacement records, and keeping agency requests moving.",
     availability: "Mon-Fri, 8:30 AM - 4:30 PM",
-    pronouns: "He/Him"
+    pronouns: "He/Him",
+    organization_id: "ORG-SHELTER",
+    organization_name: "Paterson Shelter Navigation Team"
   },
   "WK-03": {
     title: "Lead Case Worker",
@@ -150,7 +157,9 @@ const defaultWorkerProfiles = {
     specialties: ["State ID appointments", "Transportation planning", "Complex case support"],
     bio: "Priya coordinates appointments, transportation, and urgent next steps for clients with multiple barriers.",
     availability: "Mon-Sat, 9:00 AM - 6:00 PM",
-    pronouns: "She/Her"
+    pronouns: "She/Her",
+    organization_id: "ORG-HOSPITAL",
+    organization_name: "St. Joseph Hospital Support Team"
   },
   "WK-04": {
     title: "Client Intake and Outreach Worker",
@@ -161,9 +170,46 @@ const defaultWorkerProfiles = {
     specialties: ["New client intake", "Outreach", "Document collection"],
     bio: "Marcus helps new clients get started, collect missing files, and understand the next case milestone.",
     availability: "Mon-Fri, 10:00 AM - 6:00 PM",
-    pronouns: "He/Him"
+    pronouns: "He/Him",
+    organization_id: "ORG-NONPROFIT",
+    organization_name: "Community Document Access Network"
   }
 };
+
+const defaultAgencies = [
+  {
+    id: COUNTY_ORGANIZATION_ID,
+    name: COUNTY_ORGANIZATION_NAME,
+    type: "county",
+    status: "active",
+    contact_email: "county@idhelp.org",
+    contact_phone: "(973) 555-0199"
+  },
+  {
+    id: "ORG-SHELTER",
+    name: "Paterson Shelter Navigation Team",
+    type: "shelter",
+    status: "active",
+    contact_email: "shelter@idhelp.org",
+    contact_phone: "(973) 555-0181"
+  },
+  {
+    id: "ORG-HOSPITAL",
+    name: "St. Joseph Hospital Support Team",
+    type: "hospital",
+    status: "active",
+    contact_email: "hospital@idhelp.org",
+    contact_phone: "(973) 555-0182"
+  },
+  {
+    id: "ORG-NONPROFIT",
+    name: "Community Document Access Network",
+    type: "nonprofit",
+    status: "active",
+    contact_email: "community@idhelp.org",
+    contact_phone: "(973) 555-0183"
+  }
+];
 
 function buildDefaultWorker(id, name, activeCases) {
   return {
@@ -364,7 +410,9 @@ function enrichWorkerProfile(worker) {
     phone: worker.phone || profileDefaults.phone || "",
     email: worker.email || profileDefaults.email || "",
     title: worker.title || profileDefaults.title || "Case Worker",
-    pronouns: worker.pronouns || profileDefaults.pronouns || ""
+    pronouns: worker.pronouns || profileDefaults.pronouns || "",
+    organization_id: worker.organization_id || profileDefaults.organization_id || COUNTY_ORGANIZATION_ID,
+    organization_name: worker.organization_name || profileDefaults.organization_name || COUNTY_ORGANIZATION_NAME
   };
 }
 
@@ -392,14 +440,23 @@ function syncClientRelationships(client) {
 
   const linkedAccount = clientAccounts.find((account) => account.clientId === client.id) || null;
   const assignedWorker = workers.find((worker) => worker.id === client.assigned_worker) || null;
+  const assignedAgencyId = assignedWorker?.organization_id || client.accepted_agency_id || client.requested_agency_id || null;
+  const assignedAgency = agencies.find((agency) => agency.id === assignedAgencyId) || null;
 
   client.county_id = COUNTY_ADMIN_ID;
   client.county_name = COUNTY_ADMIN_NAME;
+  client.requested_agency_id = client.requested_agency_id || null;
+  client.requested_agency_name = client.requested_agency_name || "";
+  client.agency_request_status = client.agency_request_status || "not_started";
+  client.accepted_agency_id = client.accepted_agency_id || assignedAgency?.id || null;
+  client.accepted_agency_name = client.accepted_agency_name || assignedAgency?.name || "";
   client.linked_account_id = linkedAccount?.clientId || client.linked_account_id || client.id;
   client.account_linked = Boolean(linkedAccount);
   client.account_name = linkedAccount?.name || client.name || "";
   client.assigned_worker_name = assignedWorker?.name || "";
   client.assigned_worker_email = assignedWorker?.email || "";
+  client.assigned_worker_organization_id = assignedWorker?.organization_id || client.assigned_worker_organization_id || null;
+  client.assigned_worker_organization_name = assignedWorker?.organization_name || client.assigned_worker_organization_name || "";
   client.updated_at = client.updated_at || getTimestamp();
 
   return client;
@@ -488,7 +545,21 @@ function buildWorkerView(worker) {
     ...worker,
     completed_cases: completedCases,
     completed_cases_count: completedCases.length,
-    handled_cases_count: worker.active_cases + completedCases.length
+    handled_cases_count: worker.active_cases + completedCases.length,
+    organization_id: worker.organization_id || COUNTY_ORGANIZATION_ID,
+    organization_name: worker.organization_name || COUNTY_ORGANIZATION_NAME
+  };
+}
+
+function buildAgencyView(agency) {
+  return {
+    ...agency,
+    worker_count: workers.filter((worker) => worker.organization_id === agency.id).length,
+    active_case_count: clients.filter((client) => (
+      client.assigned_worker &&
+      client.assigned_worker_organization_id === agency.id &&
+      client.worker_status === "active"
+    )).length
   };
 }
 
@@ -531,6 +602,7 @@ function saveCountyState() {
   syncWorkerActiveCaseCounts();
   saveJsonArray(clientsFilePath, clients, { key: "clients" });
   saveJsonArray(workersFilePath, workers, { key: "workers" });
+  saveJsonArray(agenciesFilePath, agencies, { key: "agencies" });
   saveJsonArray(notificationsFilePath, notifications, { key: "notifications" });
   saveJsonArray(transportRequestsFilePath, transportRequests, { key: "transport-requests" });
   saveJsonArray(workerCaseHistoryFilePath, workerCaseHistory, { key: "worker-case-history" });
@@ -557,6 +629,7 @@ function removeItemsInPlace(items, predicate) {
 }
 
 const clients = loadJsonArray(clientsFilePath, defaultClients, { key: "clients" });
+const agencies = loadJsonArray(agenciesFilePath, defaultAgencies, { key: "agencies" });
 const workers = loadJsonArray(workersFilePath, defaultWorkers, { key: "workers" }).map(enrichWorkerProfile);
 const notifications = loadJsonArray(notificationsFilePath, defaultNotifications, { key: "notifications" });
 const clientNotifications = loadJsonArray(clientNotificationsFilePath, defaultClientNotifications, { key: "client-notifications" });
@@ -800,6 +873,8 @@ function sanitizeClientAccount(account) {
     phone: account.phone || "",
     email: account.email || "",
     requestedCaseWorker: Boolean(account.requestedCaseWorker),
+    requestedAgencyId: account.requestedAgencyId || null,
+    requestedAgencyName: account.requestedAgencyName || "",
     hasCompletedIntake: Boolean(account.hasCompletedIntake),
     documentAnswers: account.documentAnswers || null,
     intakeLocations: account.intakeLocations || null,
@@ -888,6 +963,8 @@ function findClientAccountByEmail(email) {
 function ensureClientRecordForAccount(account, requestCaseWorker) {
   let client = clients.find((item) => item.id === account.clientId);
   const wantsCaseWorker = Boolean(requestCaseWorker ?? account?.requestedCaseWorker);
+  const requestedAgencyId = account?.requestedAgencyId || null;
+  const requestedAgency = agencies.find((agency) => agency.id === requestedAgencyId) || null;
 
   if (!client) {
     client = {
@@ -900,7 +977,14 @@ function ensureClientRecordForAccount(account, requestCaseWorker) {
       assigned_worker: null,
       worker_status: null,
       created_at: getTimestamp(),
-      case_worker_requested: wantsCaseWorker
+      case_worker_requested: wantsCaseWorker,
+      requested_agency_id: requestedAgencyId,
+      requested_agency_name: requestedAgency?.name || "",
+      agency_request_status: wantsCaseWorker && requestedAgencyId ? "pending_review" : "not_started",
+      accepted_agency_id: null,
+      accepted_agency_name: "",
+      assigned_worker_organization_id: null,
+      assigned_worker_organization_name: ""
     };
     clients.unshift(client);
   }
@@ -908,6 +992,11 @@ function ensureClientRecordForAccount(account, requestCaseWorker) {
   client.name = account.name || client.name;
   client.linked_account_id = account.clientId;
   client.case_worker_requested = wantsCaseWorker;
+  client.requested_agency_id = requestedAgencyId;
+  client.requested_agency_name = requestedAgency?.name || "";
+  client.agency_request_status = wantsCaseWorker && requestedAgencyId
+    ? (client.agency_request_status === "accepted" ? "accepted" : "pending_review")
+    : "not_started";
   touchClientRelationship(client, wantsCaseWorker ? "client_signup_request" : "client_signup");
 }
 
@@ -1349,7 +1438,10 @@ function migrateClientStore() {
 }
 
 function addAccountCreationNotification(account, requestCaseWorker) {
-  const message = `New portal account: ${account.name}. Case worker requested: ${requestCaseWorker ? "Yes" : "No"}.`;
+  const organizationLabel = account.requestedAgencyName
+    ? ` Organization selected: ${account.requestedAgencyName}.`
+    : "";
+  const message = `New portal account: ${account.name}. Case worker requested: ${requestCaseWorker ? "Yes" : "No"}.${organizationLabel}`;
 
   pushCountyNotification(message);
 }
@@ -1489,6 +1581,13 @@ app.get("/api/workers", (_req, res) => {
   });
 });
 
+app.get("/api/agencies", (_req, res) => {
+  syncClientsFromAccounts();
+  res.json({
+    agencies: agencies.map(buildAgencyView)
+  });
+});
+
 app.get("/api/notifications", (_req, res) => {
   res.json({
     notifications: notifications.slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
@@ -1537,6 +1636,8 @@ app.post("/api/auth/signup/phone", async (req, res) => {
   const name = String(req.body?.name || "").trim();
   const phone = String(req.body?.phone || "").trim();
   const requestCaseWorker = Boolean(req.body?.request_case_worker);
+  const requestedAgencyId = String(req.body?.requested_agency_id || "").trim();
+  const requestedAgency = agencies.find((agency) => agency.id === requestedAgencyId) || null;
 
   if (!name || !phone) {
     res.status(400).json({ error: "Enter your name and phone number." });
@@ -1557,6 +1658,8 @@ app.post("/api/auth/signup/phone", async (req, res) => {
     passwordSalt: "",
     authMethods: ["phone"],
     requestedCaseWorker: requestCaseWorker,
+    requestedAgencyId: requestedAgency?.id || null,
+    requestedAgencyName: requestedAgency?.name || "",
     hasCompletedIntake: false,
     documentAnswers: null,
     intakeLocations: null,
@@ -1570,11 +1673,14 @@ app.post("/api/auth/signup/phone", async (req, res) => {
   addAccountCreationNotification(account, requestCaseWorker);
   saveClientAccounts(clientAccounts);
   saveCountyState();
+  const signupMessage = requestCaseWorker && requestedAgency
+    ? `Your request was sent to ${requestedAgency.name}. Future updates will come here and by text.`
+    : requestCaseWorker
+      ? "Your case worker request was sent. Future updates will come here and by text."
+      : "Your account is ready. Future updates will come here and by text.";
   await createClientNotification(account.clientId, {
     title: "Notifications are on",
-    message: requestCaseWorker
-      ? "Your case worker request was sent. Future updates will come here and by text."
-      : "Your account is ready. Future updates will come here and by text.",
+    message: signupMessage,
     category: "account"
   });
 
@@ -1589,6 +1695,8 @@ app.post("/api/auth/signup/email", async (req, res) => {
   const email = String(req.body?.email || "").trim();
   const password = String(req.body?.password || "").trim();
   const requestCaseWorker = Boolean(req.body?.request_case_worker);
+  const requestedAgencyId = String(req.body?.requested_agency_id || "").trim();
+  const requestedAgency = agencies.find((agency) => agency.id === requestedAgencyId) || null;
 
   if (!name || !email || !password) {
     res.status(400).json({ error: "Enter your name, email, and password." });
@@ -1610,6 +1718,8 @@ app.post("/api/auth/signup/email", async (req, res) => {
     passwordSalt: salt,
     authMethods: ["email"],
     requestedCaseWorker: requestCaseWorker,
+    requestedAgencyId: requestedAgency?.id || null,
+    requestedAgencyName: requestedAgency?.name || "",
     hasCompletedIntake: false,
     documentAnswers: null,
     intakeLocations: null,
@@ -1623,11 +1733,14 @@ app.post("/api/auth/signup/email", async (req, res) => {
   addAccountCreationNotification(account, requestCaseWorker);
   saveClientAccounts(clientAccounts);
   saveCountyState();
+  const signupMessage = requestCaseWorker && requestedAgency
+    ? `Your request was sent to ${requestedAgency.name}. Future updates will come here and by email.`
+    : requestCaseWorker
+      ? "Your case worker request was sent. Future updates will come here and by email."
+      : "Your account is ready. Future updates will come here and by email.";
   await createClientNotification(account.clientId, {
     title: "Notifications are on",
-    message: requestCaseWorker
-      ? "Your case worker request was sent. Future updates will come here and by email."
-      : "Your account is ready. Future updates will come here and by email.",
+    message: signupMessage,
     category: "account"
   });
 
@@ -1763,6 +1876,14 @@ app.get("/api/admin/demo-accounts", (req, res) => {
     return;
   }
 
+  if (role === "organization") {
+    res.json({
+      role,
+      accounts: getOrganizationAdminAccounts()
+    });
+    return;
+  }
+
   const account = getDemoAdminAccount(role);
   res.json({
     role,
@@ -1807,7 +1928,9 @@ app.post("/api/admin/caseworkers", (req, res) => {
     specialties: ["Case management"],
     bio: `${name} supports Passaic County clients and case follow-up.`,
     availability: "Mon-Fri, 9:00 AM - 5:00 PM",
-    pronouns: ""
+    pronouns: "",
+    organization_id: COUNTY_ORGANIZATION_ID,
+    organization_name: COUNTY_ORGANIZATION_NAME
   });
 
   workers.push(newWorker);
@@ -1817,6 +1940,8 @@ app.post("/api/admin/caseworkers", (req, res) => {
     workerId,
     name,
     email: normalizedEmail,
+    organization_id: COUNTY_ORGANIZATION_ID,
+    organization_name: COUNTY_ORGANIZATION_NAME,
     passwordSalt: salt,
     passwordHash: hash
   });
@@ -1832,7 +1957,9 @@ app.post("/api/admin/caseworkers", (req, res) => {
       role: "caseworker",
       workerId,
       name,
-      email: normalizedEmail
+      email: normalizedEmail,
+      organization_id: COUNTY_ORGANIZATION_ID,
+      organization_name: COUNTY_ORGANIZATION_NAME
     }
   });
 });

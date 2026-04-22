@@ -110,6 +110,10 @@
               <strong id="portal-passaic-title">Passaic County Portal</strong>
               <span class="small-text" id="portal-passaic-text">For county staff reviewing intake, assignments, and system activity.</span>
             </button>
+            <button class="portal-card" type="button" id="portal-organization-btn">
+              <strong id="portal-organization-title">Organization Portal</strong>
+              <span class="small-text" id="portal-organization-text">For partner organizations managing their own case workers and client requests.</span>
+            </button>
           </div>
         </div>
       </section>
@@ -240,6 +244,14 @@
               <span id="create-account-request-worker-label">Request a case worker</span>
             </label>
 
+            <div class="create-account-org-block" id="create-account-org-block">
+              <label for="create-account-organization-select" id="create-account-organization-label">Choose organization</label>
+              <select id="create-account-organization-select">
+                <option value="">Select organization</option>
+              </select>
+              <p class="small-text" id="create-account-organization-note">Choose the organization you want help from if you are requesting a case worker.</p>
+            </div>
+
             <button class="big-btn create-account-submit-btn" type="button" id="create-account-submit-btn">Create Account</button>
             <p class="error-text" id="create-account-error" aria-live="polite"></p>
           </div>
@@ -358,6 +370,22 @@
               </div>
 
               <div class="county-bottom-grid">
+                <div class="county-panel county-organization-panel">
+                  <div class="county-section-head">
+                    <div>
+                      <p class="panel-kicker" id="county-organization-kicker">Organization routing</p>
+                      <strong id="county-organization-title">🏢 Organizations</strong>
+                      <p class="small-text" id="county-organization-subtitle">Select an organization to see its case workers, client count, and incoming requests.</p>
+                    </div>
+                    <span class="county-count-pill" id="county-organization-pill">All organizations</span>
+                  </div>
+                  <div class="county-organization-filter-row">
+                    <label for="county-organization-filter" id="county-organization-filter-label">Filter by organization</label>
+                    <select id="county-organization-filter"></select>
+                  </div>
+                  <div id="county-organization-list"></div>
+                </div>
+
                 <div class="county-panel insight-summary-panel">
                   <p class="panel-kicker" id="county-bottleneck-kicker">System friction</p>
                   <strong id="county-bottleneck-title">⚠️ Bottlenecks</strong>

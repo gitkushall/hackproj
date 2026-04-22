@@ -1,0 +1,34 @@
+[
+  {
+    "id": "ORG-COUNTY",
+    "name": "Passaic County Housing Coordination",
+    "type": "county",
+    "status": "active",
+    "contact_email": "county@idhelp.org",
+    "contact_phone": "(973) 555-0199"
+  },
+  {
+    "id": "ORG-SHELTER",
+    "name": "Paterson Shelter Navigation Team",
+    "type": "shelter",
+    "status": "active",
+    "contact_email": "shelter@idhelp.org",
+    "contact_phone": "(973) 555-0181"
+  },
+  {
+    "id": "ORG-HOSPITAL",
+    "name": "St. Joseph Hospital Support Team",
+    "type": "hospital",
+    "status": "active",
+    "contact_email": "hospital@idhelp.org",
+    "contact_phone": "(973) 555-0182"
+  },
+  {
+    "id": "ORG-NONPROFIT",
+    "name": "Community Document Access Network",
+    "type": "nonprofit",
+    "status": "active",
+    "contact_email": "community@idhelp.org",
+    "contact_phone": "(973) 555-0183"
+  }
+]
