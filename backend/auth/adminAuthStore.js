@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 const path = require("path");
-const { loadJsonArray } = require("../storage/runtimeJsonStore");
+const { loadJsonArray, saveJsonArray } = require("../storage/runtimeJsonStore");
 
 const adminAccountsFilePath = path.join(__dirname, "..", "..", "data", "admin-accounts.json");
 
@@ -53,6 +53,10 @@ const defaultAdminAccounts = [
 
 function loadAdminAccounts() {
   return loadJsonArray(adminAccountsFilePath, defaultAdminAccounts, { key: "admin-accounts" });
+}
+
+function saveAdminAccounts(accounts) {
+  saveJsonArray(adminAccountsFilePath, accounts, { key: "admin-accounts" });
 }
 
 function normalizeEmail(email) {
@@ -115,5 +119,6 @@ module.exports = {
   getDemoAdminAccount,
   getDemoCaseworkerAccounts,
   loadAdminAccounts,
+  saveAdminAccounts,
   verifyAdminLogin
 };

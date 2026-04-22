@@ -1,6 +1,7 @@
 const state = {
   lang: "en",
   authView: "user",
+  loginPortal: "client",
   loginView: "phone",
   createAccountMode: "phone",
   adminRole: "caseworker",
@@ -16,6 +17,7 @@ const state = {
     clearedNotificationCutoff: null,
     refreshIntervalId: null,
     isLoading: false,
+    isCreatingWorker: false,
     isAiPanelOpen: false,
     selectedWorkerId: null
   },
@@ -46,6 +48,7 @@ const state = {
     workers: [],
     clients: [],
     notifications: [],
+    clearedNotificationCutoff: null,
     myCases: [],
     selectedClientId: null,
     fullCaseViewId: null,
@@ -134,6 +137,9 @@ const DEFAULT_DEMO_CASEWORKERS = [
   { workerId: "WK-04", name: "Marcus Hill", email: "marcus.hill@idhelp.org" }
 ];
 
+const COUNTY_NOTIFICATION_CUTOFF_STORAGE_KEY = "passaicCountyNotificationCutoff";
+const WORKER_NOTIFICATION_CUTOFF_STORAGE_PREFIX = "passaicWorkerNotificationCutoff:";
+
 const uiText = {
   en: {
     adminPortal: "Admin Portal",
@@ -141,7 +147,7 @@ const uiText = {
     adminMark: "Admin Login",
     adminEyebrow: "Staff access",
     adminTitle: "Admin sign in",
-    adminSubtitle: "Use your staff email and password to open the staff dashboard.",
+    adminSubtitle: "Choose Passaic County or Case Worker, then log in with your staff email and password.",
     adminRoleCaseworker: "Case Worker",
     adminRolePassaic: "Passaic County",
     adminEmail: "Email",
@@ -159,7 +165,7 @@ const uiText = {
     goBack: "Go Back",
     loginEyebrow: "Housing support access",
     loginTitle: "Log in to your housing portal",
-    loginSubtitle: "Use your phone or email to enter the housing portal.",
+    loginSubtitle: "Client login uses phone or email. Staff can open the admin panel for Passaic County or case worker access.",
     phoneOption: "Phone Login",
     workerOption: "Email Login",
     phone: "Enter your phone number",
@@ -252,7 +258,7 @@ const uiText = {
     adminMark: "Ingreso admin",
     adminEyebrow: "Acceso del personal",
     adminTitle: "Ingreso de admin",
-    adminSubtitle: "Use su correo del personal y su contrasena para abrir el panel del personal.",
+    adminSubtitle: "Elija Passaic County o trabajador social y luego ingrese con su correo y contrasena del personal.",
     adminRoleCaseworker: "Trabajador social",
     adminRolePassaic: "Passaic County",
     adminEmail: "Correo",
@@ -270,7 +276,7 @@ const uiText = {
     goBack: "Volver",
     loginEyebrow: "Acceso a apoyo de vivienda",
     loginTitle: "Inicie sesion en su portal de vivienda",
-    loginSubtitle: "Use su telefono o correo para entrar al portal de vivienda.",
+    loginSubtitle: "El acceso de cliente usa telefono o correo. El personal puede abrir el panel admin para Passaic County o trabajador social.",
     phoneOption: "Ingreso con telefono",
     workerOption: "Ingreso con correo",
     phone: "Ingrese su numero de telefono",
@@ -856,23 +862,21 @@ function openScreen(screenId) {
     screenId = "questions-screen";
   }
 
-  ["login-screen", "create-account-screen", "admin-dashboard-screen", "caseworker-client-screen", "caseworker-documents-screen", "client-documents-screen", "dashboard-screen", "client-progress-screen", "client-chat-screen", "client-notifications-screen", "questions-screen", "result-screen"].forEach((id) => {
+  ["login-screen", "portal-select-screen", "auth-screen", "create-account-screen", "admin-dashboard-screen", "caseworker-client-screen", "caseworker-documents-screen", "client-documents-screen", "dashboard-screen", "client-progress-screen", "client-chat-screen", "client-notifications-screen", "questions-screen", "result-screen"].forEach((id) => {
     document.getElementById(id).classList.toggle("hidden", id !== screenId);
   });
   document.getElementById("login-error").textContent = "";
   document.getElementById("create-account-error").textContent = "";
 
   const isAdminScreen = screenId === "admin-dashboard-screen" || screenId === "caseworker-client-screen" || screenId === "caseworker-documents-screen";
-  const isAdminLogin = screenId === "login-screen" && state.authView === "admin";
-  const isCreateAccountScreen = screenId === "create-account-screen";
-  const postLogin = screenId !== "login-screen" && !isCreateAccountScreen;
-  const showHelp = postLogin && !isAdminScreen && !isAdminLogin;
+  const isPreLoginScreen = ["login-screen", "portal-select-screen", "auth-screen", "create-account-screen"].includes(screenId);
+  const showHelp = !isPreLoginScreen && !isAdminScreen;
   const adminPortalBtn = document.getElementById("admin-portal-btn");
   if (adminPortalBtn) {
-    adminPortalBtn.classList.toggle("hidden", postLogin || isAdminLogin);
+    adminPortalBtn.classList.toggle("hidden", screenId !== "login-screen");
   }
 
-  document.getElementById("skyline").classList.toggle("dimmed", postLogin);
+  document.getElementById("skyline").classList.toggle("dimmed", !isPreLoginScreen);
   const helpButton = document.getElementById("help-float-btn");
   helpButton.classList.toggle("hidden", !showHelp);
   helpButton.hidden = !showHelp;
@@ -895,6 +899,7 @@ function openScreen(screenId) {
   syncCaseWorkerAutoRefresh(screenId);
   syncClientCaseRefresh(screenId);
   syncClientNotificationRefresh(screenId);
+  renderGuidedNavigatorPanels();
 }
 
 function syncAdminLayoutMode(screenId) {
@@ -915,7 +920,6 @@ function syncAdminLayoutMode(screenId) {
 
 function applyLanguage() {
   const t = uiText[state.lang];
-  const isAdmin = state.authView === "admin";
   const selectedWorkerAccount = getCurrentWorker();
   const selectedClientAccount = getCurrentClientAccount();
   const clientFirstName = getFirstName(selectedClientAccount?.name);
@@ -926,9 +930,40 @@ function applyLanguage() {
   });
   document.documentElement.lang = state.lang;
 
-  document.getElementById("login-eyebrow").textContent = isAdmin ? t.adminEyebrow : t.loginEyebrow;
-  document.getElementById("login-title").textContent = isAdmin ? t.adminTitle : t.loginTitle;
-  document.getElementById("login-subtitle").textContent = isAdmin ? t.adminSubtitle : t.loginSubtitle;
+  document.getElementById("login-eyebrow").textContent = state.lang === "es" ? "Portal de apoyo de vivienda" : "Housing support portal";
+  document.getElementById("login-title").textContent = state.lang === "es" ? "Bienvenido a su portal de vivienda" : "Welcome to your housing portal";
+  document.getElementById("login-subtitle").textContent = state.lang === "es"
+    ? "Solicite apoyo de vivienda, mantengase conectado con su trabajador social y reciba ayuda con documentos en un solo lugar."
+    : "Apply for housing support, stay connected with your case worker, and get help with documents in one place.";
+  document.getElementById("landing-login-btn").textContent = state.lang === "es" ? "Ingresar" : "Login";
+  document.getElementById("portal-select-back-btn").textContent = t.goBack;
+  document.getElementById("portal-select-eyebrow").textContent = state.lang === "es" ? "Elija su portal" : "Choose your portal";
+  document.getElementById("portal-select-title").textContent = state.lang === "es" ? "Seleccione donde quiere iniciar sesion" : "Select where you want to sign in";
+  document.getElementById("portal-select-subtitle").textContent = state.lang === "es"
+    ? "Elija el portal que coincide con su rol. Cada opcion abre su propia pagina de acceso."
+    : "Choose the portal that matches your role. Each option opens its own login page.";
+  document.getElementById("portal-client-title").textContent = state.lang === "es" ? "Portal del cliente" : "Client Portal";
+  document.getElementById("portal-client-text").textContent = state.lang === "es" ? "Para clientes y solicitantes que usan acceso por telefono o correo." : "For housing applicants and clients using phone or email login.";
+  document.getElementById("portal-caseworker-title").textContent = state.lang === "es" ? "Portal del trabajador social" : "Case Worker Portal";
+  document.getElementById("portal-caseworker-text").textContent = state.lang === "es" ? "Para trabajadores sociales que administran casos y actualizaciones." : "For case workers managing client cases and updates.";
+  document.getElementById("portal-passaic-title").textContent = state.lang === "es" ? "Portal de Passaic County" : "Passaic County Portal";
+  document.getElementById("portal-passaic-text").textContent = state.lang === "es" ? "Para personal del condado que revisa ingreso, asignaciones y actividad del sistema." : "For county staff reviewing intake, assignments, and system activity.";
+  document.getElementById("auth-back-btn").textContent = t.goBack;
+  document.getElementById("auth-eyebrow").textContent = state.loginPortal === "client"
+    ? (state.lang === "es" ? "Acceso del cliente" : "Client access")
+    : (state.loginPortal === "passaic"
+        ? (state.lang === "es" ? "Acceso de Passaic County" : "Passaic County access")
+        : (state.lang === "es" ? "Acceso del personal" : "Staff access"));
+  document.getElementById("auth-title").textContent = state.loginPortal === "client"
+    ? (state.lang === "es" ? "Ingreso al portal del cliente" : "Client portal login")
+    : (state.loginPortal === "passaic"
+        ? (state.lang === "es" ? "Ingreso de Passaic County" : "Passaic County login")
+        : (state.lang === "es" ? "Ingreso de trabajador social" : "Case Worker login"));
+  document.getElementById("auth-subtitle").textContent = state.loginPortal === "client"
+    ? (state.lang === "es" ? "Ingrese para revisar su caso, documentos y siguientes pasos." : "Sign in to review your case, documents, and next steps.")
+    : (state.loginPortal === "passaic"
+        ? (state.lang === "es" ? "Ingrese para revisar cola, asignaciones y actividad del sistema." : "Sign in to review queue, assignments, and system activity.")
+        : (state.lang === "es" ? "Ingrese para administrar casos, mensajes y actualizaciones del cliente." : "Sign in to manage cases, messages, and client updates."));
   document.getElementById("phone-option-btn").textContent = t.phoneOption;
   document.getElementById("worker-option-btn").textContent = t.workerOption;
   document.getElementById("phone-label").textContent = t.phone;
@@ -958,7 +993,6 @@ function applyLanguage() {
   document.getElementById("create-account-password-input").placeholder = t.createAccountPasswordPlaceholder;
   document.getElementById("worker-login-btn").textContent = t.workerLogin;
   document.getElementById("code-demo-note").textContent = t.codeSent;
-  document.getElementById("admin-login-back-btn").textContent = t.adminBack;
   document.getElementById("admin-google-mark").textContent = t.adminMark;
   document.getElementById("caseworker-role-btn").textContent = t.adminRoleCaseworker;
   document.getElementById("passaic-role-btn").textContent = t.adminRolePassaic;
@@ -973,7 +1007,7 @@ function applyLanguage() {
 
   const adminPortalBtn = document.getElementById("admin-portal-btn");
   if (adminPortalBtn) {
-    adminPortalBtn.textContent = t.adminPortal;
+    adminPortalBtn.textContent = state.lang === "es" ? "Ingresar" : "Login";
   }
   document.getElementById("dashboard-back-btn").textContent = t.goBack;
   document.getElementById("admin-dashboard-back-btn").textContent = t.goBack;
@@ -1129,6 +1163,7 @@ function applyLanguage() {
     : "Most delays are happening at the State ID step due to appointments and transportation issues.";
 
   refreshLocalizedScreens();
+  renderGuidedNavigatorPanels();
 
 }
 
@@ -1175,11 +1210,11 @@ function refreshLocalizedScreens() {
 function setAuthView(view) {
   state.authView = view;
   const showAdmin = view === "admin";
+  const showUser = view === "user";
 
-  document.getElementById("user-login-panel").classList.toggle("hidden", showAdmin);
+  document.getElementById("user-login-panel").classList.toggle("hidden", !showUser);
   document.getElementById("admin-login-panel").classList.toggle("hidden", !showAdmin);
   document.getElementById("login-error").textContent = "";
-  openScreen("login-screen");
 }
 
 function setAdminRole(role) {
@@ -1303,6 +1338,7 @@ function loadIntakeFromCurrentUser() {
 
   setupLocationDropdowns(savedLocations || undefined);
   state.lastPlan = user?.roadmapPlan || null;
+  renderGuidedNavigatorPanels();
 }
 
 function routeClientAfterLogin() {
@@ -1320,6 +1356,8 @@ function routeClientAfterLogin() {
 function routeClientEntry() {
   if (!hasAuthenticatedClientUser()) {
     state.authView = "user";
+    state.loginPortal = "client";
+    applyLanguage();
     openScreen("login-screen");
     return;
   }
@@ -1469,6 +1507,52 @@ function getApiUrl(url) {
   }
 
   return url;
+}
+
+function readStoredNotificationCutoff(key) {
+  try {
+    const rawValue = window.localStorage.getItem(key);
+    if (!rawValue) {
+      return null;
+    }
+
+    const parsed = Number(rawValue);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeStoredNotificationCutoff(key, value) {
+  try {
+    if (!value) {
+      window.localStorage.removeItem(key);
+      return;
+    }
+
+    window.localStorage.setItem(key, String(value));
+  } catch (error) {
+    // Ignore storage failures and keep the in-memory cutoff.
+  }
+}
+
+function getWorkerNotificationCutoffStorageKey(workerId) {
+  return `${WORKER_NOTIFICATION_CUTOFF_STORAGE_PREFIX}${workerId || ""}`;
+}
+
+function filterNotificationsByCutoff(items, cutoff) {
+  if (!cutoff) {
+    return items;
+  }
+
+  return items.filter((item) => {
+    const timestamp = new Date(item.timestamp).getTime();
+    if (Number.isNaN(timestamp)) {
+      return true;
+    }
+
+    return timestamp > cutoff;
+  });
 }
 
 async function fetchJson(url, options = {}) {
@@ -1740,15 +1824,21 @@ function getWorkerProfile(workerId) {
   const worker = state.countyData.workers.find((item) => item.id === workerId);
   if (!worker) return null;
 
-  const clients = state.countyData.clients.filter((client) => client.assigned_worker === workerId);
-  const averageProgress = clients.length
-    ? Math.round(clients.reduce((total, client) => total + getClientProgress(client), 0) / clients.length)
+  const assignedClients = state.countyData.clients.filter((client) => client.assigned_worker === workerId);
+  const activeClients = assignedClients.filter((client) => client.worker_status === "active");
+  const pendingClients = assignedClients.filter((client) => client.worker_status === "pending_approval");
+  const completedCases = Array.isArray(worker.completed_cases) ? worker.completed_cases : [];
+  const averageProgress = activeClients.length
+    ? Math.round(activeClients.reduce((total, client) => total + getClientProgress(client), 0) / activeClients.length)
     : 0;
 
   return {
     worker,
     office: countyWorkerOffices[workerId] || "Passaic County Main Office",
-    clients,
+    assignedClients,
+    activeClients,
+    pendingClients,
+    completedCases,
     averageProgress
   };
 }
@@ -1765,6 +1855,7 @@ function renderWorkers() {
         <div>
           <strong>${escapeHtml(worker.name)}</strong>
           <p class="small-text">Worker ID: ${escapeHtml(worker.id)}</p>
+          <p class="small-text">Handled: ${escapeHtml(String(worker.handled_cases_count || worker.active_cases || 0))} total cases</p>
         </div>
         <div class="worker-load-meta">
           <span class="worker-load-badge ${loadState}">${worker.active_cases} active</span>
@@ -1779,6 +1870,83 @@ function renderWorkers() {
       openWorkerProfile(button.dataset.workerId);
     });
   });
+}
+
+function setCountyAddWorkerMessage(message = "", tone = "") {
+  const messageNode = document.getElementById("county-add-worker-message");
+  if (!messageNode) {
+    return;
+  }
+
+  messageNode.textContent = message;
+  messageNode.classList.remove("success", "error");
+
+  if (tone) {
+    messageNode.classList.add(tone);
+  }
+}
+
+function resetCountyAddWorkerForm() {
+  const form = document.getElementById("county-add-worker-form");
+  if (form) {
+    form.reset();
+  }
+}
+
+async function createCountyCaseWorker() {
+  if (state.countyData.isCreatingWorker) {
+    return;
+  }
+
+  const nameInput = document.getElementById("county-add-worker-name-input");
+  const emailInput = document.getElementById("county-add-worker-email-input");
+  const passwordInput = document.getElementById("county-add-worker-password-input");
+  const workerIdInput = document.getElementById("county-add-worker-id-input");
+  const submitButton = document.getElementById("county-add-worker-submit-btn");
+
+  const payload = {
+    name: nameInput.value.trim(),
+    email: emailInput.value.trim(),
+    password: passwordInput.value.trim(),
+    workerId: workerIdInput.value.trim()
+  };
+
+  if (!payload.name || !payload.email || !payload.password || !payload.workerId) {
+    setCountyAddWorkerMessage("Enter the case worker name, email, password, and WK number.", "error");
+    return;
+  }
+
+  state.countyData.isCreatingWorker = true;
+  submitButton.disabled = true;
+  setCountyAddWorkerMessage("Creating case worker account...", "");
+
+  try {
+    const data = await fetchJson("/api/admin/caseworkers", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    state.countyData.workers = [
+      ...state.countyData.workers.filter((worker) => worker.id !== data.worker.id),
+      data.worker
+    ].sort((left, right) => String(left.id).localeCompare(String(right.id)));
+    state.countyData.recommendedWorkerId = data.worker.id;
+    renderCountyDashboard();
+    resetCountyAddWorkerForm();
+    await Promise.all([
+      loadCountyDashboard(),
+      loadAdminDemoCaseworkers()
+    ]);
+    setCountyAddWorkerMessage(`${data.worker.name} (${data.worker.id}) is now in the case worker list.`, "success");
+  } catch (error) {
+    setCountyAddWorkerMessage(error.message || "Unable to create the case worker account.", "error");
+  } finally {
+    state.countyData.isCreatingWorker = false;
+    submitButton.disabled = false;
+  }
 }
 
 function renderWorkerProfileModal() {
@@ -1812,27 +1980,42 @@ function renderWorkerProfileModal() {
         <p class="small-text">Current Passaic County assignment location.</p>
       </div>
       <div class="county-worker-profile-card">
-        <span class="metric-kicker">Case load</span>
-        <strong>${profile.clients.length}</strong>
-        <p class="small-text">Clients currently assigned to this worker.</p>
+        <span class="metric-kicker">Active cases</span>
+        <strong>${profile.activeClients.length}</strong>
+        <p class="small-text">Cases this worker accepted and is actively handling now.</p>
+      </div>
+      <div class="county-worker-profile-card">
+        <span class="metric-kicker">Handled cases</span>
+        <strong>${profile.worker.handled_cases_count || (profile.activeClients.length + profile.completedCases.length)}</strong>
+        <p class="small-text">Combined total of active and completed cases handled by this worker.</p>
+      </div>
+      <div class="county-worker-profile-card">
+        <span class="metric-kicker">Completed cases</span>
+        <strong>${profile.completedCases.length}</strong>
+        <p class="small-text">Cases finished and saved in county worker history.</p>
+      </div>
+      <div class="county-worker-profile-card">
+        <span class="metric-kicker">Pending approvals</span>
+        <strong>${profile.pendingClients.length}</strong>
+        <p class="small-text">Cases assigned by the county that are still waiting for worker acceptance.</p>
       </div>
       <div class="county-worker-profile-card">
         <span class="metric-kicker">Client progress</span>
         <strong>${profile.averageProgress}%</strong>
-        <p class="small-text">Average case progress across assigned clients.</p>
+        <p class="small-text">Average progress across this worker's current active cases.</p>
       </div>
     </div>
 
     <div class="county-worker-profile-section">
       <div class="county-section-head">
         <div>
-          <p class="panel-kicker">Assigned clients</p>
-          <strong>Current caseload</strong>
-          <p class="small-text">Progress is estimated from case status and remaining document steps.</p>
+          <p class="panel-kicker">Current caseload</p>
+          <strong>Accepted active cases</strong>
+          <p class="small-text">These cases update after the county assigns them and the worker accepts them.</p>
         </div>
       </div>
-      <div class="county-worker-client-list">
-        ${profile.clients.length ? profile.clients.map((client) => `
+      <div class="county-worker-client-list ${profile.activeClients.length > 5 ? "scrollable" : ""}">
+        ${profile.activeClients.length ? profile.activeClients.map((client) => `
           <article class="county-worker-client-card">
             <div class="county-worker-client-top">
               <div>
@@ -1849,7 +2032,34 @@ function renderWorkerProfileModal() {
               <span style="width: ${getClientProgress(client)}%"></span>
             </div>
           </article>
-        `).join("") : '<div class="county-empty-state">No clients assigned to this worker yet.</div>'}
+        `).join("") : '<div class="county-empty-state">No accepted active cases for this worker yet.</div>'}
+      </div>
+    </div>
+
+    <div class="county-worker-profile-section">
+      <div class="county-section-head">
+        <div>
+          <p class="panel-kicker">Completed history</p>
+          <strong>Cases handled by this worker</strong>
+          <p class="small-text">Completed cases stay visible here even after they leave the live county queue.</p>
+        </div>
+      </div>
+      <div class="county-worker-client-list ${profile.completedCases.length > 5 ? "scrollable" : ""}">
+        ${profile.completedCases.length ? profile.completedCases.map((client) => `
+          <article class="county-worker-client-card">
+            <div class="county-worker-client-top">
+              <div>
+                <strong>${escapeHtml(client.client_name)}</strong>
+                <p class="small-text">${escapeHtml(client.city || "Passaic")} • ${escapeHtml(client.client_id)}</p>
+              </div>
+              <span class="client-status-pill completed">Completed</span>
+            </div>
+            <div class="county-worker-progress-row">
+              <span class="small-text">Handled by ${escapeHtml(client.worker_name || profile.worker.name)}</span>
+              <span class="small-text">${escapeHtml(formatLocalizedTime(client.completed_at))}</span>
+            </div>
+          </article>
+        `).join("") : '<div class="county-empty-state">No completed case history for this worker yet.</div>'}
       </div>
     </div>
   `;
@@ -1899,9 +2109,22 @@ function clearCountyNotifications() {
   }, Date.now());
 
   state.countyData.clearedNotificationCutoff = latestTimestamp;
+  writeStoredNotificationCutoff(COUNTY_NOTIFICATION_CUTOFF_STORAGE_KEY, latestTimestamp);
   state.countyData.notifications = [];
   state.countyData.highlightNotificationId = null;
   renderNotifications();
+}
+
+function clearWorkerNotifications() {
+  const latestTimestamp = state.caseWorkerData.notifications.reduce((latest, item) => {
+    const timestamp = new Date(item.timestamp).getTime();
+    return Number.isNaN(timestamp) ? latest : Math.max(latest, timestamp);
+  }, Date.now());
+
+  state.caseWorkerData.clearedNotificationCutoff = latestTimestamp;
+  writeStoredNotificationCutoff(getWorkerNotificationCutoffStorageKey(state.caseWorkerData.currentWorkerId), latestTimestamp);
+  state.caseWorkerData.notifications = [];
+  renderWorkerNotifications();
 }
 
 function renderTransportRequests() {
@@ -2085,18 +2308,10 @@ async function loadCountyDashboard() {
 
     state.countyData.clients = clientsData.clients;
     state.countyData.workers = workersData.workers;
-    state.countyData.notifications = (notificationsData.notifications || []).filter((item) => {
-      if (!state.countyData.clearedNotificationCutoff) {
-        return true;
-      }
-
-      const timestamp = new Date(item.timestamp).getTime();
-      if (Number.isNaN(timestamp)) {
-        return true;
-      }
-
-      return timestamp > state.countyData.clearedNotificationCutoff;
-    });
+    state.countyData.notifications = filterNotificationsByCutoff(
+      notificationsData.notifications || [],
+      state.countyData.clearedNotificationCutoff
+    );
     state.countyData.transportRequests = transportRequestsData.transport_requests;
     state.countyData.recommendedWorkerId =
       clientsData.recommended_worker_id || workersData.recommended_worker_id || null;
@@ -2450,6 +2665,177 @@ function getClientProgressStatus(client) {
   }
 
   return state.lang === "es" ? "Pendiente" : "Pending";
+}
+
+function getGuidedNavigatorDraftAnswers() {
+  const account = getCurrentClientAccount();
+  const savedAnswers = account?.documentAnswers || {};
+
+  return {
+    hasBirth: state.answers.hasBirth !== null ? state.answers.hasBirth : (savedAnswers.hasBirth ?? null),
+    hasSSN: state.answers.hasSSN !== null ? state.answers.hasSSN : (savedAnswers.hasSSN ?? null),
+    hasID: state.answers.hasID !== null ? state.answers.hasID : (savedAnswers.hasID ?? null)
+  };
+}
+
+function buildGuidedNavigatorSteps(context) {
+  const isEs = state.lang === "es";
+
+  if (context === "login" || context === "create-account") {
+    return {
+      kicker: isEs ? "Camino de 4 pasos" : "4-step path",
+      title: "Guided Navigator",
+      subtitle: isEs
+        ? "Cada usuario sigue la misma ruta clara hacia estar listo para vivienda."
+        : "Every user follows the same clear route toward housing readiness.",
+      nextStep: isEs
+        ? "Inicie sesion o cree una cuenta para ver su siguiente paso personal."
+        : "Sign in or create an account to see your personal next step.",
+      steps: [
+        { title: isEs ? "Acta de nacimiento" : "Birth Certificate", note: isEs ? "Primer paso del camino" : "First step in the path", state: "current" },
+        { title: isEs ? "Tarjeta de Seguro Social" : "Social Security Card", note: isEs ? "Se desbloquea despues" : "Unlocked after the first step", state: "upcoming" },
+        { title: isEs ? "ID estatal" : "State ID", note: isEs ? "Necesaria para avanzar" : "Needed to move forward", state: "upcoming" },
+        { title: isEs ? "Listo para vivienda" : "Housing Ready", note: isEs ? "Meta final" : "Final milestone", state: "upcoming" }
+      ]
+    };
+  }
+
+  if (context === "admin") {
+    const stateIdFocus = state.adminRole === "passaic" || state.adminRole === "caseworker";
+
+    return {
+      kicker: state.adminRole === "passaic"
+        ? (isEs ? "Vista del condado" : "County view")
+        : (isEs ? "Vista del personal" : "Staff view"),
+      title: "Guided Navigator",
+      subtitle: state.adminRole === "passaic"
+        ? (isEs ? "Use este flujo para orientar decisiones del condado y reducir bloqueos." : "Use this flow to orient county decisions and reduce bottlenecks.")
+        : (isEs ? "Use este flujo para enfocar la siguiente tarea del cliente." : "Use this flow to focus the client's next task."),
+      nextStep: stateIdFocus
+        ? (isEs ? "La siguiente prioridad mas comun es mover clientes por el paso de ID estatal." : "The most common next priority is moving clients through the State ID step.")
+        : (isEs ? "Revise el siguiente paso pendiente del cliente y mantenga el caso avanzando." : "Review the client's next open step and keep the case moving."),
+      steps: [
+        { title: isEs ? "Acta de nacimiento" : "Birth Certificate", note: isEs ? "Paso base del documento" : "Foundational document step", state: "done" },
+        { title: isEs ? "Tarjeta de Seguro Social" : "Social Security Card", note: isEs ? "Segunda verificacion comun" : "Second common verification step", state: "done" },
+        { title: isEs ? "ID estatal" : "State ID", note: isEs ? "Mayor punto de atasco actual" : "Current highest-friction milestone", state: "current" },
+        { title: isEs ? "Listo para vivienda" : "Housing Ready", note: isEs ? "Resultado al completar documentos" : "Outcome after document readiness", state: "upcoming" }
+      ]
+    };
+  }
+
+  const model = buildClientProgressModel();
+  const answers = getGuidedNavigatorDraftAnswers();
+  const documentStatus = [
+    {
+      key: "birth",
+      title: isEs ? "Acta de nacimiento" : "Birth Certificate",
+      done: answers.hasBirth === true && !model.missingDocuments.includes("birth_certificate")
+    },
+    {
+      key: "ssn",
+      title: isEs ? "Tarjeta de Seguro Social" : "Social Security Card",
+      done: answers.hasSSN === true && !model.missingDocuments.includes("ssn")
+    },
+    {
+      key: "id",
+      title: isEs ? "ID estatal" : "State ID",
+      done: answers.hasID === true && !model.missingDocuments.includes("state_id")
+    }
+  ];
+
+  const allDocumentsComplete = documentStatus.every((step) => step.done);
+  const housingReadyComplete = allDocumentsComplete && (model.client?.status === "completed" || model.client?.worker_status === "completed");
+  let currentAssigned = false;
+
+  const steps = documentStatus.map((step) => {
+    const stepState = step.done ? "done" : (!currentAssigned ? (currentAssigned = true, "current") : "upcoming");
+    return {
+      title: step.title,
+      note: step.done
+        ? (isEs ? "Marcado como completo" : "Marked complete")
+        : (stepState === "current"
+            ? (isEs ? "Este es su siguiente paso" : "This is your next step")
+            : (isEs ? "Seguira despues" : "This comes after the current step")),
+      state: stepState
+    };
+  });
+
+  const housingState = housingReadyComplete ? "done" : (!currentAssigned ? "current" : "upcoming");
+  steps.push({
+    title: isEs ? "Listo para vivienda" : "Housing Ready",
+    note: housingReadyComplete
+      ? (isEs ? "Todos los pasos principales estan completos" : "All major steps are complete")
+      : (housingState === "current"
+          ? (isEs ? "Mantenga su caso avanzando hacia ubicacion" : "Keep your case moving toward placement")
+          : (isEs ? "Se activa despues de completar documentos" : "Unlocked after the document steps")),
+    state: housingState
+  });
+
+  const firstOpenStep = steps.find((step) => step.state === "current");
+  const nextStep = model.nextActions[0]?.detail || (
+    firstOpenStep?.title === (isEs ? "Acta de nacimiento" : "Birth Certificate")
+      ? (isEs ? "Empiece con su acta de nacimiento para abrir el resto del camino." : "Start with your birth certificate to unlock the rest of the path.")
+      : firstOpenStep?.title === (isEs ? "Tarjeta de Seguro Social" : "Social Security Card")
+        ? (isEs ? "Su siguiente paso es conseguir o confirmar su tarjeta de Seguro Social." : "Your next step is to get or confirm your Social Security card.")
+        : firstOpenStep?.title === (isEs ? "ID estatal" : "State ID")
+          ? (isEs ? "Su siguiente paso es terminar el requisito de ID estatal." : "Your next step is finishing the State ID requirement.")
+          : (isEs ? "Ya tiene los documentos principales. Siga con su trabajador social para llegar a vivienda." : "You have the main documents ready. Stay connected with your case worker to reach housing readiness.")
+  );
+
+  const subtitleByContext = {
+    dashboard: isEs ? "Siga la ruta completa y vea su proximo movimiento mas util." : "Follow the full route and see your most useful next move.",
+    progress: isEs ? "Este resumen se actualiza segun su progreso guardado." : "This summary updates from your saved progress.",
+    questions: isEs ? "Sus respuestas cambian esta lista en tiempo real." : "Your answers update this checklist in real time.",
+    result: isEs ? "Su plan generado encaja dentro del mismo flujo guiado." : "Your generated plan fits into the same guided flow."
+  };
+
+  return {
+    kicker: isEs ? "Camino personal" : "Personal path",
+    title: "Guided Navigator",
+    subtitle: subtitleByContext[context] || subtitleByContext.dashboard,
+    nextStep,
+    steps
+  };
+}
+
+function renderGuidedNavigatorPanels() {
+  const isEs = state.lang === "es";
+
+  document.querySelectorAll("[data-guided-context]").forEach((panel) => {
+    const context = panel.dataset.guidedContext || "dashboard";
+    const config = buildGuidedNavigatorSteps(context);
+    const kickerNode = panel.querySelector(".guided-navigator-kicker");
+    const titleNode = panel.querySelector(".guided-navigator-title");
+    const subtitleNode = panel.querySelector(".guided-navigator-subtitle");
+    const nextNode = panel.querySelector(".guided-next-step");
+    const listNode = panel.querySelector(".guided-step-list");
+
+    if (!kickerNode || !titleNode || !subtitleNode || !nextNode || !listNode) {
+      return;
+    }
+
+    kickerNode.textContent = config.kicker;
+    titleNode.textContent = config.title;
+    subtitleNode.textContent = config.subtitle;
+    nextNode.textContent = config.nextStep;
+    listNode.innerHTML = config.steps.map((step, index) => {
+      const pill = step.state === "done"
+        ? (isEs ? "Completo" : "Complete")
+        : (step.state === "current" ? (isEs ? "Siguiente" : "Next") : (isEs ? "Pendiente" : "Pending"));
+      const icon = step.state === "done" ? "✓" : String(index + 1);
+
+      return `
+        <article class="guided-step-item ${step.state}">
+          <span class="guided-step-badge" aria-hidden="true">${icon}</span>
+          <div class="guided-step-copy">
+            <strong>${escapeHtml(step.title)}</strong>
+            <span>${escapeHtml(step.note)}</span>
+          </div>
+          <span class="guided-step-pill">${escapeHtml(pill)}</span>
+        </article>
+      `;
+    }).join("");
+  });
 }
 
 function buildClientProgressModel() {
@@ -3566,6 +3952,12 @@ function renderWorkerNotifications() {
   }).join("");
 }
 
+function syncWorkerNotificationCutoff() {
+  state.caseWorkerData.clearedNotificationCutoff = readStoredNotificationCutoff(
+    getWorkerNotificationCutoffStorageKey(state.caseWorkerData.currentWorkerId)
+  );
+}
+
 function loadMyCases() {
   state.caseWorkerData.myCases = state.caseWorkerData.clients.filter((client) => (
     isAssignedToCurrentWorker(client) &&
@@ -4207,6 +4599,7 @@ function renderCaseWorkerDashboard() {
 
 async function loadCaseWorkerDashboard() {
   try {
+    syncWorkerNotificationCutoff();
     const [clientsData, workersData, notificationsData] = await Promise.all([
       fetchJson("/api/clients"),
       fetchJson("/api/workers"),
@@ -4215,7 +4608,10 @@ async function loadCaseWorkerDashboard() {
 
     state.caseWorkerData.clients = clientsData.clients;
     state.caseWorkerData.workers = workersData.workers;
-    state.caseWorkerData.notifications = notificationsData.notifications;
+    state.caseWorkerData.notifications = filterNotificationsByCutoff(
+      notificationsData.notifications || [],
+      state.caseWorkerData.clearedNotificationCutoff
+    );
 
     const selectedStillExists = state.caseWorkerData.clients.some((client) => client.id === state.caseWorkerData.selectedClientId);
     if (!selectedStillExists) {
@@ -4353,6 +4749,7 @@ function startOver() {
   document.getElementById("current-city").value = "";
   document.getElementById("current-same-as-birth-input").checked = false;
   setupLocationDropdowns();
+  renderGuidedNavigatorPanels();
   openScreen("questions-screen");
 }
 
@@ -4366,6 +4763,7 @@ function attachChoiceHandlers() {
         state.answers[key] = button.dataset.value === "true";
         row.querySelectorAll(".choice-btn").forEach((innerBtn) => innerBtn.classList.remove("active"));
         button.classList.add("active");
+        renderGuidedNavigatorPanels();
       });
     });
   });
@@ -4598,7 +4996,9 @@ function bindEvents() {
   });
 
   document.getElementById("create-account-back-btn").addEventListener("click", () => {
-    openScreen("login-screen");
+    state.loginPortal = "client";
+    setAuthView("user");
+    openScreen("auth-screen");
   });
 
   document.getElementById("create-account-phone-mode-btn").addEventListener("click", () => {
@@ -4630,18 +5030,41 @@ function bindEvents() {
   const adminPortalBtn = document.getElementById("admin-portal-btn");
   if (adminPortalBtn) {
     adminPortalBtn.addEventListener("click", () => {
-      setAuthView("admin");
-      setAdminRole("caseworker");
-      if (!state.adminDemoWorkers.length) {
-        void loadAdminDemoCaseworkers();
-      }
-      document.getElementById("admin-email-input").focus();
+      openScreen("portal-select-screen");
     });
   }
-
-  document.getElementById("admin-login-back-btn").addEventListener("click", () => {
+  document.getElementById("landing-login-btn").addEventListener("click", () => {
+    openScreen("portal-select-screen");
+  });
+  document.getElementById("portal-select-back-btn").addEventListener("click", () => {
+    openScreen("login-screen");
+  });
+  document.getElementById("portal-client-btn").addEventListener("click", () => {
+    state.loginPortal = "client";
     setAuthView("user");
     setLoginView("phone");
+    applyLanguage();
+    openScreen("auth-screen");
+    document.getElementById("phone-input").focus();
+  });
+  document.getElementById("portal-caseworker-btn").addEventListener("click", () => {
+    state.loginPortal = "caseworker";
+    setAuthView("admin");
+    setAdminRole("caseworker");
+    applyLanguage();
+    openScreen("auth-screen");
+    document.getElementById("admin-email-input").focus();
+  });
+  document.getElementById("portal-passaic-btn").addEventListener("click", () => {
+    state.loginPortal = "passaic";
+    setAuthView("admin");
+    setAdminRole("passaic");
+    applyLanguage();
+    openScreen("auth-screen");
+    document.getElementById("admin-email-input").focus();
+  });
+  document.getElementById("auth-back-btn").addEventListener("click", () => {
+    openScreen("portal-select-screen");
   });
 
   document.getElementById("caseworker-role-btn").addEventListener("click", () => {
@@ -4942,6 +5365,11 @@ function bindEvents() {
     loadCountyDashboard();
   });
   document.getElementById("county-clear-notifications-btn").addEventListener("click", clearCountyNotifications);
+  document.getElementById("worker-clear-notifications-btn").addEventListener("click", clearWorkerNotifications);
+  document.getElementById("county-add-worker-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    void createCountyCaseWorker();
+  });
 
   document.getElementById("county-worker-modal-close-btn").addEventListener("click", closeWorkerProfile);
   document.getElementById("county-worker-modal").addEventListener("click", (event) => {
@@ -4969,6 +5397,8 @@ async function initializeApp() {
   setAuthView("user");
   setAdminRole("caseworker");
   setLoginView("phone");
+  state.countyData.clearedNotificationCutoff = readStoredNotificationCutoff(COUNTY_NOTIFICATION_CUTOFF_STORAGE_KEY);
+  syncWorkerNotificationCutoff();
   await loadAdminDemoCaseworkers();
   applyLanguage();
   const restored = await restoreClientSession();

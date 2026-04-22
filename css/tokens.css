@@ -1,15 +1,15 @@
 :root {
-  --bg: #f5f2e8;
-  --bg-deep: #f0e7d4;
-  --card: rgba(255, 252, 246, 0.9);
-  --card-solid: #fffaf2;
-  --text: #243127;
-  --muted: #5f6f63;
-  --border: rgba(103, 125, 105, 0.22);
-  --accent: #2f6c4f;
-  --accent-dark: #214e39;
-  --accent-soft: #deeadf;
-  --green: #3a7f4c;
+  --bg: #f4f8fc;
+  --bg-deep: #e7eef7;
+  --card: rgba(255, 255, 255, 0.9);
+  --card-solid: #ffffff;
+  --text: #1d2d44;
+  --muted: #5b6c82;
+  --border: rgba(107, 132, 170, 0.22);
+  --accent: #2552a1;
+  --accent-dark: #1d417f;
+  --accent-soft: #eaf2fd;
+  --green: #2552a1;
   --error: #a7372d;
   --shadow: 0 24px 60px rgba(67, 78, 61, 0.16);
 }

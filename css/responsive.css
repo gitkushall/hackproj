@@ -10,6 +10,10 @@
     gap: 18px;
   }
 
+  .create-account-screen-shell {
+    grid-template-columns: 1fr;
+  }
+
   .login-copy {
     min-height: auto;
     padding: 22px 20px;
@@ -30,7 +34,10 @@
   .caseworker-system-grid,
   .assign-row,
   .admin-ai-form,
-  .dashboard-head {
+  .dashboard-head,
+  .landing-story-grid,
+  .landing-detail-grid,
+  .portal-select-grid {
     grid-template-columns: 1fr;
   }
 
@@ -42,6 +49,7 @@
   .county-section-head,
   .client-request-head,
   .worker-load-card,
+  .county-worker-profile-head,
   .worker-client-head,
   .worker-detail-header,
   .worker-detail-actions,
@@ -63,6 +71,8 @@
   .document-page-grid,
   .document-file-grid,
   .client-document-card-grid,
+  .county-worker-profile-grid,
+  .county-add-worker-grid,
   .worker-chat-compose-rich,
   .client-chat-layout {
     grid-template-columns: 1fr;
@@ -87,6 +97,14 @@
   .client-progress-hero {
     flex-direction: column;
   }
+
+  .guided-step-item {
+    grid-template-columns: auto 1fr;
+  }
+
+  .guided-step-pill {
+    justify-self: start;
+  }
 }
 
 @media (max-width: 640px) {
@@ -106,6 +124,11 @@
   .card {
     padding: 18px;
     border-radius: 22px;
+  }
+
+  .guided-navigator-card,
+  .question-block {
+    padding: 18px;
   }
 
   #login-screen {
@@ -179,6 +202,11 @@
 
   .county-metric-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .dashboard-grid,
+  .client-progress-metric-grid {
+    grid-template-columns: 1fr;
   }
 
   .workspace-modal,

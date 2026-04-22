@@ -36,57 +36,134 @@
       </div>
 
       <section class="card" id="login-screen">
-        <div class="login-shell">
-          <div class="login-copy">
-            <div class="login-copy-topbar">
-              <button class="admin-link-btn login-copy-admin-btn" type="button" id="admin-portal-btn">Admin Portal</button>
+        <div class="landing-shell">
+          <div class="landing-hero">
+            <div class="landing-topbar">
+              <p class="eyebrow" id="login-eyebrow">Housing support portal</p>
+              <button class="admin-link-btn landing-login-btn" type="button" id="admin-portal-btn">Login</button>
             </div>
-            <p class="eyebrow" id="login-eyebrow">Housing support access</p>
-            <h1 id="login-title">Log in to your housing portal</h1>
+            <h1 id="login-title">Welcome to your housing portal</h1>
             <p class="small-text login-intro" id="login-subtitle">
-              Choose the easiest sign-in method to continue your case support.
+              Apply for housing support, stay connected with your case worker, and get help with documents in one place.
             </p>
+            <div class="landing-hero-actions">
+              <button class="big-btn landing-primary-btn" type="button" id="landing-login-btn">Login</button>
+            </div>
           </div>
 
-          <div class="login-panel">
-            <div id="user-login-panel" class="user-login-main">
-                <div class="choice-row" id="login-option-row">
-                  <button class="choice-btn active" type="button" id="phone-option-btn">Phone Login</button>
-                  <button class="choice-btn" type="button" id="worker-option-btn">Email Login</button>
+          <div class="landing-story-grid">
+            <article class="landing-story-card">
+              <strong>Apply for support</strong>
+              <p class="small-text">Use the portal to follow your housing case and understand what comes next.</p>
+            </article>
+            <article class="landing-story-card">
+              <strong>Get document help</strong>
+              <p class="small-text">Track steps for birth certificates, Social Security cards, and State ID support.</p>
+            </article>
+            <article class="landing-story-card">
+              <strong>Stay updated</strong>
+              <p class="small-text">See notifications, progress updates, and messages from your case worker.</p>
+            </article>
+          </div>
+
+          <div class="landing-detail-grid">
+            <section class="landing-detail-panel">
+              <p class="landing-section-kicker">What this portal helps with</p>
+              <h2>Simple support from intake to housing readiness</h2>
+              <p class="small-text">This portal is designed for people who need housing support and document guidance. It keeps the steps clear, simple, and easy to use on a shared device.</p>
+            </section>
+            <section class="landing-detail-panel">
+              <p class="landing-section-kicker">What you can do here</p>
+              <ul class="landing-feature-list">
+                <li>Apply and follow your housing case</li>
+                <li>Check your next document step</li>
+                <li>Message your case worker</li>
+                <li>Review updates and notifications</li>
+              </ul>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="card hidden" id="portal-select-screen">
+        <div class="screen-top-row">
+          <button class="back-link-btn screen-back-btn" type="button" id="portal-select-back-btn">Go Back</button>
+        </div>
+
+        <div class="portal-select-shell">
+          <div>
+            <p class="eyebrow" id="portal-select-eyebrow">Choose your portal</p>
+            <h1 id="portal-select-title">Select where you want to sign in</h1>
+            <p class="small-text" id="portal-select-subtitle">Choose the portal that matches your role. Each option opens its own login page.</p>
+          </div>
+
+          <div class="portal-select-grid">
+            <button class="portal-card" type="button" id="portal-client-btn">
+              <strong id="portal-client-title">Client Portal</strong>
+              <span class="small-text" id="portal-client-text">For housing applicants and clients using phone or email login.</span>
+            </button>
+            <button class="portal-card" type="button" id="portal-caseworker-btn">
+              <strong id="portal-caseworker-title">Case Worker Portal</strong>
+              <span class="small-text" id="portal-caseworker-text">For case workers managing client cases and updates.</span>
+            </button>
+            <button class="portal-card" type="button" id="portal-passaic-btn">
+              <strong id="portal-passaic-title">Passaic County Portal</strong>
+              <span class="small-text" id="portal-passaic-text">For county staff reviewing intake, assignments, and system activity.</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card hidden" id="auth-screen">
+        <div class="screen-top-row">
+          <button class="back-link-btn screen-back-btn" type="button" id="auth-back-btn">Go Back</button>
+        </div>
+
+        <div class="auth-screen-shell">
+          <div>
+            <p class="eyebrow" id="auth-eyebrow">Portal login</p>
+            <h1 id="auth-title">Sign in</h1>
+            <p class="small-text" id="auth-subtitle">Use the login form below to enter your portal.</p>
+          </div>
+
+          <div class="login-panel auth-login-panel">
+            <div id="user-login-panel" class="user-login-main hidden">
+              <div class="choice-row" id="login-option-row">
+                <button class="choice-btn active" type="button" id="phone-option-btn">Phone Login</button>
+                <button class="choice-btn" type="button" id="worker-option-btn">Email Login</button>
+              </div>
+
+              <form id="phone-login-form" novalidate>
+                <label for="phone-input" id="phone-label">Enter your phone number</label>
+                <input id="phone-input" type="tel" inputmode="tel" autocomplete="tel" placeholder="(000) 000-0000" />
+
+                <button class="big-btn" type="button" id="send-code-btn">Send Code</button>
+
+                <div class="hidden" id="code-entry-block">
+                  <label for="code-input" id="code-label">Enter code</label>
+                  <input id="code-input" type="text" inputmode="numeric" maxlength="4" placeholder="1234" />
+                  <p class="demo-note" id="code-demo-note">Check the server console for the OTP code.</p>
+                  <button class="big-btn" type="button" id="verify-code-btn">Verify Code</button>
                 </div>
+              </form>
 
-                <form id="phone-login-form" novalidate>
-                  <label for="phone-input" id="phone-label">Enter your phone number</label>
-                  <input id="phone-input" type="tel" inputmode="tel" autocomplete="tel" placeholder="(000) 000-0000" />
+              <form id="worker-login-form" class="hidden" novalidate>
+                <label for="worker-username-input" id="worker-username-label">Email</label>
+                <input id="worker-username-input" type="email" autocomplete="email" placeholder="name@example.com" />
 
-                  <button class="big-btn" type="button" id="send-code-btn">Send Code</button>
+                <label for="worker-password-input" id="worker-password-label">Password</label>
+                <input id="worker-password-input" type="password" autocomplete="current-password" placeholder="Enter password" />
 
-                  <div class="hidden" id="code-entry-block">
-                    <label for="code-input" id="code-label">Enter code</label>
-                    <input id="code-input" type="text" inputmode="numeric" maxlength="4" placeholder="1234" />
-                    <p class="demo-note" id="code-demo-note">Check the server console for the OTP code.</p>
-                    <button class="big-btn" type="button" id="verify-code-btn">Verify Code</button>
-                  </div>
-                </form>
+                <button class="big-btn" type="submit" id="worker-login-btn">Login</button>
+              </form>
 
-                <form id="worker-login-form" class="hidden" novalidate>
-                  <label for="worker-username-input" id="worker-username-label">Email</label>
-                  <input id="worker-username-input" type="email" autocomplete="email" placeholder="name@example.com" />
-
-                  <label for="worker-password-input" id="worker-password-label">Password</label>
-                  <input id="worker-password-input" type="password" autocomplete="current-password" placeholder="Enter password" />
-
-                  <button class="big-btn" type="submit" id="worker-login-btn">Login</button>
-                </form>
-
-                <button class="secondary-btn create-account-btn" type="button" id="create-account-toggle-btn">Create your account</button>
+              <button class="secondary-btn create-account-btn" type="button" id="create-account-toggle-btn">Create your account</button>
             </div>
 
-            <div class="hidden" id="admin-login-panel">
-              <button class="back-link-btn" type="button" id="admin-login-back-btn">Back to login</button>
+            <div id="admin-login-panel" class="hidden">
               <p class="admin-google-mark" id="admin-google-mark">Admin Login</p>
 
-              <div class="choice-row" id="admin-role-row">
+              <div class="choice-row hidden" id="admin-role-row">
                 <button class="choice-btn active" type="button" id="caseworker-role-btn">Case Worker</button>
                 <button class="choice-btn" type="button" id="passaic-role-btn">Passaic County</button>
               </div>
@@ -209,7 +286,10 @@
                     <strong>🔔 Notifications</strong>
                     <p class="small-text">Updates from clients and Passaic County appear here for this worker.</p>
                   </div>
-                  <span class="county-count-pill" id="worker-notification-count">0 alerts</span>
+                  <div class="county-section-actions">
+                    <span class="county-count-pill" id="worker-notification-count">0 alerts</span>
+                    <button class="secondary-btn county-clear-btn" type="button" id="worker-clear-notifications-btn">Clear</button>
+                  </div>
                 </div>
                 <div class="notification-list" id="worker-notification-list"></div>
               </div>
@@ -323,6 +403,31 @@
                   <span class="county-count-pill" id="county-workers-pill">Balanced queue</span>
                 </div>
                 <div class="worker-load-list" id="worker-load-list"></div>
+                <div class="county-add-worker-panel">
+                  <div class="county-add-worker-head">
+                    <strong id="county-add-worker-title">Add Case Worker</strong>
+                    <p class="small-text" id="county-add-worker-subtitle">Create a new case worker account with a name, email, password, and WK number.</p>
+                  </div>
+                  <form id="county-add-worker-form" novalidate>
+                    <div class="county-add-worker-grid">
+                      <label for="county-add-worker-name-input">Case worker name</label>
+                      <input id="county-add-worker-name-input" type="text" autocomplete="name" placeholder="Jordan Lee" />
+
+                      <label for="county-add-worker-email-input">Case worker email</label>
+                      <input id="county-add-worker-email-input" type="email" autocomplete="email" placeholder="worker@example.com" />
+
+                      <label for="county-add-worker-password-input">Password</label>
+                      <input id="county-add-worker-password-input" type="password" autocomplete="new-password" placeholder="Create password" />
+
+                      <label for="county-add-worker-id-input">WK number</label>
+                      <input id="county-add-worker-id-input" type="text" inputmode="text" autocapitalize="characters" placeholder="WK-05" />
+                    </div>
+                    <div class="county-add-worker-actions">
+                      <button class="secondary-btn county-add-worker-btn" type="submit" id="county-add-worker-submit-btn">Create Case Worker</button>
+                    </div>
+                    <p class="small-text worker-inline-message" id="county-add-worker-message"></p>
+                  </form>
+                </div>
               </div>
 
               <div class="county-panel county-transport-requests-panel">
@@ -387,6 +492,16 @@
             <button class="secondary-btn dashboard-intake-btn" type="button" id="dashboard-continue-btn">Edit Intake</button>
           </div>
         </div>
+
+        <section class="guided-navigator-card guided-navigator-dashboard" data-guided-context="dashboard" aria-label="Guided Navigator">
+          <div class="guided-navigator-head">
+            <p class="guided-navigator-kicker">Your path</p>
+            <h2 class="guided-navigator-title">Guided Navigator</h2>
+            <p class="guided-navigator-subtitle">Follow the document steps and see the clearest next action.</p>
+          </div>
+          <p class="guided-next-step">We will show your next best step here.</p>
+          <div class="guided-step-list"></div>
+        </section>
 
         <div class="dashboard-grid">
           <button class="doc-card" type="button" data-doc="id">
@@ -542,6 +657,16 @@
         <h1 id="main-title">Edit your intake</h1>
         <p class="small-text" id="main-subtitle">Review and update your answers.</p>
 
+        <section class="guided-navigator-card guided-navigator-compact" data-guided-context="questions" aria-label="Guided Navigator">
+          <div class="guided-navigator-head">
+            <p class="guided-navigator-kicker">Step tracker</p>
+            <h2 class="guided-navigator-title">Guided Navigator</h2>
+            <p class="guided-navigator-subtitle">Your answers update the checklist in real time.</p>
+          </div>
+          <p class="guided-next-step">Answer the questions to reveal the next required step.</p>
+          <div class="guided-step-list"></div>
+        </section>
+
         <div class="question-block first-block">
           <p id="q-birth">Do you have a birth certificate?</p>
           <div class="choice-row" data-group="hasBirth">
@@ -598,6 +723,17 @@
         </div>
 
         <h1 id="result-page-title">Your plan</h1>
+
+        <section class="guided-navigator-card guided-navigator-compact guided-navigator-result" data-guided-context="result" aria-label="Guided Navigator">
+          <div class="guided-navigator-head">
+            <p class="guided-navigator-kicker">Plan summary</p>
+            <h2 class="guided-navigator-title">Guided Navigator</h2>
+            <p class="guided-navigator-subtitle">Your generated plan stays aligned with the four housing-readiness steps.</p>
+          </div>
+          <p class="guided-next-step">Review the next step before continuing.</p>
+          <div class="guided-step-list"></div>
+        </section>
+
         <ul id="plan-steps"></ul>
         <button class="big-btn hidden" type="button" id="transport-btn">Get Transportation Help</button>
         <button class="big-btn" type="button" id="plan-dashboard-btn">Continue to Dashboard</button>

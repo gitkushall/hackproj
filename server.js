@@ -5,7 +5,7 @@ const crypto = require("crypto");
 const path = require("path");
 const nodemailer = require("nodemailer");
 const twilio = require("twilio");
-const { getDemoAdminAccount, getDemoCaseworkerAccounts, verifyAdminLogin } = require("./backend/auth/adminAuthStore");
+const { getDemoAdminAccount, getDemoCaseworkerAccounts, loadAdminAccounts, saveAdminAccounts, verifyAdminLogin } = require("./backend/auth/adminAuthStore");
 const { generateAdminInsight } = require("./backend/services/openaiService");
 const { getRuntimeStorageInfo, loadJsonArray, saveJsonArray } = require("./backend/storage/runtimeJsonStore");
 
@@ -41,6 +41,7 @@ const clientNotificationsFilePath = path.join(dataDirectory, "client-notificatio
 const transportRequestsFilePath = path.join(dataDirectory, "transport-requests.json");
 const messagesFilePath = path.join(dataDirectory, "messages.json");
 const clientDocumentsFilePath = path.join(dataDirectory, "client-documents.json");
+const workerCaseHistoryFilePath = path.join(dataDirectory, "worker-case-history.json");
 const COUNTY_ADMIN_ID = "PASSAIC-COUNTY";
 const COUNTY_ADMIN_NAME = "Passaic County";
 
@@ -269,6 +270,8 @@ const defaultNotifications = [
   }
 ];
 
+const defaultWorkerCaseHistory = [];
+
 const defaultTransportRequests = [
   {
     id: "TR-01",
@@ -456,6 +459,55 @@ function buildClientView(client) {
   };
 }
 
+function buildCompletedCaseRecord(client, worker) {
+  return {
+    id: `HC-${client.id}-${worker.id}`,
+    client_id: client.id,
+    client_name: client.name,
+    city: client.city || "",
+    worker_id: worker.id,
+    worker_name: worker.name,
+    completed_at: getTimestamp(),
+    missing_documents: Array.isArray(client.missing_documents) ? [...client.missing_documents] : [],
+    status: "completed"
+  };
+}
+
+function getCompletedCasesForWorker(workerId) {
+  return workerCaseHistory
+    .filter((item) => item.worker_id === workerId)
+    .slice()
+    .sort((left, right) => new Date(right.completed_at) - new Date(left.completed_at));
+}
+
+function buildWorkerView(worker) {
+  const completedCases = getCompletedCasesForWorker(worker.id);
+
+  return {
+    ...worker,
+    completed_cases: completedCases,
+    completed_cases_count: completedCases.length,
+    handled_cases_count: worker.active_cases + completedCases.length
+  };
+}
+
+function recordCompletedWorkerCase(client, worker) {
+  if (!client || !worker) {
+    return;
+  }
+
+  const recordId = `HC-${client.id}-${worker.id}`;
+  const existingIndex = workerCaseHistory.findIndex((item) => item.id === recordId);
+  const nextRecord = buildCompletedCaseRecord(client, worker);
+
+  if (existingIndex >= 0) {
+    workerCaseHistory[existingIndex] = nextRecord;
+    return;
+  }
+
+  workerCaseHistory.unshift(nextRecord);
+}
+
 function touchClientRelationship(client, actor) {
   if (!client) {
     return;
@@ -480,6 +532,7 @@ function saveCountyState() {
   saveJsonArray(workersFilePath, workers, { key: "workers" });
   saveJsonArray(notificationsFilePath, notifications, { key: "notifications" });
   saveJsonArray(transportRequestsFilePath, transportRequests, { key: "transport-requests" });
+  saveJsonArray(workerCaseHistoryFilePath, workerCaseHistory, { key: "worker-case-history" });
 }
 
 function saveClientNotifications() {
@@ -507,6 +560,7 @@ const workers = loadJsonArray(workersFilePath, defaultWorkers, { key: "workers" 
 const notifications = loadJsonArray(notificationsFilePath, defaultNotifications, { key: "notifications" });
 const clientNotifications = loadJsonArray(clientNotificationsFilePath, defaultClientNotifications, { key: "client-notifications" });
 const transportRequests = loadJsonArray(transportRequestsFilePath, defaultTransportRequests, { key: "transport-requests" });
+const workerCaseHistory = loadJsonArray(workerCaseHistoryFilePath, defaultWorkerCaseHistory, { key: "worker-case-history" });
 const clientAccounts = loadJsonArray(clientAccountsFilePath, defaultClientAccounts, { key: "client-accounts" });
 const messages = loadJsonArray(messagesFilePath, defaultMessages, { key: "messages" });
 const clientDocuments = loadJsonArray(clientDocumentsFilePath, defaultClientDocuments, { key: "client-documents" });
@@ -538,6 +592,22 @@ function getRecommendedWorker() {
   return workers.reduce((lowest, worker) => (
     worker.active_cases < lowest.active_cases ? worker : lowest
   ), workers[0]);
+}
+
+function getNextWorkerIdNumber() {
+  return workers.reduce((maxId, worker) => {
+    const numericId = Number.parseInt(String(worker.id || "").replace("WK-", ""), 10);
+    return Number.isNaN(numericId) ? maxId : Math.max(maxId, numericId);
+  }, 0) + 1;
+}
+
+function formatWorkerId(value) {
+  const raw = String(value || "").trim().toUpperCase();
+  if (!raw) {
+    return `WK-${String(getNextWorkerIdNumber()).padStart(2, "0")}`;
+  }
+
+  return raw.startsWith("WK-") ? raw : `WK-${raw}`;
 }
 
 function normalizePhone(phone) {
@@ -1268,7 +1338,7 @@ app.get("/api/workers", (_req, res) => {
   syncClientsFromAccounts();
   syncWorkerActiveCaseCounts();
   res.json({
-    workers,
+    workers: workers.map(buildWorkerView),
     recommended_worker_id: getRecommendedWorker().id
   });
 });
@@ -1554,6 +1624,73 @@ app.get("/api/admin/demo-accounts", (req, res) => {
   });
 });
 
+app.post("/api/admin/caseworkers", (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  const email = String(req.body?.email || "").trim();
+  const password = String(req.body?.password || "").trim();
+  const requestedWorkerId = String(req.body?.workerId || "").trim();
+  const workerId = formatWorkerId(requestedWorkerId);
+
+  if (!name || !email || !password || !workerId) {
+    res.status(400).json({ success: false, error: "Name, email, password, and caseworker number are required." });
+    return;
+  }
+
+  if (workers.some((worker) => String(worker.id).toUpperCase() === workerId)) {
+    res.status(400).json({ success: false, error: "That caseworker number already exists." });
+    return;
+  }
+
+  const normalizedEmail = normalizeEmail(email);
+  const adminAccounts = loadAdminAccounts();
+  if (adminAccounts.some((account) => normalizeEmail(account.email) === normalizedEmail)) {
+    res.status(400).json({ success: false, error: "That login email is already in use." });
+    return;
+  }
+
+  const { salt, hash } = hashPassword(password);
+  const newWorker = enrichWorkerProfile({
+    id: workerId,
+    name,
+    active_cases: 0,
+    title: "Case Worker",
+    phone: "",
+    email: normalizedEmail,
+    office: "Passaic County Main Office",
+    languages: ["English"],
+    specialties: ["Case management"],
+    bio: `${name} supports Passaic County clients and case follow-up.`,
+    availability: "Mon-Fri, 9:00 AM - 5:00 PM",
+    pronouns: ""
+  });
+
+  workers.push(newWorker);
+  adminAccounts.push({
+    id: `AD-${String(adminAccounts.length + 1).padStart(2, "0")}`,
+    role: "caseworker",
+    workerId,
+    name,
+    email: normalizedEmail,
+    passwordSalt: salt,
+    passwordHash: hash
+  });
+
+  saveAdminAccounts(adminAccounts);
+  pushCountyNotification(`New caseworker account created for ${name} (${workerId})`, workerId);
+  saveCountyState();
+
+  res.json({
+    success: true,
+    worker: buildWorkerView(newWorker),
+    account: {
+      role: "caseworker",
+      workerId,
+      name,
+      email: normalizedEmail
+    }
+  });
+});
+
 app.post("/api/admin/demo-login", (req, res) => {
   const role = String(req.body?.role || "caseworker").trim();
   const workerId = String(req.body?.workerId || "").trim();
@@ -1816,6 +1953,7 @@ app.post("/api/case-status", async (req, res) => {
     });
   } else if (action === "complete") {
     pushCountyNotification(`${worker.name} completed ${client.name}`, worker.id);
+    recordCompletedWorkerCase(client, worker);
     removeClientFromSystem(clientId);
   } else if (action === "reject") {
     client.worker_status = "rejected";
