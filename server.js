@@ -424,11 +424,32 @@ function getTimestamp() {
   return new Date().toISOString();
 }
 
-function pushCountyNotification(message, workerId = "system", timestamp = getTimestamp()) {
+function getOrganizationIdFromWorker(workerId) {
+  const worker = workers.find((item) => item.id === workerId);
+  return worker?.organization_id || null;
+}
+
+function getClientOrganizationIds(client) {
+  return new Set([
+    client?.requested_agency_id,
+    client?.accepted_agency_id,
+    client?.assigned_worker_organization_id,
+    getOrganizationIdFromWorker(client?.assigned_worker)
+  ].filter(Boolean));
+}
+
+function clientBelongsToOrganization(client, organizationId) {
+  return !organizationId || getClientOrganizationIds(client).has(organizationId);
+}
+
+function pushCountyNotification(message, workerId = "system", timestamp = getTimestamp(), options = {}) {
+  const organizationId = options.organization_id || getOrganizationIdFromWorker(workerId) || null;
+
   notifications.unshift({
     id: `NT-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
     message,
     worker_id: workerId,
+    organization_id: organizationId,
     timestamp
   });
 }
@@ -1443,7 +1464,9 @@ function addAccountCreationNotification(account, requestCaseWorker) {
     : "";
   const message = `New portal account: ${account.name}. Case worker requested: ${requestCaseWorker ? "Yes" : "No"}.${organizationLabel}`;
 
-  pushCountyNotification(message);
+  pushCountyNotification(message, "system", getTimestamp(), {
+    organization_id: account.requestedAgencyId || null
+  });
 }
 
 function markClientNotificationsAsRead(clientId) {
@@ -1562,35 +1585,121 @@ function createPortalHelpFallback(questionRaw, language = "en") {
     : "I'm Portal Help. I can help with login, documents, transportation, notifications, and portal steps. For questions or changes about your case, use the case worker chat.";
 }
 
-app.get("/api/clients", (_req, res) => {
+function normalizeOrganizationFilter(req) {
+  return String(req.query.organization_id || "").trim();
+}
+
+function getRecommendedWorkerForOrganization(organizationId) {
+  syncWorkerActiveCaseCounts();
+  const eligibleWorkers = organizationId
+    ? workers.filter((worker) => worker.organization_id === organizationId)
+    : workers;
+
+  if (!eligibleWorkers.length) {
+    return null;
+  }
+
+  return eligibleWorkers.reduce((lowest, worker) => (
+    worker.active_cases < lowest.active_cases ? worker : lowest
+  ), eligibleWorkers[0]);
+}
+
+function notificationBelongsToOrganization(notification, organizationId) {
+  if (!organizationId) {
+    return true;
+  }
+
+  if (notification.organization_id === organizationId) {
+    return true;
+  }
+
+  const workerOrganizationId = getOrganizationIdFromWorker(notification.worker_id);
+  if (workerOrganizationId === organizationId) {
+    return true;
+  }
+
+  const organization = agencies.find((agency) => agency.id === organizationId) || null;
+  if (
+    notification.message &&
+    notification.message.includes("Organization selected:") &&
+    organization?.name &&
+    !notification.message.includes(organization.name)
+  ) {
+    return false;
+  }
+
+  const matchingClient = clients.find((client) => (
+    notification.message &&
+    (notification.message.includes(client.name) || notification.message.includes(client.id))
+  ));
+
+  return matchingClient ? clientBelongsToOrganization(matchingClient, organizationId) : false;
+}
+
+function transportRequestBelongsToOrganization(request, organizationId) {
+  if (!organizationId) {
+    return true;
+  }
+
+  const workerOrganizationId = getOrganizationIdFromWorker(request.worker_id);
+  if (workerOrganizationId === organizationId) {
+    return true;
+  }
+
+  const client = clients.find((item) => item.id === request.client_id);
+  return clientBelongsToOrganization(client, organizationId);
+}
+
+app.get("/api/clients", (req, res) => {
+  const organizationId = normalizeOrganizationFilter(req);
   syncClientsFromAccounts();
   syncAllClientRelationships();
   syncWorkerActiveCaseCounts();
+  const visibleClients = organizationId
+    ? clients.filter((client) => clientBelongsToOrganization(client, organizationId))
+    : clients;
+  const recommendedWorker = getRecommendedWorkerForOrganization(organizationId) || getRecommendedWorker();
+
   res.json({
-    clients: clients.map(buildClientView),
-    recommended_worker_id: getRecommendedWorker().id
+    clients: visibleClients.map(buildClientView),
+    recommended_worker_id: recommendedWorker?.id || null
   });
 });
 
-app.get("/api/workers", (_req, res) => {
+app.get("/api/workers", (req, res) => {
+  const organizationId = normalizeOrganizationFilter(req);
   syncClientsFromAccounts();
   syncWorkerActiveCaseCounts();
+  const visibleWorkers = organizationId
+    ? workers.filter((worker) => worker.organization_id === organizationId)
+    : workers;
+  const recommendedWorker = getRecommendedWorkerForOrganization(organizationId);
+
   res.json({
-    workers: workers.map(buildWorkerView),
-    recommended_worker_id: getRecommendedWorker().id
+    workers: visibleWorkers.map(buildWorkerView),
+    recommended_worker_id: recommendedWorker?.id || getRecommendedWorker().id
   });
 });
 
-app.get("/api/agencies", (_req, res) => {
+app.get("/api/agencies", (req, res) => {
+  const organizationId = normalizeOrganizationFilter(req);
   syncClientsFromAccounts();
+  const visibleAgencies = organizationId
+    ? agencies.filter((agency) => agency.id === organizationId)
+    : agencies;
+
   res.json({
-    agencies: agencies.map(buildAgencyView)
+    agencies: visibleAgencies.map(buildAgencyView)
   });
 });
 
-app.get("/api/notifications", (_req, res) => {
+app.get("/api/notifications", (req, res) => {
+  const organizationId = normalizeOrganizationFilter(req);
   res.json({
-    notifications: notifications.slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    notifications: notifications
+      .filter((notification) => notificationBelongsToOrganization(notification, organizationId))
+      .slice()
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
   });
 });
 
@@ -1626,9 +1735,13 @@ app.post("/api/client-notifications/read-all", (req, res) => {
   res.json({ success: true, unread_count: 0 });
 });
 
-app.get("/api/transport-requests", (_req, res) => {
+app.get("/api/transport-requests", (req, res) => {
+  const organizationId = normalizeOrganizationFilter(req);
   res.json({
-    transport_requests: transportRequests.slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    transport_requests: transportRequests
+      .filter((request) => transportRequestBelongsToOrganization(request, organizationId))
+      .slice()
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
   });
 });
 

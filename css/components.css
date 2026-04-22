@@ -1515,6 +1515,112 @@ textarea:focus {
   padding-right: 6px;
 }
 
+/* Partner organization dashboard: intentionally separate from county command center. */
+#admin-dashboard-screen.organization-mode {
+  --org-ink: #183b32;
+  --org-muted: #587067;
+  --org-line: rgba(35, 83, 70, 0.14);
+  --org-accent: #0f766e;
+  --org-soft: #e7f5ef;
+}
+
+#admin-dashboard-screen.organization-mode .county-hero {
+  border: 1px solid var(--org-line);
+  border-top: 0;
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at 10% 20%, rgba(15, 118, 110, 0.15), transparent 30%),
+    linear-gradient(135deg, #f7fbf6 0%, #eaf6f0 52%, #fdf8ea 100%);
+  box-shadow: 0 28px 70px rgba(22, 66, 52, 0.16);
+}
+
+#admin-dashboard-screen.organization-mode .county-title {
+  max-width: 18ch;
+  color: var(--org-ink);
+  font-family: "Trebuchet MS", "Verdana", sans-serif;
+  letter-spacing: -0.055em;
+}
+
+#admin-dashboard-screen.organization-mode .county-subtitle,
+#admin-dashboard-screen.organization-mode .small-text {
+  color: var(--org-muted);
+}
+
+#admin-dashboard-screen.organization-mode .metric-card,
+#admin-dashboard-screen.organization-mode .county-panel,
+#admin-dashboard-screen.organization-mode .client-request-card,
+#admin-dashboard-screen.organization-mode .worker-load-card,
+#admin-dashboard-screen.organization-mode .notification-card {
+  border: 1px solid var(--org-line);
+  border-radius: 24px;
+  background: rgba(255, 255, 252, 0.9);
+  box-shadow: 0 18px 45px rgba(22, 66, 52, 0.1);
+}
+
+#admin-dashboard-screen.organization-mode .metric-card {
+  border-top: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 252, 0.98), rgba(238, 248, 241, 0.95));
+}
+
+#admin-dashboard-screen.organization-mode .metric-card strong,
+#admin-dashboard-screen.organization-mode .county-section-head strong,
+#admin-dashboard-screen.organization-mode .client-request-head strong,
+#admin-dashboard-screen.organization-mode .worker-load-card strong,
+#admin-dashboard-screen.organization-mode .notification-card strong {
+  color: var(--org-ink);
+}
+
+#admin-dashboard-screen.organization-mode .panel-kicker,
+#admin-dashboard-screen.organization-mode .metric-kicker {
+  color: var(--org-accent);
+}
+
+#admin-dashboard-screen.organization-mode .county-section-head strong {
+  border-left: 0;
+  padding-left: 0;
+}
+
+#admin-dashboard-screen.organization-mode .county-section-head strong::after {
+  content: "";
+  display: block;
+  width: 46px;
+  height: 4px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--org-accent), #d6a73a);
+}
+
+#admin-dashboard-screen.organization-mode .county-refresh-btn,
+#admin-dashboard-screen.organization-mode .assign-worker-btn {
+  border-radius: 999px;
+  background: var(--org-accent);
+  box-shadow: 0 14px 30px rgba(15, 118, 110, 0.22);
+}
+
+#admin-dashboard-screen.organization-mode .county-refresh-btn:hover,
+#admin-dashboard-screen.organization-mode .assign-worker-btn:hover {
+  background: #115e59;
+}
+
+#admin-dashboard-screen.organization-mode .county-count-pill,
+#admin-dashboard-screen.organization-mode .worker-recommended-flag,
+#admin-dashboard-screen.organization-mode .document-tag {
+  border-color: rgba(15, 118, 110, 0.16);
+  background: var(--org-soft);
+  color: #115e59;
+}
+
+#admin-dashboard-screen.organization-mode .county-clear-btn {
+  border-color: rgba(15, 118, 110, 0.22);
+  color: var(--org-accent);
+}
+
+#admin-dashboard-screen.organization-mode .notification-card-new {
+  border-color: rgba(15, 118, 110, 0.18);
+  background: #edf8f4;
+  box-shadow: 0 14px 34px rgba(15, 118, 110, 0.12);
+}
+
 #worker-notification-list {
   max-height: 420px;
   overflow-y: auto;
