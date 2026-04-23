@@ -50,8 +50,12 @@ function getStorageMode() {
     return configured;
   }
 
-  if (process.env.VERCEL || process.env.NODE_ENV === "production") {
-    return "memory";
+  if (process.env.VERCEL) {
+    return getDatabaseSync() ? "tmp" : "memory";
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    return getDatabaseSync() ? "filesystem" : "memory";
   }
 
   return "filesystem";
