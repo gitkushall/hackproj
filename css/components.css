@@ -989,6 +989,19 @@ textarea:focus {
   border-top: 4px solid #5e7b97;
 }
 
+.county-transport-links {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.county-transport-links .worker-link-btn {
+  width: auto;
+  min-height: 40px;
+  padding: 10px 14px;
+}
+
 #admin-dashboard-screen.county-mode .insight-summary-panel {
   border-top: 4px solid #b97a3b;
 }
