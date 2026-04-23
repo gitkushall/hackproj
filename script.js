@@ -90,6 +90,7 @@ const state = {
 
 let activeScreenId = "login-screen";
 const COUNTY_ORGANIZATION_ID = "ORG-COUNTY";
+const ORG_REQUEST_SHADOW_STORAGE_KEY = "org_request_shadow_v1";
 
 const adminCases = {
   caseworker: [
@@ -1841,11 +1842,15 @@ async function createClientAccount() {
       return;
     }
 
-    await fetchJson(route, {
+    const data = await fetchJson(route, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
+
+    if (requestCaseWorker && requestedAgencyId && requestedAgencyId !== COUNTY_ORGANIZATION_ID && data?.user) {
+      upsertShadowOrgRequest(buildShadowClientFromSignup(data.user, requestedAgencyId));
+    }
 
     if (state.createAccountMode === "phone") {
       document.getElementById("phone-input").value = phone;
@@ -1886,6 +1891,100 @@ function getApiUrl(url) {
   }
 
   return url;
+}
+
+function loadShadowOrgRequests() {
+  try {
+    const raw = window.localStorage.getItem(ORG_REQUEST_SHADOW_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveShadowOrgRequests(items) {
+  try {
+    window.localStorage.setItem(ORG_REQUEST_SHADOW_STORAGE_KEY, JSON.stringify(items));
+  } catch (error) {
+    // Ignore storage failures and preserve live app behavior.
+  }
+}
+
+function getShadowClientById(clientId) {
+  return loadShadowOrgRequests().find((item) => item.id === clientId) || null;
+}
+
+function upsertShadowOrgRequest(client) {
+  if (!client?.id) {
+    return;
+  }
+
+  const next = loadShadowOrgRequests().filter((item) => item.id !== client.id);
+  next.unshift({
+    ...client,
+    is_shadow_local: true
+  });
+  saveShadowOrgRequests(next);
+}
+
+function removeShadowOrgRequest(clientId) {
+  saveShadowOrgRequests(loadShadowOrgRequests().filter((item) => item.id !== clientId));
+}
+
+function buildShadowQueueState(client) {
+  if (client.worker_status === "completed" || client.status === "completed") return "completed";
+  if (client.agency_request_status === "pending_review") return "awaiting_agency_response";
+  if (client.agency_request_status === "rejected") return "agency_declined";
+  if (client.worker_status === "pending_approval") return "awaiting_caseworker_response";
+  if (client.worker_status === "active") return "assigned_active";
+  if (client.case_worker_requested) return "awaiting_assignment";
+  return "working_individually";
+}
+
+function mergeShadowClients(apiClients = []) {
+  const shadowClients = loadShadowOrgRequests();
+  if (!shadowClients.length) {
+    return apiClients;
+  }
+
+  const apiIds = new Set(apiClients.map((client) => client.id));
+  const missingShadowClients = shadowClients.filter((client) => !apiIds.has(client.id));
+  return [...missingShadowClients, ...apiClients];
+}
+
+function buildShadowClientFromSignup(user, requestedAgencyId) {
+  const agency = state.countyData.agencies.find((item) => item.id === requestedAgencyId) || null;
+  const isCountyRequest = requestedAgencyId === COUNTY_ORGANIZATION_ID;
+
+  const client = {
+    id: user.clientId,
+    name: user.name,
+    city: "Passaic",
+    missing_documents: [],
+    transportation_needed: false,
+    status: "pending",
+    assigned_worker: null,
+    worker_status: null,
+    created_at: new Date().toISOString(),
+    case_worker_requested: true,
+    requested_agency_id: requestedAgencyId || null,
+    requested_agency_name: agency?.name || user.requestedAgencyName || "",
+    agency_request_status: isCountyRequest ? "accepted" : "pending_review",
+    accepted_agency_id: isCountyRequest ? requestedAgencyId : null,
+    accepted_agency_name: isCountyRequest ? (agency?.name || user.requestedAgencyName || "") : "",
+    assigned_worker_organization_id: null,
+    assigned_worker_organization_name: "",
+    linked_account_id: user.clientId,
+    account_linked: true,
+    account_name: user.name,
+    assigned_worker_name: "",
+    assigned_worker_email: "",
+    is_completed: false
+  };
+
+  client.queue_state = buildShadowQueueState(client);
+  return client;
 }
 
 function readStoredNotificationCutoff(key) {
@@ -3499,7 +3598,7 @@ async function loadCountyDashboard() {
       fetchJson(`/api/agency-tickets${organizationScopeQuery}`)
     ]);
 
-    state.countyData.clients = clientsData.clients || [];
+    state.countyData.clients = mergeShadowClients(clientsData.clients || []);
     state.countyData.workers = workersData.workers || [];
     state.countyData.agencies = agenciesData.agencies || [];
     state.countyData.notifications = filterNotificationsByCutoff(
@@ -3788,6 +3887,30 @@ async function assignClient(clientId) {
     );
     await loadCountyDashboard();
   } catch (error) {
+    const shadowClient = getShadowClientById(clientId);
+    if (shadowClient && state.adminRole === "organization") {
+      shadowClient.assigned_worker = select.value;
+      shadowClient.worker_status = "pending_approval";
+      shadowClient.status = "pending";
+      shadowClient.agency_request_status = "accepted";
+      shadowClient.accepted_agency_id = state.adminAccount?.organization_id || shadowClient.accepted_agency_id;
+      shadowClient.accepted_agency_name = state.adminAccount?.organization_name || shadowClient.accepted_agency_name;
+      shadowClient.assigned_worker_name = selectedWorker?.name || "";
+      shadowClient.assigned_worker_email = selectedWorker?.email || "";
+      shadowClient.assigned_worker_organization_id = selectedWorker?.organization_id || null;
+      shadowClient.assigned_worker_organization_name = selectedWorker?.organization_name || "";
+      shadowClient.queue_state = buildShadowQueueState(shadowClient);
+      upsertShadowOrgRequest(shadowClient);
+      setCountyActionStatus(
+        selectedWorker
+          ? `${selectedWorker.name} was assigned. The case worker must accept or reject the case next.`
+          : "Case worker assigned. The worker must accept or reject the case next.",
+        "success"
+      );
+      await loadCountyDashboard();
+      return;
+    }
+
     setCountyActionStatus(
       error.message === "SERVER_OFFLINE"
         ? showServerOfflineMessage()
@@ -3819,6 +3942,30 @@ async function updateAgencyRequestStatus(clientId, organizationId, action) {
     );
     await loadCountyDashboard();
   } catch (error) {
+    const shadowClient = getShadowClientById(clientId);
+    if (shadowClient && shadowClient.requested_agency_id === organizationId) {
+      shadowClient.agency_request_status = action === "accept" ? "accepted" : "rejected";
+      shadowClient.accepted_agency_id = action === "accept" ? organizationId : null;
+      shadowClient.accepted_agency_name = action === "accept" ? (shadowClient.requested_agency_name || "") : "";
+      shadowClient.assigned_worker = null;
+      shadowClient.worker_status = null;
+      shadowClient.status = "pending";
+      shadowClient.assigned_worker_name = "";
+      shadowClient.assigned_worker_email = "";
+      shadowClient.assigned_worker_organization_id = null;
+      shadowClient.assigned_worker_organization_name = "";
+      shadowClient.queue_state = buildShadowQueueState(shadowClient);
+      upsertShadowOrgRequest(shadowClient);
+      setCountyActionStatus(
+        action === "accept"
+          ? "Request accepted. You can now assign a case worker from this organization."
+          : "Request rejected. The client must choose another organization or return to county review.",
+        "success"
+      );
+      await loadCountyDashboard();
+      return;
+    }
+
     setCountyActionStatus(
       error.message === "SERVER_OFFLINE"
         ? showServerOfflineMessage()
@@ -5348,7 +5495,7 @@ async function loadClientPortalChat() {
       fetchJson("/api/clients"),
       fetchJson("/api/workers")
     ]);
-    state.caseWorkerData.clients = clientsData.clients;
+    state.caseWorkerData.clients = mergeShadowClients(clientsData.clients);
     state.caseWorkerData.workers = workersData.workers || [];
     state.countyData.workers = workersData.workers || state.countyData.workers;
     const currentClient = state.caseWorkerData.clients.find((item) => item.id === state.clientPortalData.currentClientId);
@@ -6259,6 +6406,44 @@ async function updateCaseApproval(clientId, action) {
 
     await loadCaseWorkerDashboard();
   } catch (error) {
+    const shadowClient = getShadowClientById(clientId);
+    const currentWorker = getCurrentWorker();
+    if (shadowClient && currentWorker && shadowClient.assigned_worker === state.caseWorkerData.currentWorkerId) {
+      if (action === "accept") {
+        shadowClient.worker_status = "active";
+        shadowClient.status = "active";
+      } else if (action === "reject") {
+        shadowClient.worker_status = "rejected";
+        shadowClient.status = "pending";
+        shadowClient.assigned_worker = null;
+        shadowClient.assigned_worker_name = "";
+        shadowClient.assigned_worker_email = "";
+        shadowClient.assigned_worker_organization_id = null;
+        shadowClient.assigned_worker_organization_name = "";
+      } else if (action === "complete") {
+        shadowClient.worker_status = "completed";
+        shadowClient.status = "completed";
+      }
+
+      shadowClient.queue_state = buildShadowQueueState(shadowClient);
+      if (action === "complete") {
+        removeShadowOrgRequest(clientId);
+      } else {
+        upsertShadowOrgRequest(shadowClient);
+      }
+
+      setWorkerActionStatus(
+        action === "accept"
+          ? "Case accepted. You can now work the case from this portal."
+          : action === "reject"
+            ? "Case declined. It is now back in queue for reassignment."
+            : "Case marked completed.",
+        "success"
+      );
+      await loadCaseWorkerDashboard();
+      return;
+    }
+
     setWorkerActionStatus(
       error.message === "SERVER_OFFLINE"
         ? showServerOfflineMessage()
