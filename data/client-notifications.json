@@ -1,5 +1,155 @@
 [
   {
+    "id": "CNT-1776957478034-56c897",
+    "client_id": "CL-1020",
+    "title": "New message",
+    "message": "Your case worker sent an image update.",
+    "category": "message",
+    "read": false,
+    "timestamp": "2026-04-23T15:17:58.034Z",
+    "delivery": {
+      "channel": "email",
+      "recipient": "hussaink12@gmail.com",
+      "provider": "console-simulated-email",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1776957472578-a90d57",
+    "client_id": "CL-1020",
+    "title": "New message",
+    "message": "hyalp",
+    "category": "message",
+    "read": false,
+    "timestamp": "2026-04-23T15:17:52.578Z",
+    "delivery": {
+      "channel": "email",
+      "recipient": "hussaink12@gmail.com",
+      "provider": "console-simulated-email",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1776957462413-072bb8",
+    "client_id": "CL-1020",
+    "title": "Case accepted",
+    "message": "Priya Shah accepted your case and started working on it.",
+    "category": "status",
+    "read": false,
+    "timestamp": "2026-04-23T15:17:42.413Z",
+    "delivery": {
+      "channel": "email",
+      "recipient": "hussaink12@gmail.com",
+      "provider": "console-simulated-email",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1776957434632-2ddf9e",
+    "client_id": "CL-1020",
+    "title": "Case worker assigned",
+    "message": "Priya Shah has been assigned to your case.",
+    "category": "assignment",
+    "read": false,
+    "timestamp": "2026-04-23T15:17:14.632Z",
+    "delivery": {
+      "channel": "email",
+      "recipient": "hussaink12@gmail.com",
+      "provider": "console-simulated-email",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1776957324399-1bf6a0",
+    "client_id": "CL-1020",
+    "title": "Notifications are on",
+    "message": "Your request is with St. Joseph Hospital Support Team. They can assign a caseworker next. Future updates will come here and by email.",
+    "category": "account",
+    "read": false,
+    "timestamp": "2026-04-23T15:15:24.399Z",
+    "delivery": {
+      "channel": "email",
+      "recipient": "hussaink12@gmail.com",
+      "provider": "console-simulated-email",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1776955293958-dd28b6",
+    "client_id": "CL-1018",
+    "title": "Case worker assigned",
+    "message": "Sarah Ahmed has been assigned to your case.",
+    "category": "assignment",
+    "read": false,
+    "timestamp": "2026-04-23T14:41:33.958Z",
+    "delivery": {
+      "channel": "email",
+      "recipient": "codex-1776945196@example.com",
+      "provider": "console-simulated-email",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1776953965138-9db6bc",
+    "client_id": "CL-1013",
+    "title": "Case accepted",
+    "message": "Peter Rijal accepted your case and started working on it.",
+    "category": "status",
+    "read": false,
+    "timestamp": "2026-04-23T14:19:25.138Z",
+    "delivery": {
+      "channel": "sms",
+      "recipient": "4444444444",
+      "provider": "console-simulated-sms",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1776953946424-c19bd8",
+    "client_id": "CL-1013",
+    "title": "Case worker assigned",
+    "message": "Peter Rijal has been assigned to your case.",
+    "category": "assignment",
+    "read": false,
+    "timestamp": "2026-04-23T14:19:06.424Z",
+    "delivery": {
+      "channel": "sms",
+      "recipient": "4444444444",
+      "provider": "console-simulated-sms",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1776945234082-44c62a",
+    "client_id": "CL-1019",
+    "title": "Notifications are on",
+    "message": "Your account is ready. Future updates will come here and by email.",
+    "category": "account",
+    "read": false,
+    "timestamp": "2026-04-23T11:53:54.082Z",
+    "delivery": {
+      "channel": "email",
+      "recipient": "codex-1776945234@example.com",
+      "provider": "console-simulated-email",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1776945196182-f79648",
+    "client_id": "CL-1018",
+    "title": "Notifications are on",
+    "message": "Your account is ready. Future updates will come here and by email.",
+    "category": "account",
+    "read": false,
+    "timestamp": "2026-04-23T11:53:16.182Z",
+    "delivery": {
+      "channel": "email",
+      "recipient": "codex-1776945196@example.com",
+      "provider": "console-simulated-email",
+      "status": "simulated"
+    }
+  },
+  {
     "id": "CNT-1776940108011-a9e880",
     "client_id": "CL-1017",
     "title": "Notifications are on",

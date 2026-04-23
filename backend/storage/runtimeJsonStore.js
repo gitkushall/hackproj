@@ -70,6 +70,10 @@ function shouldUseSQLite(mode) {
     return false;
   }
 
+  if (process.env.NODE_ENV !== "production") {
+    return false;
+  }
+
   return Boolean(getDatabaseSync());
 }
 

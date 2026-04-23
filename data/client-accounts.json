@@ -15,7 +15,8 @@
     "intakeLocations": null,
     "roadmapPlan": null,
     "intakeCompletedAt": null,
-    "requestedCaseWorker": false
+    "requestedCaseWorker": false,
+    "shelterAddress": ""
   },
   {
     "clientId": "CL-1012",
@@ -85,7 +86,8 @@
     },
     "intakeCompletedAt": "2026-04-01T02:56:25.585Z",
     "createdAt": "2026-03-26T12:52:58.491Z",
-    "requestedCaseWorker": false
+    "requestedCaseWorker": false,
+    "shelterAddress": ""
   },
   {
     "clientId": "CL-1013",
@@ -155,7 +157,8 @@
     },
     "intakeCompletedAt": "2026-03-26T13:26:51.665Z",
     "createdAt": "2026-03-26T13:25:46.506Z",
-    "requestedCaseWorker": false
+    "requestedCaseWorker": false,
+    "shelterAddress": ""
   },
   {
     "clientId": "CL-1014",
@@ -225,7 +228,8 @@
     },
     "intakeCompletedAt": "2026-03-26T13:28:11.231Z",
     "createdAt": "2026-03-26T13:27:35.701Z",
-    "requestedCaseWorker": false
+    "requestedCaseWorker": false,
+    "shelterAddress": ""
   },
   {
     "clientId": "CL-1015",
@@ -243,7 +247,8 @@
     "roadmapPlan": null,
     "intakeCompletedAt": null,
     "createdAt": "2026-03-31T22:42:26.585Z",
-    "requestedCaseWorker": false
+    "requestedCaseWorker": false,
+    "shelterAddress": ""
   },
   {
     "clientId": "CL-1016",
@@ -302,7 +307,8 @@
       "transportation_needed": true
     },
     "intakeCompletedAt": "2026-04-23T10:21:51.030Z",
-    "createdAt": "2026-04-23T10:19:39.511Z"
+    "createdAt": "2026-04-23T10:19:39.511Z",
+    "shelterAddress": ""
   },
   {
     "clientId": "CL-1017",
@@ -370,6 +376,118 @@
       "transportation_needed": true
     },
     "intakeCompletedAt": "2026-04-23T10:30:31.090Z",
-    "createdAt": "2026-04-23T10:28:28.007Z"
+    "createdAt": "2026-04-23T10:28:28.007Z",
+    "shelterAddress": ""
+  },
+  {
+    "clientId": "CL-1018",
+    "name": "Codex Test",
+    "phone": "",
+    "email": "codex-1776945196@example.com",
+    "passwordHash": "3d0be004e4f8380e4c26b20854f594c6c8640de5bcb4ba4b87d62d003720af1776fc5c440a78b52c7a709e39c55a63f77fd4e880ed3d4b6e2e563ae0a438d801",
+    "passwordSalt": "88d21fd09a7306b0c860c74bdf9ee605",
+    "authMethods": [
+      "email"
+    ],
+    "requestedCaseWorker": false,
+    "requestedAgencyId": null,
+    "requestedAgencyName": "",
+    "hasCompletedIntake": false,
+    "documentAnswers": null,
+    "intakeLocations": null,
+    "roadmapPlan": null,
+    "intakeCompletedAt": null,
+    "createdAt": "2026-04-23T11:53:16.180Z",
+    "shelterAddress": ""
+  },
+  {
+    "clientId": "CL-1019",
+    "name": "Codex Test",
+    "phone": "",
+    "email": "codex-1776945234@example.com",
+    "passwordHash": "783158d016888c00a20a5e5a9cabf1265a0da0cba646c661d9a216fa1458c5698ad892feb67e335c1e4ba31f7ac3121c0f2dff7b0f7fd3034673a8b4fff25d1c",
+    "passwordSalt": "9794a112615c8d8ec16b1c904cd833c1",
+    "authMethods": [
+      "email"
+    ],
+    "requestedCaseWorker": false,
+    "requestedAgencyId": null,
+    "requestedAgencyName": "",
+    "hasCompletedIntake": false,
+    "documentAnswers": null,
+    "intakeLocations": null,
+    "roadmapPlan": null,
+    "intakeCompletedAt": null,
+    "createdAt": "2026-04-23T11:53:54.080Z",
+    "shelterAddress": ""
+  },
+  {
+    "clientId": "CL-1020",
+    "name": "Hussain Khan",
+    "phone": "",
+    "email": "hussaink12@gmail.com",
+    "shelterAddress": "54 n 12 st, paterson, 07522",
+    "passwordHash": "43f36f27010d0170f8f914a7361d2a6c4d6ba8356c501d509a9133017c49b3ec2df97aca3a5a95da2f9cce28dadeceadd515806ad6edcd88a0c355cbbeb69eb4",
+    "passwordSalt": "0fc104ce00e710a7c8804e69a41cafc0",
+    "authMethods": [
+      "email"
+    ],
+    "requestedCaseWorker": true,
+    "requestedAgencyId": "ORG-HOSPITAL",
+    "requestedAgencyName": "St. Joseph Hospital Support Team",
+    "hasCompletedIntake": true,
+    "documentAnswers": {
+      "hasBirth": true,
+      "hasSSN": false,
+      "hasID": false
+    },
+    "intakeLocations": {
+      "birth": {
+        "state": "New Jersey",
+        "county": "Passaic",
+        "city": "Paterson"
+      },
+      "current": {
+        "state": "New Jersey",
+        "county": "Passaic",
+        "city": "Paterson"
+      }
+    },
+    "roadmapPlan": {
+      "steps": [
+        {
+          "text": "You need a Social Security card.",
+          "description": "Visit the official Social Security website to apply for or replace your SSN card.",
+          "actionLabel": "Get Social Security Card",
+          "actionLink": "https://www.ssa.gov/number-card",
+          "actionExternal": true
+        },
+        {
+          "text": "Go to SSA office in Paterson, Passaic County, New Jersey."
+        },
+        {
+          "text": "You need a State ID.",
+          "description": "New Jersey state IDs are issued at 29 MVC Licensing Centers. Use these official links before you go.",
+          "actionLinks": [
+            {
+              "label": "NJ MVC Non-Driver ID",
+              "href": "https://www.nj.gov/mvc/license/nondriverid.htm"
+            },
+            {
+              "label": "NJ MVC Licensing Centers",
+              "href": "https://www.nj.gov/mvc/locations/liccenters.htm"
+            },
+            {
+              "label": "NJ MVC 6 Points of ID",
+              "href": "https://www.nj.gov/mvc/license/6pointid.htm"
+            }
+          ],
+          "actionExternal": true
+        }
+      ],
+      "transportation_needed": true
+    },
+    "intakeCompletedAt": "2026-04-23T15:18:01.945Z",
+    "createdAt": "2026-04-23T15:15:24.396Z"
   }
 ]

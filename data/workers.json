@@ -44,7 +44,7 @@
     "organization_name": "Paterson Shelter Navigation Team",
     "id": "WK-02",
     "name": "Daniel Kim",
-    "active_cases": 2
+    "active_cases": 0
   },
   {
     "title": "Lead Case Worker",
@@ -68,7 +68,7 @@
     "organization_name": "St. Joseph Hospital Support Team",
     "id": "WK-03",
     "name": "Priya Shah",
-    "active_cases": 1
+    "active_cases": 2
   },
   {
     "title": "Client Intake and Outreach Worker",
@@ -108,6 +108,26 @@
       "Case management"
     ],
     "bio": "Kim Karl supports Paterson Shelter Navigation Team clients and case follow-up.",
+    "availability": "Mon-Fri, 9:00 AM - 5:00 PM",
+    "pronouns": "",
+    "organization_id": "ORG-SHELTER",
+    "organization_name": "Paterson Shelter Navigation Team"
+  },
+  {
+    "id": "WK-10",
+    "name": "Peter Rijal",
+    "active_cases": 1,
+    "title": "Case Worker",
+    "phone": "",
+    "email": "peterj@gmail.com",
+    "office": "Passaic County Main Office",
+    "languages": [
+      "English"
+    ],
+    "specialties": [
+      "Case management"
+    ],
+    "bio": "Peter Rijal supports Paterson Shelter Navigation Team clients and case follow-up.",
     "availability": "Mon-Fri, 9:00 AM - 5:00 PM",
     "pronouns": "",
     "organization_id": "ORG-SHELTER",

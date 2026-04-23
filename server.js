@@ -2225,7 +2225,14 @@ app.get("/api/client-notifications", (req, res) => {
   const account = getAuthenticatedAccount(req);
 
   if (!account) {
-    res.status(401).json({ error: "Unauthorized." });
+    // The client may prefetch this endpoint before auth is restored on first load.
+    // Return an empty payload so serverless logs do not fill with expected 401s.
+    res.json({
+      notifications: [],
+      unread_count: 0,
+      delivery_method: "in_app",
+      delivery_target: ""
+    });
     return;
   }
 
@@ -2803,7 +2810,8 @@ app.get("/api/client-service-recommendations", (req, res) => {
   const account = getAuthenticatedAccount(req);
 
   if (!account) {
-    res.status(401).json({ error: "Unauthorized." });
+    // Treat anonymous prefetches as an empty state for the demo experience.
+    res.json({ recommendations: {} });
     return;
   }
 
