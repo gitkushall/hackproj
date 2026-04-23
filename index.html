@@ -303,6 +303,7 @@
                   </div>
                   <span class="county-count-pill worker-active-pill" id="worker-case-count">0 cases</span>
                 </div>
+                <p class="small-text worker-inline-message" id="worker-action-status"></p>
                 <div class="worker-client-list" id="worker-case-list"></div>
               </div>
             </div>
@@ -394,7 +395,20 @@
                   </div>
                   <span class="county-count-pill" id="county-client-count">0 open</span>
                 </div>
+                <p class="small-text worker-inline-message" id="county-action-status"></p>
                 <div class="client-request-list" id="client-request-list"></div>
+              </div>
+
+              <div class="county-panel county-transport-requests-panel">
+                <div class="county-section-head">
+                  <div>
+                    <p class="panel-kicker" id="county-field-support-kicker">Field support</p>
+                    <strong id="county-transport-requests-title">🚗 Transport Requests</strong>
+                    <p class="small-text" id="county-transport-requests-subtitle">Uber or transportation requests sent by case workers.</p>
+                  </div>
+                  <span class="county-count-pill" id="county-transport-pill">Priority</span>
+                </div>
+                <div class="notification-list" id="county-transport-request-list"></div>
               </div>
 
               <div class="county-bottom-grid">
@@ -422,13 +436,6 @@
                     <li id="county-bottleneck-ssn">28% stuck at SSN</li>
                     <li id="county-bottleneck-birth">20% stuck at Birth Certificate</li>
                   </ul>
-                </div>
-
-                <div class="county-panel transport-summary-panel">
-                  <p class="panel-kicker" id="county-transport-impact-kicker">Mobility risk</p>
-                  <strong id="county-transport-impact-title">🚗 Transport Impact</strong>
-                  <p class="info-big-number">37%</p>
-                  <p class="small-text" id="county-transport-impact-note">of users need transportation support and are more likely to miss appointments.</p>
                 </div>
               </div>
             </div>
@@ -458,6 +465,10 @@
                   </div>
                   <span class="county-count-pill" id="county-workers-pill">Balanced queue</span>
                 </div>
+                <div class="county-worker-search-row">
+                  <label for="county-worker-search-input" id="county-worker-search-label">Search case workers</label>
+                  <input id="county-worker-search-input" type="search" placeholder="Search by name or WK number" />
+                </div>
                 <div class="worker-load-list" id="worker-load-list"></div>
                 <div class="county-add-worker-panel">
                   <div class="county-add-worker-head">
@@ -484,18 +495,6 @@
                     <p class="small-text worker-inline-message" id="county-add-worker-message"></p>
                   </form>
                 </div>
-              </div>
-
-              <div class="county-panel county-transport-requests-panel">
-                <div class="county-section-head">
-                  <div>
-                    <p class="panel-kicker" id="county-field-support-kicker">Field support</p>
-                    <strong id="county-transport-requests-title">🚗 Transport Requests</strong>
-                    <p class="small-text" id="county-transport-requests-subtitle">Uber or transportation requests sent by case workers.</p>
-                  </div>
-                  <span class="county-count-pill" id="county-transport-pill">Priority</span>
-                </div>
-                <div class="notification-list" id="county-transport-request-list"></div>
               </div>
 
               <div class="county-panel county-housing-availability-panel">
@@ -561,6 +560,14 @@
             </div>
           </div>
         </div>
+      </section>
+
+      <section class="card hidden" id="organization-stats-screen">
+        <div class="screen-top-row">
+          <button class="back-link-btn screen-back-btn" type="button" id="organization-stats-back-btn">Go Back</button>
+        </div>
+
+        <div class="organization-stats-page" id="organization-stats-page"></div>
       </section>
 
       <section class="card hidden" id="caseworker-client-screen">

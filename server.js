@@ -457,6 +457,42 @@ function pushCountyNotification(message, workerId = "system", timestamp = getTim
   });
 }
 
+function resolveAgencyRequestStatus(client, requestedAgencyId, wantsCaseWorker) {
+  if (!wantsCaseWorker || !requestedAgencyId) {
+    return "not_started";
+  }
+
+  if (requestedAgencyId === COUNTY_ORGANIZATION_ID) {
+    return "accepted";
+  }
+
+  if (["accepted", "rejected", "pending_review"].includes(client?.agency_request_status)) {
+    return client.agency_request_status;
+  }
+
+  return "pending_review";
+}
+
+function resolveAcceptedAgencyId(client, requestedAgencyId, agencyRequestStatus, assignedWorker) {
+  if (!requestedAgencyId) {
+    return assignedWorker?.organization_id || null;
+  }
+
+  if (assignedWorker?.organization_id) {
+    return assignedWorker.organization_id;
+  }
+
+  if (requestedAgencyId === COUNTY_ORGANIZATION_ID) {
+    return requestedAgencyId;
+  }
+
+  if (agencyRequestStatus === "accepted") {
+    return client?.accepted_agency_id || requestedAgencyId;
+  }
+
+  return null;
+}
+
 function syncClientRelationships(client) {
   if (!client) {
     return null;
@@ -464,23 +500,26 @@ function syncClientRelationships(client) {
 
   const linkedAccount = clientAccounts.find((account) => account.clientId === client.id) || null;
   const assignedWorker = workers.find((worker) => worker.id === client.assigned_worker) || null;
-  const assignedAgencyId = assignedWorker?.organization_id || client.accepted_agency_id || client.requested_agency_id || null;
+  const wantsCaseWorker = Boolean(client.case_worker_requested);
+  const agencyRequestStatus = resolveAgencyRequestStatus(client, client.requested_agency_id, wantsCaseWorker);
+  const acceptedAgencyId = resolveAcceptedAgencyId(client, client.requested_agency_id, agencyRequestStatus, assignedWorker);
+  const assignedAgencyId = assignedWorker?.organization_id || acceptedAgencyId || null;
   const assignedAgency = agencies.find((agency) => agency.id === assignedAgencyId) || null;
 
   client.county_id = COUNTY_ADMIN_ID;
   client.county_name = COUNTY_ADMIN_NAME;
   client.requested_agency_id = client.requested_agency_id || null;
   client.requested_agency_name = client.requested_agency_name || "";
-  client.agency_request_status = client.agency_request_status || "not_started";
-  client.accepted_agency_id = client.accepted_agency_id || assignedAgency?.id || null;
-  client.accepted_agency_name = client.accepted_agency_name || assignedAgency?.name || "";
+  client.agency_request_status = agencyRequestStatus;
+  client.accepted_agency_id = acceptedAgencyId;
+  client.accepted_agency_name = acceptedAgencyId ? (assignedAgency?.name || client.accepted_agency_name || "") : "";
   client.linked_account_id = linkedAccount?.clientId || client.linked_account_id || client.id;
   client.account_linked = Boolean(linkedAccount);
   client.account_name = linkedAccount?.name || client.name || "";
   client.assigned_worker_name = assignedWorker?.name || "";
   client.assigned_worker_email = assignedWorker?.email || "";
-  client.assigned_worker_organization_id = assignedWorker?.organization_id || client.assigned_worker_organization_id || null;
-  client.assigned_worker_organization_name = assignedWorker?.organization_name || client.assigned_worker_organization_name || "";
+  client.assigned_worker_organization_id = assignedWorker?.organization_id || null;
+  client.assigned_worker_organization_name = assignedWorker?.organization_name || "";
   client.updated_at = client.updated_at || getTimestamp();
 
   return client;
@@ -493,6 +532,14 @@ function isClientCompleted(client) {
 function getClientQueueState(client) {
   if (isClientCompleted(client)) {
     return "completed";
+  }
+
+  if (client?.case_worker_requested && client?.requested_agency_id && client?.agency_request_status === "pending_review") {
+    return "awaiting_agency_response";
+  }
+
+  if (client?.case_worker_requested && client?.requested_agency_id && client?.agency_request_status === "rejected") {
+    return "agency_declined";
   }
 
   if (client?.assigned_worker && client?.worker_status === "pending_approval") {
@@ -1077,6 +1124,7 @@ function ensureClientRecordForAccount(account, requestCaseWorker) {
   const wantsCaseWorker = Boolean(requestCaseWorker ?? account?.requestedCaseWorker);
   const requestedAgencyId = account?.requestedAgencyId || null;
   const requestedAgency = agencies.find((agency) => agency.id === requestedAgencyId) || null;
+  const isCountyRequest = requestedAgencyId === COUNTY_ORGANIZATION_ID;
 
   if (!client) {
     client = {
@@ -1092,9 +1140,9 @@ function ensureClientRecordForAccount(account, requestCaseWorker) {
       case_worker_requested: wantsCaseWorker,
       requested_agency_id: requestedAgencyId,
       requested_agency_name: requestedAgency?.name || "",
-      agency_request_status: wantsCaseWorker && requestedAgencyId ? "pending_review" : "not_started",
-      accepted_agency_id: null,
-      accepted_agency_name: "",
+      agency_request_status: wantsCaseWorker && requestedAgencyId ? (isCountyRequest ? "accepted" : "pending_review") : "not_started",
+      accepted_agency_id: isCountyRequest ? requestedAgencyId : null,
+      accepted_agency_name: isCountyRequest ? (requestedAgency?.name || "") : "",
       assigned_worker_organization_id: null,
       assigned_worker_organization_name: ""
     };
@@ -1106,9 +1154,16 @@ function ensureClientRecordForAccount(account, requestCaseWorker) {
   client.case_worker_requested = wantsCaseWorker;
   client.requested_agency_id = requestedAgencyId;
   client.requested_agency_name = requestedAgency?.name || "";
-  client.agency_request_status = wantsCaseWorker && requestedAgencyId
-    ? (client.agency_request_status === "accepted" ? "accepted" : "pending_review")
-    : "not_started";
+  client.agency_request_status = resolveAgencyRequestStatus(client, requestedAgencyId, wantsCaseWorker);
+  client.accepted_agency_id = resolveAcceptedAgencyId(
+    client,
+    requestedAgencyId,
+    client.agency_request_status,
+    workers.find((worker) => worker.id === client.assigned_worker) || null
+  );
+  client.accepted_agency_name = client.accepted_agency_id
+    ? (agencies.find((agency) => agency.id === client.accepted_agency_id)?.name || client.accepted_agency_name || "")
+    : "";
   touchClientRelationship(client, wantsCaseWorker ? "client_signup_request" : "client_signup");
 }
 
@@ -1988,6 +2043,7 @@ app.post("/api/auth/signup/phone", async (req, res) => {
   const requestCaseWorker = Boolean(req.body?.request_case_worker);
   const requestedAgencyId = String(req.body?.requested_agency_id || "").trim();
   const requestedAgency = agencies.find((agency) => agency.id === requestedAgencyId) || null;
+  const isCountyRequest = requestedAgency?.id === COUNTY_ORGANIZATION_ID;
 
   if (!name || !phone) {
     res.status(400).json({ error: "Enter your name and phone number." });
@@ -2024,7 +2080,9 @@ app.post("/api/auth/signup/phone", async (req, res) => {
   saveClientAccounts(clientAccounts);
   saveCountyState();
   const signupMessage = requestCaseWorker && requestedAgency
-    ? `Your request was sent to ${requestedAgency.name}. Future updates will come here and by text.`
+    ? (isCountyRequest
+        ? `Your request is with ${requestedAgency.name}. Caseworker assignment can begin right away. Future updates will come here and by text.`
+        : `Your request was sent to ${requestedAgency.name}. That agency must accept before caseworker assignment can begin. Future updates will come here and by text.`)
     : requestCaseWorker
       ? "Your case worker request was sent. Future updates will come here and by text."
       : "Your account is ready. Future updates will come here and by text.";
@@ -2047,6 +2105,7 @@ app.post("/api/auth/signup/email", async (req, res) => {
   const requestCaseWorker = Boolean(req.body?.request_case_worker);
   const requestedAgencyId = String(req.body?.requested_agency_id || "").trim();
   const requestedAgency = agencies.find((agency) => agency.id === requestedAgencyId) || null;
+  const isCountyRequest = requestedAgency?.id === COUNTY_ORGANIZATION_ID;
 
   if (!name || !email || !password) {
     res.status(400).json({ error: "Enter your name, email, and password." });
@@ -2084,7 +2143,9 @@ app.post("/api/auth/signup/email", async (req, res) => {
   saveClientAccounts(clientAccounts);
   saveCountyState();
   const signupMessage = requestCaseWorker && requestedAgency
-    ? `Your request was sent to ${requestedAgency.name}. Future updates will come here and by email.`
+    ? (isCountyRequest
+        ? `Your request is with ${requestedAgency.name}. Caseworker assignment can begin right away. Future updates will come here and by email.`
+        : `Your request was sent to ${requestedAgency.name}. That agency must accept before caseworker assignment can begin. Future updates will come here and by email.`)
     : requestCaseWorker
       ? "Your case worker request was sent. Future updates will come here and by email."
       : "Your account is ready. Future updates will come here and by email.";
@@ -2246,7 +2307,11 @@ app.post("/api/admin/caseworkers", (req, res) => {
   const email = String(req.body?.email || "").trim();
   const password = String(req.body?.password || "").trim();
   const requestedWorkerId = String(req.body?.workerId || "").trim();
+  const requestedOrganizationId = String(req.body?.organization_id || COUNTY_ORGANIZATION_ID).trim();
   const workerId = formatWorkerId(requestedWorkerId);
+  const organization = agencies.find((agency) => agency.id === requestedOrganizationId) || agencies.find((agency) => agency.id === COUNTY_ORGANIZATION_ID);
+  const organizationId = organization?.id || COUNTY_ORGANIZATION_ID;
+  const organizationName = organization?.name || COUNTY_ORGANIZATION_NAME;
 
   if (!name || !email || !password || !workerId) {
     res.status(400).json({ success: false, error: "Name, email, password, and caseworker number are required." });
@@ -2276,11 +2341,11 @@ app.post("/api/admin/caseworkers", (req, res) => {
     office: "Passaic County Main Office",
     languages: ["English"],
     specialties: ["Case management"],
-    bio: `${name} supports Passaic County clients and case follow-up.`,
+    bio: `${name} supports ${organizationName} clients and case follow-up.`,
     availability: "Mon-Fri, 9:00 AM - 5:00 PM",
     pronouns: "",
-    organization_id: COUNTY_ORGANIZATION_ID,
-    organization_name: COUNTY_ORGANIZATION_NAME
+    organization_id: organizationId,
+    organization_name: organizationName
   });
 
   workers.push(newWorker);
@@ -2290,14 +2355,16 @@ app.post("/api/admin/caseworkers", (req, res) => {
     workerId,
     name,
     email: normalizedEmail,
-    organization_id: COUNTY_ORGANIZATION_ID,
-    organization_name: COUNTY_ORGANIZATION_NAME,
+    organization_id: organizationId,
+    organization_name: organizationName,
     passwordSalt: salt,
     passwordHash: hash
   });
 
   saveAdminAccounts(adminAccounts);
-  pushCountyNotification(`New caseworker account created for ${name} (${workerId})`, workerId);
+  pushCountyNotification(`New caseworker account created for ${name} (${workerId}) at ${organizationName}`, workerId, getTimestamp(), {
+    organization_id: organizationId
+  });
   saveCountyState();
 
   res.json({
@@ -2308,8 +2375,8 @@ app.post("/api/admin/caseworkers", (req, res) => {
       workerId,
       name,
       email: normalizedEmail,
-      organization_id: COUNTY_ORGANIZATION_ID,
-      organization_name: COUNTY_ORGANIZATION_NAME
+      organization_id: organizationId,
+      organization_name: organizationName
     }
   });
 });
@@ -2542,12 +2609,27 @@ app.get("/api/worker-notifications", (req, res) => {
 });
 
 app.post("/api/assign", async (req, res) => {
-  const { client_id: clientId, worker_id: workerId } = req.body || {};
+  const { client_id: clientId, worker_id: workerId, organization_id: organizationId } = req.body || {};
   const client = clients.find((item) => item.id === clientId);
   const worker = workers.find((item) => item.id === workerId);
 
   if (!client || !worker) {
     res.status(400).json({ error: "Client or worker not found." });
+    return;
+  }
+
+  if (client.requested_agency_id && client.requested_agency_id !== COUNTY_ORGANIZATION_ID && client.agency_request_status !== "accepted") {
+    res.status(400).json({ error: "The requested agency must accept this client before a caseworker can be assigned." });
+    return;
+  }
+
+  if (client.accepted_agency_id && client.accepted_agency_id !== COUNTY_ORGANIZATION_ID && client.accepted_agency_id !== String(organizationId || "").trim()) {
+    res.status(400).json({ error: "This case must be assigned from the accepted organization portal." });
+    return;
+  }
+
+  if (client.accepted_agency_id && worker.organization_id !== client.accepted_agency_id) {
+    res.status(400).json({ error: "This worker does not belong to the accepted agency for this client." });
     return;
   }
 
@@ -2584,8 +2666,79 @@ app.post("/api/assign", async (req, res) => {
   });
 });
 
+app.post("/api/agency-request-status", async (req, res) => {
+  const { client_id: clientId, organization_id: organizationId, action } = req.body || {};
+  syncClientsFromAccounts();
+  syncAllClientRelationships();
+  const client = clients.find((item) => item.id === clientId);
+  const agency = agencies.find((item) => item.id === organizationId);
+
+  if (!client || !agency) {
+    res.status(400).json({ error: "Client or organization not found." });
+    return;
+  }
+
+  if (client.requested_agency_id !== organizationId) {
+    res.status(400).json({ error: "This client did not request this organization." });
+    return;
+  }
+
+  if (!["accept", "reject"].includes(action)) {
+    res.status(400).json({ error: "Invalid action." });
+    return;
+  }
+
+  if (client.agency_request_status !== "pending_review") {
+    res.status(400).json({ error: "This request is no longer waiting for agency review." });
+    return;
+  }
+
+  if (action === "accept") {
+    client.agency_request_status = "accepted";
+    client.accepted_agency_id = organizationId;
+    client.accepted_agency_name = agency.name;
+    client.status = "pending";
+    client.worker_status = null;
+    client.assigned_worker = null;
+    touchClientRelationship(client, "agency_accept");
+    pushCountyNotification(`${agency.name} accepted ${client.name}'s request`, "system", getTimestamp(), {
+      organization_id: organizationId
+    });
+    await createClientNotification(client.id, {
+      title: "Agency request accepted",
+      message: `${agency.name} accepted your request. They can now assign a caseworker.`,
+      category: "status"
+    });
+  } else {
+    client.agency_request_status = "rejected";
+    client.accepted_agency_id = null;
+    client.accepted_agency_name = "";
+    client.assigned_worker = null;
+    client.worker_status = null;
+    client.status = "pending";
+    touchClientRelationship(client, "agency_reject");
+    pushCountyNotification(`${agency.name} declined ${client.name}'s request`, "system", getTimestamp(), {
+      organization_id: organizationId
+    });
+    await createClientNotification(client.id, {
+      title: "Agency request declined",
+      message: `${agency.name} declined your request. Please choose another agency or contact the county.`,
+      category: "status"
+    });
+  }
+
+  saveCountyState();
+  res.json({
+    success: true,
+    client: buildClientView(client)
+  });
+});
+
 app.post("/api/case-status", async (req, res) => {
   const { client_id: clientId, worker_id: workerId, action } = req.body || {};
+  syncClientsFromAccounts();
+  syncAllClientRelationships();
+  syncWorkerActiveCaseCounts();
   const client = clients.find((item) => item.id === clientId);
   const worker = workers.find((item) => item.id === workerId);
 
@@ -2595,6 +2748,11 @@ app.post("/api/case-status", async (req, res) => {
   }
 
   if (action === "accept") {
+    if (client.worker_status !== "pending_approval") {
+      res.status(400).json({ error: "This case is not waiting for worker acceptance." });
+      return;
+    }
+
     client.status = "active";
     client.worker_status = "active";
     client.case_worker_requested = true;
@@ -2607,6 +2765,11 @@ app.post("/api/case-status", async (req, res) => {
       category: "status"
     });
   } else if (action === "complete") {
+    if (client.worker_status !== "active") {
+      res.status(400).json({ error: "Only active cases can be completed." });
+      return;
+    }
+
     pushCountyNotification(`${worker.name} completed ${client.name}`, worker.id);
     recordCompletedWorkerCase(client, worker);
     markClientCaseCompleted(client, worker);
@@ -2616,6 +2779,11 @@ app.post("/api/case-status", async (req, res) => {
       category: "status"
     });
   } else if (action === "reject") {
+    if (client.worker_status !== "pending_approval") {
+      res.status(400).json({ error: "This case is not waiting for worker review." });
+      return;
+    }
+
     client.worker_status = "rejected";
     client.status = "pending";
     client.assigned_worker = null;

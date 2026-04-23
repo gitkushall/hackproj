@@ -1060,6 +1060,37 @@ textarea:focus {
   gap: 14px;
 }
 
+.worker-load-list.scroll-after-five {
+  max-height: 560px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+#admin-dashboard-screen.county-mode .worker-load-list {
+  max-height: 560px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.county-worker-search-row {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 16px;
+}
+
+.county-worker-search-row label {
+  color: #355276;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.county-worker-search-row input {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  background: #ffffff;
+}
+
 .client-request-card,
 .worker-load-card,
 .notification-card {
@@ -1619,6 +1650,196 @@ textarea:focus {
   border-color: rgba(15, 118, 110, 0.18);
   background: #edf8f4;
   box-shadow: 0 14px 34px rgba(15, 118, 110, 0.12);
+}
+
+#admin-dashboard-screen.organization-mode .county-system-grid {
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
+  align-items: start;
+}
+
+#admin-dashboard-screen.organization-mode .county-metric-grid {
+  grid-template-columns: repeat(4, minmax(170px, 1fr));
+  margin-top: 22px;
+}
+
+#admin-dashboard-screen.organization-mode #county-organization-list {
+  grid-template-columns: 1fr;
+}
+
+#admin-dashboard-screen.organization-mode .metric-card {
+  min-height: 190px;
+  padding: 24px;
+}
+
+#admin-dashboard-screen.organization-mode .metric-card strong {
+  font-size: clamp(2.4rem, 4vw, 3.5rem);
+}
+
+#admin-dashboard-screen.organization-mode .county-clients-panel {
+  min-height: 0;
+}
+
+#admin-dashboard-screen.organization-mode #client-request-list {
+  max-height: 620px;
+}
+
+#admin-dashboard-screen.organization-mode .county-bottom-grid {
+  grid-template-columns: 1fr;
+}
+
+#admin-dashboard-screen.organization-mode .insight-summary-panel,
+#admin-dashboard-screen.organization-mode .transport-summary-panel,
+#admin-dashboard-screen.organization-mode .county-housing-availability-panel {
+  display: none;
+}
+
+#admin-dashboard-screen.organization-mode .county-organization-panel {
+  min-height: 210px;
+}
+
+#admin-dashboard-screen.organization-mode .county-workers-panel,
+#admin-dashboard-screen.organization-mode .county-notifications-panel,
+#admin-dashboard-screen.organization-mode .county-transport-requests-panel {
+  min-height: 0;
+}
+
+#organization-stats-screen.county-mode,
+#organization-stats-screen.organization-mode {
+  max-width: 100%;
+  padding: 30px;
+}
+
+.organization-stats-shell {
+  display: grid;
+  gap: 22px;
+}
+
+.organization-stats-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.organization-stats-hero h1 {
+  margin: 0;
+  color: #102a46;
+}
+
+.organization-stats-metrics {
+  margin-top: 0;
+}
+
+.organization-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+
+.organization-stats-panel {
+  min-height: 100%;
+}
+
+.organization-worker-scroll,
+.organization-client-scroll {
+  display: grid;
+  gap: 10px;
+}
+
+.organization-worker-scroll.scrollable,
+.organization-client-scroll.scrollable {
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.organization-stats-breakdown {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.organization-stats-breakdown-card {
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.organization-stats-breakdown-card strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 1.6rem;
+  color: #102a46;
+}
+
+#organization-stats-screen.organization-mode .organization-stats-breakdown-card,
+#organization-stats-screen.organization-mode .org-worker-mini-card,
+#organization-stats-screen.organization-mode .county-worker-client-card {
+  border-color: var(--org-line, rgba(15, 118, 110, 0.16));
+  background: rgba(255, 255, 252, 0.94);
+}
+
+#organization-stats-screen.organization-mode .organization-stats-hero h1,
+#organization-stats-screen.organization-mode .organization-stats-breakdown-card strong {
+  color: var(--org-ink, #183b32);
+}
+
+#organization-stats-screen.organization-mode .metric-card,
+#organization-stats-screen.organization-mode .county-panel {
+  border: 1px solid var(--org-line, rgba(15, 118, 110, 0.16));
+  background: rgba(255, 255, 252, 0.94);
+  box-shadow: 0 18px 45px rgba(22, 66, 52, 0.1);
+}
+
+.org-profile-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+  border-radius: 24px;
+  border: 1px solid var(--org-line, rgba(15, 118, 110, 0.16));
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.84), transparent 34%),
+    var(--org-soft, #e7f5ef);
+}
+
+.org-profile-card > div:first-child strong {
+  display: block;
+  color: var(--org-ink, #183b32);
+  font-size: clamp(1.45rem, 3vw, 2.3rem);
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.org-profile-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(94px, 1fr));
+  gap: 10px;
+  min-width: 230px;
+}
+
+.org-profile-stats span {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--org-ink, #183b32);
+}
+
+.org-profile-stats strong {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.org-profile-stats small {
+  color: var(--org-muted, #587067);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .organization-login-banner {
@@ -4420,6 +4641,11 @@ h2,
   gap: 12px;
 }
 
+#admin-dashboard-screen.county-mode #county-organization-list {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
 .county-organization-card {
   display: flex;
   align-items: flex-start;
@@ -4434,9 +4660,32 @@ h2,
   cursor: pointer;
 }
 
+.org-worker-mini-card {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 13px;
+  border: 1px solid rgba(37, 99, 235, 0.1);
+  border-radius: 16px;
+  background: #ffffff;
+  color: #1f2937;
+  text-align: left;
+  cursor: pointer;
+}
+
+.org-worker-mini-card span {
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
 .county-organization-card.selected {
   border-color: rgba(42, 101, 168, 0.3);
   box-shadow: 0 18px 30px rgba(27, 48, 78, 0.08);
+}
+
+#admin-dashboard-screen.county-mode .county-organization-panel {
+  grid-column: 1 / -1;
 }
 
 .county-organization-meta {
@@ -5049,5 +5298,21 @@ textarea:focus {
 
   .county-ticket-toggle-btn {
     width: 100%;
+  }
+
+  #admin-dashboard-screen.organization-mode .county-system-grid,
+  #admin-dashboard-screen.organization-mode .county-metric-grid,
+  #admin-dashboard-screen.county-mode #county-organization-list,
+  .org-profile-card {
+    grid-template-columns: 1fr;
+  }
+
+  .county-organization-worker-detail {
+    grid-row: auto;
+    grid-column: auto;
+  }
+
+  .org-profile-stats {
+    min-width: 0;
   }
 }
