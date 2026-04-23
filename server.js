@@ -2183,9 +2183,12 @@ app.post("/api/auth/signup/phone", async (req, res) => {
     category: "account"
   });
 
+  const sessionToken = createAuthSession(res, account);
+
   res.json({
     success: true,
-    user: sanitizeClientAccount(account)
+    user: sanitizeClientAccount(account),
+    sessionToken
   });
 });
 
@@ -2244,9 +2247,12 @@ app.post("/api/auth/signup/email", async (req, res) => {
     category: "account"
   });
 
+  const sessionToken = createAuthSession(res, account);
+
   res.json({
     success: true,
-    user: sanitizeClientAccount(account)
+    user: sanitizeClientAccount(account),
+    sessionToken
   });
 });
 

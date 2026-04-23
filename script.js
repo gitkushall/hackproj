@@ -1876,15 +1876,6 @@ async function createClientAccount() {
       upsertShadowOrgRequest(buildShadowClientFromSignup(data.user, requestedAgencyId));
     }
 
-    if (state.createAccountMode === "phone") {
-      document.getElementById("phone-input").value = phone;
-      setLoginView("phone");
-    } else {
-      document.getElementById("worker-username-input").value = email;
-      document.getElementById("worker-password-input").value = "";
-      setLoginView("worker");
-    }
-
     document.getElementById("create-account-name-input").value = "";
     document.getElementById("create-account-phone-input").value = "";
     document.getElementById("create-account-email-input").value = "";
@@ -1892,11 +1883,9 @@ async function createClientAccount() {
     document.getElementById("create-account-request-worker-input").checked = false;
     document.getElementById("create-account-organization-select").value = COUNTY_ORGANIZATION_ID;
     errorBox.textContent = "";
-    openScreen("login-screen");
-    document.getElementById("login-error").textContent =
-      requestCaseWorker
-        ? t.createAccountSuccessRequested
-        : (state.createAccountMode === "phone" ? t.createAccountPhoneSuccess : t.createAccountEmailSuccess);
+    storeClientSessionToken(data.sessionToken || "");
+    document.getElementById("login-error").textContent = "";
+    handleLoggedInUser(data.user);
   } catch (error) {
     errorBox.textContent =
       error.message === "SERVER_OFFLINE" ? showServerOfflineMessage() : error.message;
