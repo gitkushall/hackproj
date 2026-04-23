@@ -278,6 +278,15 @@
           </div>
         </div>
 
+        <div class="organization-login-banner hidden" id="organization-login-banner" hidden>
+          <div>
+            <span class="organization-login-kicker" id="organization-login-kicker">Logged in organization</span>
+            <strong id="organization-login-name">Organization</strong>
+            <p class="small-text" id="organization-login-subtitle">Private workspace for this organization only.</p>
+          </div>
+          <span class="organization-login-badge" id="organization-login-badge">Scoped access</span>
+        </div>
+
         <div class="admin-summary-card">
           <strong id="admin-role-title">Case Worker</strong>
           <span class="small-text" id="admin-role-subtitle">Assigned cases</span>
@@ -333,6 +342,18 @@
             <div class="county-hero-actions">
               <button class="secondary-btn county-refresh-btn" type="button" id="county-refresh-btn">Refresh Data</button>
             </div>
+          </div>
+
+          <div class="county-ticket-alert-panel" id="county-ticket-panel">
+            <div>
+              <p class="panel-kicker" id="county-ticket-alert-kicker">County ticket desk</p>
+              <strong id="county-ticket-alert-title">🎫 Organization Tickets</strong>
+              <p class="small-text" id="county-ticket-alert-subtitle">Open the ticket page for county-organization messages.</p>
+            </div>
+            <button class="secondary-btn county-ticket-open-btn" type="button" id="county-ticket-open-btn">
+              <span id="county-ticket-open-label">Open ticket page</span>
+              <span class="county-ticket-notice" id="county-ticket-open-count">0</span>
+            </button>
           </div>
 
           <div class="county-metric-grid">
@@ -489,6 +510,55 @@
                 <div id="county-housing-availability"></div>
               </div>
             </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="card hidden" id="county-ticket-screen">
+        <div class="screen-top-row">
+          <button class="back-link-btn screen-back-btn" type="button" id="county-ticket-back-btn">Go Back</button>
+        </div>
+
+        <div class="county-ticket-page">
+          <div class="county-ticket-page-head">
+            <div>
+              <p class="panel-kicker" id="county-ticket-kicker">County ticket desk</p>
+              <h1 id="county-ticket-title">🎫 Organization Tickets</h1>
+              <p class="small-text" id="county-ticket-subtitle">Priority-based messages between organizations and Passaic County.</p>
+            </div>
+            <span class="county-ticket-page-badge" id="county-ticket-page-badge">Ticket queue</span>
+          </div>
+
+          <div class="county-ticket-body" id="county-ticket-body">
+            <div class="county-ticket-create-card">
+              <div class="county-ticket-create-grid">
+                <label class="county-only-ticket-field" for="county-ticket-org-select" id="county-ticket-org-label">Send to organization</label>
+                <select class="county-only-ticket-field" id="county-ticket-org-select"></select>
+
+                <label for="county-ticket-priority-select" id="county-ticket-priority-label">Urgency</label>
+                <select id="county-ticket-priority-select">
+                  <option value="1">High priority</option>
+                  <option value="2" selected>Medium priority</option>
+                  <option value="3">Low priority</option>
+                </select>
+
+                <label for="county-ticket-subject-input" id="county-ticket-subject-label">Subject</label>
+                <input id="county-ticket-subject-input" type="text" maxlength="120" placeholder="What does the county need to know?" />
+              </div>
+              <label for="county-ticket-message-input" id="county-ticket-message-label">Message</label>
+              <textarea id="county-ticket-message-input" rows="3" maxlength="1200" placeholder="Write the ticket message for Passaic County."></textarea>
+              <div class="county-ticket-actions">
+                <button class="secondary-btn assign-worker-btn" type="button" id="county-ticket-submit-btn">Send ticket</button>
+                <p class="small-text worker-inline-message" id="county-ticket-message-status"></p>
+              </div>
+            </div>
+
+            <div class="county-ticket-workspace">
+              <div class="county-ticket-list" id="county-ticket-list"></div>
+              <div class="county-ticket-detail" id="county-ticket-detail">
+                <div class="county-empty-state">Select a ticket to review the conversation.</div>
+              </div>
+            </div>
           </div>
         </div>
       </section>

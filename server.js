@@ -44,6 +44,7 @@ const messagesFilePath = path.join(dataDirectory, "messages.json");
 const clientDocumentsFilePath = path.join(dataDirectory, "client-documents.json");
 const workerCaseHistoryFilePath = path.join(dataDirectory, "worker-case-history.json");
 const agenciesFilePath = path.join(dataDirectory, "agencies.json");
+const agencyTicketsFilePath = path.join(dataDirectory, "agency-tickets.json");
 const COUNTY_ADMIN_ID = "PASSAIC-COUNTY";
 const COUNTY_ADMIN_NAME = "Passaic County";
 const COUNTY_ORGANIZATION_ID = "ORG-COUNTY";
@@ -210,6 +211,8 @@ const defaultAgencies = [
     contact_phone: "(973) 555-0183"
   }
 ];
+
+const defaultAgencyTickets = [];
 
 function buildDefaultWorker(id, name, activeCases) {
   return {
@@ -584,6 +587,89 @@ function buildAgencyView(agency) {
   };
 }
 
+function normalizeTicketPriority(priority) {
+  const numericPriority = Number(priority);
+  if ([1, 2, 3].includes(numericPriority)) {
+    return numericPriority;
+  }
+
+  return 2;
+}
+
+function getTicketPriorityLabel(priority) {
+  if (priority === 1) return "High";
+  if (priority === 3) return "Low";
+  return "Medium";
+}
+
+function getTicketAgeDays(ticket, nowMs = Date.now()) {
+  const createdMs = new Date(ticket.created_at || ticket.updated_at || nowMs).getTime();
+  if (Number.isNaN(createdMs)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor((nowMs - createdMs) / (1000 * 60 * 60 * 24)));
+}
+
+function getTicketSortScore(ticket, nowMs = Date.now()) {
+  const priority = normalizeTicketPriority(ticket.priority);
+  const ageDays = getTicketAgeDays(ticket, nowMs);
+  const isOpen = ticket.status !== "closed";
+  const isOverdue = isOpen && ageDays >= 2;
+
+  return {
+    effective_priority: isOverdue ? 0 : priority,
+    age_days: ageDays,
+    escalated_by_age: isOverdue,
+    priority_label: getTicketPriorityLabel(priority)
+  };
+}
+
+function buildTicketView(ticket) {
+  const agency = agencies.find((item) => item.id === ticket.organization_id) || null;
+  const score = getTicketSortScore(ticket);
+
+  return {
+    ...ticket,
+    organization_name: ticket.organization_name || agency?.name || "Organization",
+    ...score,
+    messages: Array.isArray(ticket.messages) ? ticket.messages : []
+  };
+}
+
+function sortTicketViews(tickets) {
+  return tickets
+    .map(buildTicketView)
+    .sort((left, right) => {
+      if (left.status !== right.status) {
+        if (left.status === "closed") return 1;
+        if (right.status === "closed") return -1;
+      }
+
+      if (left.effective_priority !== right.effective_priority) {
+        return left.effective_priority - right.effective_priority;
+      }
+
+      if (left.escalated_by_age !== right.escalated_by_age) {
+        return left.escalated_by_age ? -1 : 1;
+      }
+
+      const leftDate = new Date(left.last_message_at || left.updated_at || left.created_at).getTime();
+      const rightDate = new Date(right.last_message_at || right.updated_at || right.created_at).getTime();
+      return (Number.isNaN(rightDate) ? 0 : rightDate) - (Number.isNaN(leftDate) ? 0 : leftDate);
+    });
+}
+
+function createTicketMessage({ sender, senderRole, text }) {
+  return {
+    id: `TM-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
+    sender,
+    sender_role: senderRole,
+    text,
+    timestamp: getTimestamp()
+  };
+}
+
 function recordCompletedWorkerCase(client, worker) {
   if (!client || !worker) {
     return;
@@ -641,6 +727,10 @@ function saveClientDocuments() {
   saveJsonArray(clientDocumentsFilePath, clientDocuments, { key: "client-documents" });
 }
 
+function saveAgencyTickets() {
+  saveJsonArray(agencyTicketsFilePath, agencyTickets, { key: "agency-tickets" });
+}
+
 function removeItemsInPlace(items, predicate) {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     if (predicate(items[index], index)) {
@@ -659,6 +749,7 @@ const workerCaseHistory = loadJsonArray(workerCaseHistoryFilePath, defaultWorker
 const clientAccounts = loadJsonArray(clientAccountsFilePath, defaultClientAccounts, { key: "client-accounts" });
 const messages = loadJsonArray(messagesFilePath, defaultMessages, { key: "messages" });
 const clientDocuments = loadJsonArray(clientDocumentsFilePath, defaultClientDocuments, { key: "client-documents" });
+const agencyTickets = loadJsonArray(agencyTicketsFilePath, defaultAgencyTickets, { key: "agency-tickets" });
 const phoneOtpStore = new Map();
 const authSessions = new Map();
 let mailTransporter = null;
@@ -1743,6 +1834,152 @@ app.get("/api/transport-requests", (req, res) => {
       .slice()
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
   });
+});
+
+app.get("/api/agency-tickets", (req, res) => {
+  const organizationId = normalizeOrganizationFilter(req);
+  const includeClosed = String(req.query.include_closed || "").trim() === "true";
+  const visibleTickets = organizationId
+    ? agencyTickets.filter((ticket) => ticket.organization_id === organizationId)
+    : agencyTickets;
+  const tickets = sortTicketViews(
+    includeClosed
+      ? visibleTickets
+      : visibleTickets.filter((ticket) => ticket.status !== "closed")
+  );
+
+  res.json({
+    tickets,
+    open_count: tickets.filter((ticket) => ticket.status !== "closed").length,
+    urgent_count: tickets.filter((ticket) => ticket.status !== "closed" && ticket.effective_priority <= 1).length
+  });
+});
+
+app.post("/api/agency-tickets", (req, res) => {
+  const organizationId = String(req.body?.organization_id || "").trim();
+  const subject = String(req.body?.subject || "").trim();
+  const messageText = String(req.body?.message || "").trim();
+  const senderRole = String(req.body?.sender_role || "organization").trim() === "county" ? "county" : "organization";
+  const priority = normalizeTicketPriority(req.body?.priority);
+  const agency = agencies.find((item) => item.id === organizationId) || null;
+
+  if (!agency) {
+    res.status(400).json({ error: "Select a valid organization." });
+    return;
+  }
+
+  if (!subject || !messageText) {
+    res.status(400).json({ error: "Subject and message are required." });
+    return;
+  }
+
+  if (subject.length > 120 || messageText.length > 1200) {
+    res.status(400).json({ error: "Ticket subject or message is too long." });
+    return;
+  }
+
+  const timestamp = getTimestamp();
+  const ticket = {
+    id: `TK-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`,
+    organization_id: agency.id,
+    organization_name: agency.name,
+    subject,
+    priority,
+    status: "open",
+    created_by: senderRole,
+    created_at: timestamp,
+    updated_at: timestamp,
+    last_message_at: timestamp,
+    messages: [
+      createTicketMessage({
+        sender: senderRole === "county" ? COUNTY_ADMIN_NAME : agency.name,
+        senderRole,
+        text: messageText
+      })
+    ]
+  };
+
+  agencyTickets.unshift(ticket);
+  saveAgencyTickets();
+
+  if (senderRole === "organization") {
+    pushCountyNotification(`${agency.name} opened a county support ticket: ${subject}`, "system", timestamp, {
+      organization_id: agency.id
+    });
+    saveCountyState();
+  }
+
+  res.json({ success: true, ticket: buildTicketView(ticket) });
+});
+
+app.post("/api/agency-tickets/:ticketId/messages", (req, res) => {
+  const ticketId = String(req.params.ticketId || "").trim();
+  const messageText = String(req.body?.message || "").trim();
+  const senderRole = String(req.body?.sender_role || "").trim() === "county" ? "county" : "organization";
+  const ticket = agencyTickets.find((item) => item.id === ticketId) || null;
+
+  if (!ticket) {
+    res.status(404).json({ error: "Ticket not found." });
+    return;
+  }
+
+  if (!messageText) {
+    res.status(400).json({ error: "Message is required." });
+    return;
+  }
+
+  if (messageText.length > 1200) {
+    res.status(400).json({ error: "Message is too long." });
+    return;
+  }
+
+  if (ticket.status === "closed") {
+    res.status(400).json({ error: "This ticket is closed." });
+    return;
+  }
+
+  const timestamp = getTimestamp();
+  const sender = senderRole === "county"
+    ? COUNTY_ADMIN_NAME
+    : (ticket.organization_name || "Organization");
+
+  ticket.messages = Array.isArray(ticket.messages) ? ticket.messages : [];
+  ticket.messages.push(createTicketMessage({ sender, senderRole, text: messageText }));
+  ticket.updated_at = timestamp;
+  ticket.last_message_at = timestamp;
+  ticket.status = "open";
+  saveAgencyTickets();
+
+  if (senderRole === "organization") {
+    pushCountyNotification(`${ticket.organization_name} updated county ticket: ${ticket.subject}`, "system", timestamp, {
+      organization_id: ticket.organization_id
+    });
+    saveCountyState();
+  }
+
+  res.json({ success: true, ticket: buildTicketView(ticket) });
+});
+
+app.post("/api/agency-tickets/:ticketId/status", (req, res) => {
+  const ticketId = String(req.params.ticketId || "").trim();
+  const status = String(req.body?.status || "").trim();
+  const ticket = agencyTickets.find((item) => item.id === ticketId) || null;
+
+  if (!ticket) {
+    res.status(404).json({ error: "Ticket not found." });
+    return;
+  }
+
+  if (!["open", "closed"].includes(status)) {
+    res.status(400).json({ error: "Invalid ticket status." });
+    return;
+  }
+
+  ticket.status = status;
+  ticket.updated_at = getTimestamp();
+  saveAgencyTickets();
+
+  res.json({ success: true, ticket: buildTicketView(ticket) });
 });
 
 app.post("/api/auth/signup/phone", async (req, res) => {
