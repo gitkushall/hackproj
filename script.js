@@ -1980,6 +1980,8 @@ function getStoredClientSessionToken() {
 }
 
 async function restoreClientSession() {
+  let serverOffline = false;
+
   try {
     const data = await fetchJson("/api/auth/me");
     if (data && data.authenticated && data.user) {
@@ -1989,11 +1991,14 @@ async function restoreClientSession() {
       routeClientEntry();
       return true;
     }
+
+    storeClientSessionToken("");
+    storeShadowClientUser(null);
   } catch (error) {
-    // Ignore session restore failures and keep the user on the login screen.
+    serverOffline = error.message === "SERVER_OFFLINE";
   }
 
-  const shadowUser = getStoredShadowClientUser();
+  const shadowUser = serverOffline ? getStoredShadowClientUser() : null;
   if (shadowUser?.clientId) {
     state.clientPortalData.currentClientId = shadowUser.clientId;
     state.clientPortalData.currentUser = shadowUser;
@@ -7602,6 +7607,21 @@ async function showPlan() {
     state.clientPortalData.currentUser = data.user;
     storeShadowClientUser(data.user);
   } catch (error) {
+    if (error.message === "Unauthorized.") {
+      state.clientPortalData.currentClientId = null;
+      state.clientPortalData.currentUser = null;
+      storeClientSessionToken("");
+      storeShadowClientUser(null);
+      state.authView = "user";
+      state.loginPortal = "client";
+      applyLanguage();
+      openScreen("login-screen");
+      document.getElementById("login-error").textContent = state.lang === "es"
+        ? "Su sesion vencio. Inicie sesion otra vez para guardar el intake."
+        : "Your session expired. Sign in again to save your intake.";
+      return;
+    }
+
     if (error.message === "SERVER_OFFLINE" && state.clientPortalData.currentUser?.clientId) {
       const nextUser = {
         ...state.clientPortalData.currentUser,
