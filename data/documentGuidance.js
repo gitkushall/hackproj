@@ -33,7 +33,19 @@ const PRIMARY_RESOURCES = {
     label: "NJ MVC",
     detail: "New Jersey non-driver ID requirements and appointment system.",
     phone: "(609) 292-6500",
-    url: "https://www.nj.gov/mvc/license/non-driverid.htm"
+    url: "https://www.nj.gov/mvc/license/nondriverid.htm"
+  },
+  njMvcLocations: {
+    label: "NJ MVC Licensing Centers",
+    detail: "Official list of New Jersey Licensing Centers where non-driver IDs are issued.",
+    phone: "(609) 292-6500",
+    url: "https://www.nj.gov/mvc/locations/liccenters.htm"
+  },
+  njMvc6Points: {
+    label: "NJ MVC 6 Points of ID",
+    detail: "Official New Jersey document checklist for license and non-driver ID transactions.",
+    phone: "(609) 292-6500",
+    url: "https://www.nj.gov/mvc/license/6pointid.htm"
   },
   njMvcAppointment: {
     label: "NJ MVC Appointment Wizard",
@@ -117,6 +129,8 @@ const MVC_OFFICES = {
     note: "Alternate option for northern Passaic County."
   }
 };
+
+const NJ_STATE_ID_LOCATION_COUNT = 29;
 
 const DOCUMENT_GUIDANCE = {
   birth_certificate: {
@@ -216,15 +230,16 @@ const DOCUMENT_GUIDANCE = {
     supportNote: "For homeless applicants in New Jersey, MVC may waive the fee and allow a shelter or support address.",
     feeWaiver: "The New Jersey non-driver ID fee may be waived for homeless individuals using the proper support documentation.",
     links: [
-      PRIMARY_RESOURCES.njMvcAppointment,
       PRIMARY_RESOURCES.njMvc,
-      PRIMARY_RESOURCES.helpline211
+      PRIMARY_RESOURCES.njMvcLocations,
+      PRIMARY_RESOURCES.njMvc6Points
     ]
   }
 };
 
 module.exports = {
   DOCUMENT_GUIDANCE,
+  NJ_STATE_ID_LOCATION_COUNT,
   MVC_OFFICES,
   PASSAIC_LOCAL_BIRTH_OFFICES,
   PRIMARY_RESOURCES,

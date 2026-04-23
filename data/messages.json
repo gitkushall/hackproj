@@ -31,5 +31,27 @@
     "image_data": null,
     "image_type": null,
     "timestamp": "2026-03-26T01:25:02.929Z"
+  },
+  {
+    "id": "MSG-1776939696482",
+    "client_id": "CL-1016",
+    "worker_id": "WK-07",
+    "sender": "worker",
+    "text": "hello",
+    "image_name": null,
+    "image_data": null,
+    "image_type": null,
+    "timestamp": "2026-04-23T10:21:36.482Z"
+  },
+  {
+    "id": "MSG-1776939731079",
+    "client_id": "CL-1016",
+    "worker_id": "WK-07",
+    "sender": "client",
+    "text": "hi how are you",
+    "image_name": null,
+    "image_data": null,
+    "image_type": null,
+    "timestamp": "2026-04-23T10:22:11.079Z"
   }
 ]

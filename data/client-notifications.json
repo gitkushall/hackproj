@@ -1,5 +1,80 @@
 [
   {
+    "id": "CNT-1776940108011-a9e880",
+    "client_id": "CL-1017",
+    "title": "Notifications are on",
+    "message": "Your request is with St. Joseph Hospital Support Team. They can assign a caseworker next. Future updates will come here and by email.",
+    "category": "account",
+    "read": false,
+    "timestamp": "2026-04-23T10:28:28.011Z",
+    "delivery": {
+      "channel": "email",
+      "recipient": "mahesh@gmail.com",
+      "provider": "console-simulated-email",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1776939696486-a40607",
+    "client_id": "CL-1016",
+    "title": "New message",
+    "message": "hello",
+    "category": "message",
+    "read": false,
+    "timestamp": "2026-04-23T10:21:36.486Z",
+    "delivery": {
+      "channel": "email",
+      "recipient": "dals@gmail.com",
+      "provider": "console-simulated-email",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1776939688511-bb13cf",
+    "client_id": "CL-1016",
+    "title": "Case accepted",
+    "message": "Kim Karl accepted your case and started working on it.",
+    "category": "status",
+    "read": false,
+    "timestamp": "2026-04-23T10:21:28.511Z",
+    "delivery": {
+      "channel": "email",
+      "recipient": "dals@gmail.com",
+      "provider": "console-simulated-email",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1776939670950-187e10",
+    "client_id": "CL-1016",
+    "title": "Case worker assigned",
+    "message": "Kim Karl has been assigned to your case.",
+    "category": "assignment",
+    "read": false,
+    "timestamp": "2026-04-23T10:21:10.950Z",
+    "delivery": {
+      "channel": "email",
+      "recipient": "dals@gmail.com",
+      "provider": "console-simulated-email",
+      "status": "simulated"
+    }
+  },
+  {
+    "id": "CNT-1776939579514-3335eb",
+    "client_id": "CL-1016",
+    "title": "Notifications are on",
+    "message": "Your request is with Paterson Shelter Navigation Team. They can assign a caseworker next. Future updates will come here and by email.",
+    "category": "account",
+    "read": false,
+    "timestamp": "2026-04-23T10:19:39.514Z",
+    "delivery": {
+      "channel": "email",
+      "recipient": "dals@gmail.com",
+      "provider": "console-simulated-email",
+      "status": "simulated"
+    }
+  },
+  {
     "id": "CNT-1775016389888-8546a9",
     "client_id": "CL-1013",
     "title": "Case accepted",

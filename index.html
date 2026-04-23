@@ -42,9 +42,9 @@
               <p class="eyebrow" id="login-eyebrow">Housing support portal</p>
               <button class="admin-link-btn landing-login-btn" type="button" id="admin-portal-btn">Login</button>
             </div>
-            <h1 id="login-title">Welcome to your housing portal</h1>
+            <h1 id="login-title">Welcome</h1>
             <p class="small-text login-intro" id="login-subtitle">
-              Apply for housing support, stay connected with your case worker, and get help with documents in one place.
+              Get support, documents, and updates in one place.
             </p>
             <div class="landing-hero-actions">
               <button class="big-btn landing-primary-btn" type="button" id="landing-login-btn">Login</button>
@@ -53,32 +53,32 @@
 
           <div class="landing-story-grid">
             <article class="landing-story-card">
-              <strong>Apply for support</strong>
-              <p class="small-text">Use the portal to follow your housing case and understand what comes next.</p>
+              <strong>Apply</strong>
+              <p class="small-text">Start your case.</p>
             </article>
             <article class="landing-story-card">
-              <strong>Get document help</strong>
-              <p class="small-text">Track steps for birth certificates, Social Security cards, and State ID support.</p>
+              <strong>Documents</strong>
+              <p class="small-text">See your next step.</p>
             </article>
             <article class="landing-story-card">
-              <strong>Stay updated</strong>
-              <p class="small-text">See notifications, progress updates, and messages from your case worker.</p>
+              <strong>Updates</strong>
+              <p class="small-text">Check messages and alerts.</p>
             </article>
           </div>
 
           <div class="landing-detail-grid">
             <section class="landing-detail-panel">
-              <p class="landing-section-kicker">What this portal helps with</p>
-              <h2>Simple support from intake to housing readiness</h2>
-              <p class="small-text">This portal is designed for people who need housing support and document guidance. It keeps the steps clear, simple, and easy to use on a shared device.</p>
+              <p class="landing-section-kicker">What this portal does</p>
+              <h2>Simple housing support</h2>
+              <p class="small-text">Use this portal to follow your case and get document help.</p>
             </section>
             <section class="landing-detail-panel">
-              <p class="landing-section-kicker">What you can do here</p>
+              <p class="landing-section-kicker">What you can do</p>
               <ul class="landing-feature-list">
-                <li>Apply and follow your housing case</li>
-                <li>Check your next document step</li>
+                <li>Apply</li>
+                <li>Check documents</li>
                 <li>Message your case worker</li>
-                <li>Review updates and notifications</li>
+                <li>See updates</li>
               </ul>
             </section>
           </div>
@@ -376,6 +376,12 @@
               <span class="small-text" id="county-apps-label">Active applications</span>
               <p class="metric-note" id="county-apps-note">Requests still moving through review, documents, and assignment.</p>
             </div>
+            <button class="metric-card metric-teal county-active-clients-card" type="button" id="county-active-clients-card">
+              <span class="metric-kicker" id="county-active-clients-kicker">Live caseload</span>
+              <strong id="county-active-clients-number">0</strong>
+              <span class="small-text" id="county-active-clients-label">Active clients</span>
+              <p class="metric-note" id="county-active-clients-note">Open a grouped list of active clients by organization.</p>
+            </button>
             <div class="metric-card metric-purple metric-highlight">
               <span class="metric-kicker" id="county-ai-kicker">AI recommendation</span>
               <strong id="county-recommended-worker">-</strong>
@@ -887,10 +893,8 @@
         </div>
         <button class="chat-close-btn" id="county-ai-close-btn" type="button">X</button>
       </div>
-        <div class="chat-body county-ai-body">
-        <div class="admin-ai-response" id="ai-response">
-          Most delays are happening at the State ID step due to appointments and transportation issues.
-        </div>
+      <div class="chat-body county-ai-body">
+        <div class="admin-ai-response" id="ai-response"></div>
         <p class="small-text admin-ai-note" id="county-ai-note">
           This assistant currently uses simple logic. It can be upgraded to a real AI
           (like ChatGPT) to provide deeper insights if the system is approved.
@@ -916,6 +920,69 @@
       </aside>
     </div>
 
+    <div class="county-worker-modal hidden" id="county-active-clients-modal" hidden>
+      <div class="county-worker-modal-backdrop" data-active-clients-modal-close="true"></div>
+      <aside class="county-worker-modal-dialog county-active-clients-dialog" role="dialog" aria-modal="true" aria-labelledby="county-active-clients-modal-title">
+        <div class="county-worker-modal-head">
+          <div>
+            <p class="eyebrow county-eyebrow" id="county-active-clients-modal-eyebrow">County active clients</p>
+            <h2 id="county-active-clients-modal-title">Active Clients by Organization</h2>
+          </div>
+          <button class="chat-close-btn county-worker-modal-close" id="county-active-clients-modal-close-btn" type="button">X</button>
+        </div>
+        <div class="county-worker-modal-body" id="county-active-clients-modal-body"></div>
+      </aside>
+    </div>
+
+    <script>
+      (function attachStartupErrorOverlay() {
+        function ensureOverlay() {
+          let overlay = document.getElementById("startup-error-overlay");
+          if (overlay) {
+            return overlay;
+          }
+
+          overlay = document.createElement("div");
+          overlay.id = "startup-error-overlay";
+          overlay.hidden = true;
+          overlay.style.position = "fixed";
+          overlay.style.left = "16px";
+          overlay.style.right = "16px";
+          overlay.style.bottom = "16px";
+          overlay.style.zIndex = "99999";
+          overlay.style.padding = "14px 16px";
+          overlay.style.borderRadius = "14px";
+          overlay.style.background = "#fff7ed";
+          overlay.style.border = "1px solid #fdba74";
+          overlay.style.boxShadow = "0 10px 28px rgba(15, 23, 42, 0.18)";
+          overlay.style.color = "#7c2d12";
+          overlay.style.fontFamily = "\"Trebuchet MS\", \"Segoe UI\", sans-serif";
+          overlay.style.whiteSpace = "pre-wrap";
+          overlay.style.maxWidth = "960px";
+          overlay.style.margin = "0 auto";
+          document.addEventListener("DOMContentLoaded", function onReady() {
+            document.removeEventListener("DOMContentLoaded", onReady);
+            document.body.appendChild(overlay);
+          });
+          return overlay;
+        }
+
+        function showOverlay(label, error) {
+          const overlay = ensureOverlay();
+          const message = error && error.message ? error.message : String(error || "Unknown error");
+          overlay.hidden = false;
+          overlay.textContent = label + ": " + message;
+        }
+
+        window.addEventListener("error", function handleStartupError(event) {
+          showOverlay("Frontend error", event.error || event.message);
+        });
+
+        window.addEventListener("unhandledrejection", function handleStartupRejection(event) {
+          showOverlay("Frontend promise rejection", event.reason);
+        });
+      }());
+    </script>
     <script src="data/usLocations.js"></script>
     <script src="script.js"></script>
   </body>

@@ -8,7 +8,7 @@ const twilio = require("twilio");
 const { getDemoAdminAccount, getDemoCaseworkerAccounts, getOrganizationAdminAccounts, loadAdminAccounts, saveAdminAccounts, verifyAdminLogin } = require("./backend/auth/adminAuthStore");
 const { generateAdminInsight, generatePortalHelpReply } = require("./backend/services/openaiService");
 const { getRuntimeStorageInfo, loadJsonArray, saveJsonArray } = require("./backend/storage/runtimeJsonStore");
-const { DOCUMENT_GUIDANCE, MVC_OFFICES, PASSAIC_LOCAL_BIRTH_OFFICES, PRIMARY_RESOURCES, SSA_OFFICES } = require("./data/documentGuidance");
+const { DOCUMENT_GUIDANCE, NJ_STATE_ID_LOCATION_COUNT, MVC_OFFICES, PASSAIC_LOCAL_BIRTH_OFFICES, PRIMARY_RESOURCES, SSA_OFFICES } = require("./data/documentGuidance");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -26,7 +26,7 @@ const NJ_BIRTH_ORDER_URL = "https://www.nj.gov/health/vital/order-vital/";
 const NJ_LOCAL_VITAL_RECORDS_URL = "https://www.nj.gov/health/vital/local-vital-records/";
 const SSA_CARD_URL = "https://www.ssa.gov/number-card";
 const SSA_OFFICE_LOCATOR_URL = "https://www.ssa.gov/locator/";
-const NJ_MVC_ID_URL = "https://www.nj.gov/mvc/license/non-driverid.htm";
+const NJ_MVC_ID_URL = "https://www.nj.gov/mvc/license/nondriverid.htm";
 const NJ_MVC_APPOINTMENT_URL = "https://telegov.njportal.com/njmvc/AppointmentWizard";
 const NJ_MVC_LOCATIONS_URL = "https://www.nj.gov/mvc/locations/liccenters.htm";
 
@@ -451,10 +451,30 @@ function pushCountyNotification(message, workerId = "system", timestamp = getTim
   notifications.unshift({
     id: `NT-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
     message,
+    category: String(options.category || "").trim() || null,
     worker_id: workerId,
     organization_id: organizationId,
     timestamp
   });
+}
+
+function isVisibleCountyNotification(notification) {
+  const category = String(notification?.category || "").trim().toLowerCase();
+  if (["account_created", "worker_created", "assignment", "case_completed"].includes(category)) {
+    return true;
+  }
+
+  const message = String(notification?.message || "").trim();
+  if (!message) {
+    return false;
+  }
+
+  return (
+    message.startsWith("New portal account:") ||
+    message.startsWith("New caseworker account created") ||
+    message.includes(" assigned to ") ||
+    message.includes(" completed ")
+  );
 }
 
 function resolveAgencyRequestStatus(client, requestedAgencyId, wantsCaseWorker) {
@@ -1448,20 +1468,17 @@ function getStateIdRecommendation(account) {
   if (isNewJerseyLocation(currentLocation)) {
     return buildRecommendationPayload("state_id", {
       title: "Finish your State ID step",
-      detail: "New Jersey non-driver IDs usually require an MVC appointment. Bring your birth certificate and supporting identity information before you go.",
+      detail: `New Jersey non-driver IDs are issued at ${NJ_STATE_ID_LOCATION_COUNT} MVC Licensing Centers statewide. Use the official ID page, locations list, and 6 Points checklist before you go.`,
       primaryOption: createOfficeOption(office),
       alternateOptions: [
         createOfficeOption(MVC_OFFICES.paterson),
         createOfficeOption(MVC_OFFICES.wayne),
         createOfficeOption(MVC_OFFICES.oakland)
       ].filter((item, index, items) => item.label && items.findIndex((entry) => entry.label === item.label) === index),
-      supportResources: createGuideLinkItems([
-        PRIMARY_RESOURCES.helpline211,
-        PRIMARY_RESOURCES.njMvc
-      ]),
       links: createGuideLinkItems([
-        PRIMARY_RESOURCES.njMvcAppointment,
-        PRIMARY_RESOURCES.njMvc
+        PRIMARY_RESOURCES.njMvc,
+        PRIMARY_RESOURCES.njMvcLocations,
+        PRIMARY_RESOURCES.njMvc6Points
       ])
     });
   }
@@ -1662,7 +1679,8 @@ function addAccountCreationNotification(account, requestCaseWorker) {
   const message = `New portal account: ${account.name}. Case worker requested: ${requestCaseWorker ? "Yes" : "No"}.${organizationLabel}`;
 
   pushCountyNotification(message, "system", getTimestamp(), {
-    organization_id: account.requestedAgencyId || null
+    organization_id: account.requestedAgencyId || null,
+    category: "account_created"
   });
 }
 
@@ -1801,6 +1819,29 @@ function getRecommendedWorkerForOrganization(organizationId) {
   ), eligibleWorkers[0]);
 }
 
+function getAllowedAssignmentOrganizationId(client, organizationId = "") {
+  const scopedOrganizationId = String(organizationId || "").trim();
+
+  if (scopedOrganizationId) {
+    return scopedOrganizationId;
+  }
+
+  if (client?.accepted_agency_id) {
+    return client.accepted_agency_id;
+  }
+
+  if (client?.requested_agency_id && client.requested_agency_id !== COUNTY_ORGANIZATION_ID) {
+    return client.requested_agency_id;
+  }
+
+  return COUNTY_ORGANIZATION_ID;
+}
+
+function getAssignableWorkersForClient(client, organizationId = "") {
+  const allowedOrganizationId = getAllowedAssignmentOrganizationId(client, organizationId);
+  return workers.filter((worker) => worker.organization_id === allowedOrganizationId);
+}
+
 function notificationBelongsToOrganization(notification, organizationId) {
   if (!organizationId) {
     return true;
@@ -1894,6 +1935,7 @@ app.get("/api/notifications", (req, res) => {
   const organizationId = normalizeOrganizationFilter(req);
   res.json({
     notifications: notifications
+      .filter(isVisibleCountyNotification)
       .filter((notification) => notificationBelongsToOrganization(notification, organizationId))
       .slice()
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
@@ -2410,7 +2452,8 @@ app.post("/api/admin/caseworkers", (req, res) => {
 
   saveAdminAccounts(adminAccounts);
   pushCountyNotification(`New caseworker account created for ${name} (${workerId}) at ${organizationName}`, workerId, getTimestamp(), {
-    organization_id: organizationId
+    organization_id: organizationId,
+    category: "worker_created"
   });
   saveCountyState();
 
@@ -2524,10 +2567,6 @@ app.post("/api/auth/intake", (req, res) => {
   const client = clients.find((item) => item.id === account.clientId);
   if (client) {
     const missingCount = Array.isArray(client.missing_documents) ? client.missing_documents.length : 0;
-    pushCountyNotification(
-      `${client.name} updated intake. ${missingCount} document step${missingCount === 1 ? "" : "s"} still open.`,
-      client.assigned_worker || "system"
-    );
     saveCountyState();
   }
 
@@ -2680,6 +2719,16 @@ app.post("/api/assign", async (req, res) => {
     return;
   }
 
+  const assignableWorkers = getAssignableWorkersForClient(client, organizationId);
+  if (!assignableWorkers.some((item) => item.id === workerId)) {
+    const allowedOrganizationId = getAllowedAssignmentOrganizationId(client, organizationId);
+    const allowedOrganization = agencies.find((agency) => agency.id === allowedOrganizationId) || null;
+    res.status(400).json({
+      error: `This client can only be assigned to a case worker from ${allowedOrganization?.name || "the current organization"}.`
+    });
+    return;
+  }
+
   if (client.assigned_worker === workerId && client.worker_status === "pending_approval") {
     res.json({
       success: true,
@@ -2697,7 +2746,9 @@ app.post("/api/assign", async (req, res) => {
   touchClientRelationship(client, "county_assignment");
   syncWorkerActiveCaseCounts();
 
-  pushCountyNotification(`${worker.name} assigned to ${client.name}`, worker.id);
+  pushCountyNotification(`${worker.name} assigned to ${client.name}`, worker.id, getTimestamp(), {
+    category: "assignment"
+  });
   saveCountyState();
   await createClientNotification(client.id, {
     title: "Case worker assigned",
@@ -2743,7 +2794,6 @@ app.post("/api/case-status", async (req, res) => {
     client.case_worker_requested = true;
     touchClientRelationship(client, "caseworker_accept");
     syncWorkerActiveCaseCounts();
-    pushCountyNotification(`${worker.name} accepted ${client.name}`, worker.id);
     await createClientNotification(client.id, {
       title: "Case accepted",
       message: `${worker.name} accepted your case and started working on it.`,
@@ -2755,7 +2805,9 @@ app.post("/api/case-status", async (req, res) => {
       return;
     }
 
-    pushCountyNotification(`${worker.name} completed ${client.name}`, worker.id);
+    pushCountyNotification(`${worker.name} completed ${client.name}`, worker.id, getTimestamp(), {
+      category: "case_completed"
+    });
     recordCompletedWorkerCase(client, worker);
     markClientCaseCompleted(client, worker);
     await createClientNotification(client.id, {
@@ -2775,7 +2827,6 @@ app.post("/api/case-status", async (req, res) => {
     client.case_worker_requested = true;
     touchClientRelationship(client, "caseworker_reject");
     syncWorkerActiveCaseCounts();
-    pushCountyNotification(`${worker.name} rejected ${client.name}`, worker.id);
     await createClientNotification(client.id, {
       title: "Assignment changed",
       message: `${worker.name} declined this case. A new worker can be assigned next.`,
@@ -2868,12 +2919,6 @@ app.post("/api/messages", async (req, res) => {
 
   messages.push(message);
   touchClientRelationship(client, message.sender === "client" ? "client_message" : "caseworker_message");
-  pushCountyNotification(
-    message.sender === "client"
-      ? `${client.name} sent a message${message.worker_id ? ` to ${client.assigned_worker_name || message.worker_id}` : ""}`
-      : `${client.assigned_worker_name || "Case worker"} sent a case update to ${client.name}`,
-    message.worker_id || "system"
-  );
   saveCountyState();
   saveMessages();
   if (message.sender === "worker") {
@@ -2940,12 +2985,6 @@ app.post("/api/client-documents", async (req, res) => {
 
   clientDocuments.unshift(documentRecord);
   touchClientRelationship(client, documentRecord.uploaded_by === "client" ? "client_document" : "caseworker_document");
-  pushCountyNotification(
-    documentRecord.uploaded_by === "client"
-      ? `${client.name} uploaded ${getDocumentLabel(documentRecord.document_type)}`
-      : `${client.assigned_worker_name || "Case worker"} uploaded ${getDocumentLabel(documentRecord.document_type)} for ${client.name}`,
-    documentRecord.worker_id || "system"
-  );
   saveCountyState();
   saveClientDocuments();
   if (documentRecord.uploaded_by === "worker") {
@@ -3009,7 +3048,6 @@ app.post("/api/transport-request", async (req, res) => {
 
   transportRequests.unshift(request);
   touchClientRelationship(client, "caseworker_transport_request");
-  pushCountyNotification(request.message, worker.id, request.timestamp);
   saveCountyState();
   await createClientNotification(client.id, {
     title: "Transportation requested",
@@ -3083,6 +3121,10 @@ app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-app.listen(PORT, HOST, () => {
-  console.log(`Passaic County Housing Coordination System running at http://${HOST}:${PORT}`);
-});
+module.exports = app;
+
+if (require.main === module) {
+  app.listen(PORT, HOST, () => {
+    console.log(`Passaic County Housing Coordination System running at http://${HOST}:${PORT}`);
+  });
+}

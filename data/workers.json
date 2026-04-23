@@ -17,9 +17,11 @@
     "bio": "Sarah helps clients organize missing identity documents and keeps case steps easy to follow.",
     "availability": "Mon-Fri, 9:00 AM - 5:00 PM",
     "pronouns": "She/Her",
+    "organization_id": "ORG-COUNTY",
+    "organization_name": "Passaic County Housing Coordination",
     "id": "WK-01",
     "name": "Sarah Ahmed",
-    "active_cases": 6
+    "active_cases": 0
   },
   {
     "title": "Benefits and Records Coordinator",
@@ -38,9 +40,11 @@
     "bio": "Daniel focuses on benefits paperwork, replacement records, and keeping agency requests moving.",
     "availability": "Mon-Fri, 8:30 AM - 4:30 PM",
     "pronouns": "He/Him",
+    "organization_id": "ORG-SHELTER",
+    "organization_name": "Paterson Shelter Navigation Team",
     "id": "WK-02",
     "name": "Daniel Kim",
-    "active_cases": 4
+    "active_cases": 2
   },
   {
     "title": "Lead Case Worker",
@@ -60,9 +64,11 @@
     "bio": "Priya coordinates appointments, transportation, and urgent next steps for clients with multiple barriers.",
     "availability": "Mon-Sat, 9:00 AM - 6:00 PM",
     "pronouns": "She/Her",
+    "organization_id": "ORG-HOSPITAL",
+    "organization_name": "St. Joseph Hospital Support Team",
     "id": "WK-03",
     "name": "Priya Shah",
-    "active_cases": 3
+    "active_cases": 1
   },
   {
     "title": "Client Intake and Outreach Worker",
@@ -81,8 +87,30 @@
     "bio": "Marcus helps new clients get started, collect missing files, and understand the next case milestone.",
     "availability": "Mon-Fri, 10:00 AM - 6:00 PM",
     "pronouns": "He/Him",
+    "organization_id": "ORG-NONPROFIT",
+    "organization_name": "Community Document Access Network",
     "id": "WK-04",
     "name": "Marcus Hill",
-    "active_cases": 3
+    "active_cases": 1
+  },
+  {
+    "id": "WK-07",
+    "name": "Kim Karl",
+    "active_cases": 1,
+    "title": "Case Worker",
+    "phone": "",
+    "email": "kimk@gmail.com",
+    "office": "Passaic County Main Office",
+    "languages": [
+      "English"
+    ],
+    "specialties": [
+      "Case management"
+    ],
+    "bio": "Kim Karl supports Paterson Shelter Navigation Team clients and case follow-up.",
+    "availability": "Mon-Fri, 9:00 AM - 5:00 PM",
+    "pronouns": "",
+    "organization_id": "ORG-SHELTER",
+    "organization_name": "Paterson Shelter Navigation Team"
   }
 ]

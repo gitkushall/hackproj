@@ -20,6 +20,9 @@ const state = {
     isLoading: false,
     isCreatingWorker: false,
     isAiPanelOpen: false,
+    isAskingAi: false,
+    aiMessages: [],
+    isActiveClientsModalOpen: false,
     selectedWorkerId: null,
     selectedAgencyId: "all",
     workerSearchQuery: "",
@@ -146,7 +149,10 @@ const DOCUMENT_TYPES = [
 
 const NJ_BIRTH_CERTIFICATE_URL = "https://www.nj.gov/health/vital/order-vital/";
 const SSA_CARD_URL = "https://www.ssa.gov/number-card";
-const NJ_MVC_URL = "https://www.nj.gov/mvc/license/non-driverid.htm";
+const NJ_MVC_URL = "https://www.nj.gov/mvc/license/nondriverid.htm";
+const NJ_MVC_LOCATIONS_URL = "https://www.nj.gov/mvc/locations/liccenters.htm";
+const NJ_MVC_6_POINTS_URL = "https://www.nj.gov/mvc/license/6pointid.htm";
+const NJ_STATE_ID_LOCATION_COUNT = 29;
 const DEFAULT_DEMO_CASEWORKERS = [
   { workerId: "WK-01", name: "Sarah Ahmed", email: "sarah.ahmed@idhelp.org" },
   { workerId: "WK-02", name: "Daniel Kim", email: "daniel.kim@idhelp.org" },
@@ -680,13 +686,22 @@ function generatePlan(answers, birthPlace, currentCity) {
   if (!answers.hasID) {
     steps.push({
       text: "You need a State ID.",
-      description: "Visit the official New Jersey MVC website to apply for a State ID or schedule an appointment.",
-      actionLabel: "Apply for State ID",
-      actionLink: NJ_MVC_URL,
+      description: `New Jersey state IDs are issued at ${NJ_STATE_ID_LOCATION_COUNT} MVC Licensing Centers. Use these official links before you go.`,
+      actionLinks: [
+        {
+          label: "NJ MVC Non-Driver ID",
+          href: NJ_MVC_URL
+        },
+        {
+          label: "NJ MVC Licensing Centers",
+          href: NJ_MVC_LOCATIONS_URL
+        },
+        {
+          label: "NJ MVC 6 Points of ID",
+          href: NJ_MVC_6_POINTS_URL
+        }
+      ],
       actionExternal: true
-    });
-    steps.push({
-      text: `Go to DMV/MVC in ${currentCity}.`
     });
   }
 
@@ -1051,10 +1066,10 @@ function applyLanguage() {
   document.documentElement.lang = state.lang;
 
   document.getElementById("login-eyebrow").textContent = state.lang === "es" ? "Portal de apoyo de vivienda" : "Housing support portal";
-  document.getElementById("login-title").textContent = state.lang === "es" ? "Bienvenido a su portal de vivienda" : "Welcome to your housing portal";
+  document.getElementById("login-title").textContent = state.lang === "es" ? "Bienvenido" : "Welcome";
   document.getElementById("login-subtitle").textContent = state.lang === "es"
-    ? "Solicite apoyo de vivienda, mantengase conectado con su trabajador social y reciba ayuda con documentos en un solo lugar."
-    : "Apply for housing support, stay connected with your case worker, and get help with documents in one place.";
+    ? "Obtenga apoyo, documentos y actualizaciones en un solo lugar."
+    : "Get support, documents, and updates in one place.";
   document.getElementById("landing-login-btn").textContent = state.lang === "es" ? "Ingresar" : "Login";
   document.getElementById("portal-select-back-btn").textContent = t.goBack;
   document.getElementById("organization-stats-back-btn").textContent = t.goBack;
@@ -1334,6 +1349,17 @@ function applyLanguage() {
   document.getElementById("county-apps-note").textContent = state.adminRole === "organization"
     ? (state.lang === "es" ? "Trabajadores sociales visibles para esta organizacion." : "Case workers visible inside this organization.")
     : (state.lang === "es" ? "Solicitudes que siguen en revision, documentos y asignacion." : "Requests still moving through review, documents, and assignment.");
+  document.getElementById("county-active-clients-kicker").textContent = state.lang === "es" ? "Casos en vivo" : "Live caseload";
+  document.getElementById("county-active-clients-label").textContent = state.lang === "es" ? "Clientes activos" : "Active clients";
+  document.getElementById("county-active-clients-note").textContent = state.lang === "es"
+    ? "Abra una lista agrupada de clientes activos por organizacion."
+    : "Open a grouped list of active clients by organization.";
+  document.getElementById("county-active-clients-modal-eyebrow").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Clientes activos de la organizacion" : "Organization active clients")
+    : (state.lang === "es" ? "Clientes activos del condado" : "County active clients");
+  document.getElementById("county-active-clients-modal-title").textContent = state.lang === "es"
+    ? "Clientes activos por organizacion"
+    : "Active Clients by Organization";
   document.getElementById("county-ai-kicker").textContent = state.adminRole === "organization"
     ? (state.lang === "es" ? "Linea al condado" : "County line")
     : (state.lang === "es" ? "Recomendacion IA" : "AI recommendation");
@@ -1401,9 +1427,13 @@ function applyLanguage() {
   document.getElementById("county-housing-pill").textContent = state.lang === "es" ? "Vivienda en vivo" : "Live housing";
   document.getElementById("county-worker-modal-eyebrow").textContent = state.lang === "es" ? "Vista de personal de Passaic County" : "Passaic County Staffing View";
   document.getElementById("county-worker-modal-title").textContent = state.lang === "es" ? "Perfil del trabajador social" : "Case Worker Profile";
-  document.getElementById("ai-response").textContent = state.lang === "es"
-    ? "La mayoria de las demoras ocurren en el paso de la ID estatal por citas y transporte."
-    : "Most delays are happening at the State ID step due to appointments and transportation issues.";
+  if (!state.countyData.aiMessages.length) {
+    state.countyData.aiMessages = [{
+      role: "assistant",
+      text: getDefaultCountyAiMessage()
+    }];
+  }
+  renderCountyAiMessages();
 
   refreshLocalizedScreens();
   renderGuidedNavigatorPanels();
@@ -2240,12 +2270,7 @@ function getVisibleCountyClients() {
     ));
   }
 
-  return state.countyData.clients.filter((client) => (
-    !client.requested_agency_id ||
-    client.requested_agency_id === COUNTY_ORGANIZATION_ID ||
-    client.accepted_agency_id === COUNTY_ORGANIZATION_ID ||
-    client.assigned_worker_organization_id === COUNTY_ORGANIZATION_ID
-  ));
+  return state.countyData.clients;
 }
 
 function getVisibleCountyWorkers() {
@@ -2660,6 +2685,7 @@ function renderCountyMetrics() {
   const visibleClients = getVisibleCountyClients();
   const assignedCount = visibleClients.filter((client) => client.queue_state === "assigned_active").length;
   const openCount = visibleClients.filter((client) => !client.is_completed && client.queue_state !== "assigned_active").length;
+  document.getElementById("county-active-clients-number").textContent = String(visibleClients.filter((client) => !client.is_completed).length);
 
   if (state.adminRole === "organization") {
     const teamCount = getVisibleCountyWorkers().length;
@@ -3299,6 +3325,92 @@ function closeWorkerProfile() {
   renderWorkerProfileModal();
 }
 
+function getActiveCountyClientsByOrganization() {
+  const groups = new Map();
+  const activeClients = getVisibleCountyClients().filter((client) => !client.is_completed);
+
+  activeClients.forEach((client) => {
+    const organizationName = client.assigned_worker_organization_name
+      || client.accepted_agency_name
+      || client.requested_agency_name
+      || "Passaic County";
+    const organizationId = client.assigned_worker_organization_id
+      || client.accepted_agency_id
+      || client.requested_agency_id
+      || "ORG-COUNTY";
+
+    if (!groups.has(organizationId)) {
+      groups.set(organizationId, {
+        organizationId,
+        organizationName,
+        clients: []
+      });
+    }
+
+    groups.get(organizationId).clients.push(client);
+  });
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      clients: group.clients.slice().sort((left, right) => String(left.name).localeCompare(String(right.name)))
+    }))
+    .sort((left, right) => String(left.organizationName).localeCompare(String(right.organizationName)));
+}
+
+function renderActiveClientsModal() {
+  const overlay = document.getElementById("county-active-clients-modal");
+  const body = document.getElementById("county-active-clients-modal-body");
+
+  if (!state.countyData.isActiveClientsModalOpen) {
+    overlay.classList.add("hidden");
+    overlay.hidden = true;
+    body.innerHTML = "";
+    return;
+  }
+
+  const groups = getActiveCountyClientsByOrganization();
+  body.innerHTML = groups.length ? `
+    <div class="county-active-clients-group-list">
+      ${groups.map((group) => `
+        <section class="county-active-clients-group">
+          <div class="county-active-clients-group-head">
+            <div>
+              <span class="panel-kicker">${escapeHtml(state.lang === "es" ? "Organizacion" : "Organization")}</span>
+              <strong>${escapeHtml(group.organizationName)}</strong>
+            </div>
+            <span class="county-count-pill">${group.clients.length} ${escapeHtml(state.lang === "es" ? "activos" : "active")}</span>
+          </div>
+          <div class="county-active-clients-name-list">
+            ${group.clients.map((client) => `
+              <article class="county-active-clients-name-item">
+                <div>
+                  <strong>${escapeHtml(client.name)}</strong>
+                  <p class="small-text">${escapeHtml(client.city || "")} • ${escapeHtml(client.id)}</p>
+                </div>
+                <span class="small-text">${escapeHtml(client.assigned_worker_name || (state.lang === "es" ? "Sin asignar" : "Unassigned"))}</span>
+              </article>
+            `).join("")}
+          </div>
+        </section>
+      `).join("")}
+    </div>
+  ` : `<div class="county-empty-state">${escapeHtml(state.lang === "es" ? "No hay clientes activos en este momento." : "There are no active clients right now.")}</div>`;
+
+  overlay.classList.remove("hidden");
+  overlay.hidden = false;
+}
+
+function openActiveClientsModal() {
+  state.countyData.isActiveClientsModalOpen = true;
+  renderActiveClientsModal();
+}
+
+function closeActiveClientsModal() {
+  state.countyData.isActiveClientsModalOpen = false;
+  renderActiveClientsModal();
+}
+
 function renderNotifications() {
   const list = document.getElementById("county-notification-list");
 
@@ -3438,12 +3550,12 @@ function renderClients() {
 
   list.innerHTML = sortedClients.map((client) => {
     const selectedWorkerId = client.assigned_worker || state.countyData.recommendedWorkerId || "";
-    const assignableWorkers = state.adminRole === "organization"
-      ? state.countyData.workers.filter((worker) => worker.organization_id === orgId)
-      : state.countyData.workers.filter((worker) => (
-          (!client.requested_agency_id || client.requested_agency_id === COUNTY_ORGANIZATION_ID) &&
-          (!client.accepted_agency_id || worker.organization_id === client.accepted_agency_id)
-        ));
+    const allowedOrganizationId = state.adminRole === "organization"
+      ? orgId
+      : (client.accepted_agency_id || COUNTY_ORGANIZATION_ID);
+    const assignableWorkers = state.countyData.workers.filter((worker) => (
+      worker.organization_id === allowedOrganizationId
+    ));
     const workerOptions = assignableWorkers.map((worker) => (
       `<option value="${escapeHtml(worker.id)}" ${worker.id === selectedWorkerId ? "selected" : ""}>${escapeHtml(worker.name)} (${worker.active_cases})</option>`
     )).join("");
@@ -3468,7 +3580,7 @@ function renderClients() {
     const canAssignNow = workerOptions && (
       state.adminRole === "organization"
         ? isAcceptedInsideOrganization
-        : (!client.requested_agency_id || client.requested_agency_id === COUNTY_ORGANIZATION_ID)
+        : allowedOrganizationId === COUNTY_ORGANIZATION_ID
     );
 
     return `
@@ -3536,6 +3648,7 @@ function renderCountyDashboard() {
   renderTransportRequests();
   renderCountyHousingAvailability();
   renderClients();
+  renderActiveClientsModal();
   setCountyActionStatus(state.countyData.actionStatusMessage, state.countyData.actionStatusTone);
   if (activeScreenId === "organization-stats-screen") {
     renderOrganizationStatsPage();
@@ -3606,7 +3719,11 @@ async function loadCountyDashboard() {
       <div class="county-empty-state">${showServerOfflineMessage()}</div>
     `;
     setCountyActionStatus(showServerOfflineMessage(), "error");
-    document.getElementById("ai-response").innerText = showServerOfflineMessage();
+    state.countyData.aiMessages = [{
+      role: "assistant",
+      text: showServerOfflineMessage()
+    }];
+    renderCountyAiMessages();
   } finally {
     state.countyData.isLoading = false;
   }
@@ -3766,6 +3883,7 @@ function openCountyAiPanel() {
   const panel = document.getElementById("county-ai-panel");
   panel.classList.remove("hidden");
   panel.hidden = false;
+  renderCountyAiMessages();
   document.getElementById("ai-input").focus();
 }
 
@@ -3799,6 +3917,45 @@ function resetCountyAiPanel() {
   if (state.countyData.isAiPanelOpen) {
     closeCountyAiPanel();
   }
+}
+
+function getDefaultCountyAiMessage() {
+  return state.lang === "es"
+    ? "La mayoria de las demoras ocurren en el paso de la ID estatal por citas y transporte."
+    : "Most delays are happening at the State ID step due to appointments and transportation issues.";
+}
+
+function ensureCountyAiMessages() {
+  if (!state.countyData.aiMessages.length) {
+    state.countyData.aiMessages = [{
+      role: "assistant",
+      text: getDefaultCountyAiMessage()
+    }];
+  }
+}
+
+function renderCountyAiMessages() {
+  const responseBox = document.getElementById("ai-response");
+  if (!responseBox) {
+    return;
+  }
+
+  ensureCountyAiMessages();
+  responseBox.innerHTML = state.countyData.aiMessages.length
+    ? state.countyData.aiMessages.map((message) => `
+        <div class="worker-chat-message ${message.role === "user" ? "client" : "worker"}">
+          <div class="worker-chat-message-top">
+            <strong>${escapeHtml(message.role === "user"
+              ? (state.lang === "es" ? "Usted" : "You")
+              : "AI")}</strong>
+            <span class="small-text">${message.pending ? (state.lang === "es" ? "Pensando..." : "Thinking...") : ""}</span>
+          </div>
+          <p>${escapeHtml(message.text || "")}</p>
+        </div>
+      `).join("")
+    : `<p class="admin-ai-response-empty">${escapeHtml(getDefaultCountyAiMessage())}</p>`;
+
+  responseBox.scrollTop = responseBox.scrollHeight;
 }
 
 async function submitTransportRequest(clientId) {
@@ -3885,10 +4042,19 @@ async function assignClient(clientId) {
 
 async function askAI() {
   const input = document.getElementById("ai-input");
-  const responseBox = document.getElementById("ai-response");
   const question = input.value.trim();
 
-  if (!question) return;
+  if (!question || state.countyData.isAskingAi) return;
+
+  state.countyData.isAskingAi = true;
+  state.countyData.aiMessages.push({ role: "user", text: question });
+  state.countyData.aiMessages.push({
+    role: "assistant",
+    text: state.lang === "es" ? "Pensando..." : "Thinking...",
+    pending: true
+  });
+  input.value = "";
+  renderCountyAiMessages();
 
   try {
     const data = await fetchJson("/api/admin-chat", {
@@ -3896,15 +4062,22 @@ async function askAI() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question })
     });
-    responseBox.innerText = data.response;
+    state.countyData.aiMessages[state.countyData.aiMessages.length - 1] = {
+      role: "assistant",
+      text: data.response || getDefaultCountyAiMessage()
+    };
   } catch (error) {
-    responseBox.innerText =
-      error.message === "SERVER_OFFLINE"
+    state.countyData.aiMessages[state.countyData.aiMessages.length - 1] = {
+      role: "assistant",
+      text: error.message === "SERVER_OFFLINE"
         ? showServerOfflineMessage()
-        : "Most delays are happening at the State ID step. This is driven by appointments and transportation barriers. You should focus on faster scheduling and travel support.";
+        : getDefaultCountyAiMessage()
+    };
+  } finally {
+    state.countyData.isAskingAi = false;
+    renderCountyAiMessages();
+    input.focus();
   }
-
-  input.value = "";
 }
 
 function resetCodeEntry() {
@@ -6496,6 +6669,12 @@ async function showPlan() {
       description: step.description ? await translateText(step.description, state.lang) : "",
       actionLabel: step.actionLabel ? await translateText(step.actionLabel, state.lang) : "",
       actionLink: step.actionLink || "",
+      actionLinks: Array.isArray(step.actionLinks)
+        ? await Promise.all(step.actionLinks.map(async (link) => ({
+            label: await translateText(link.label || "", state.lang),
+            href: link.href || ""
+          })))
+        : [],
       actionExternal: Boolean(step.actionExternal)
     });
   }
@@ -6529,6 +6708,24 @@ async function showPlan() {
       }
       actionLink.textContent = step.actionLabel;
       li.appendChild(actionLink);
+    }
+
+    if (Array.isArray(step.actionLinks) && step.actionLinks.length) {
+      step.actionLinks.forEach((link) => {
+        if (!link.href || !link.label) {
+          return;
+        }
+
+        const actionLink = document.createElement("a");
+        actionLink.className = "secondary-btn plan-step-link";
+        actionLink.href = link.href;
+        if (step.actionExternal) {
+          actionLink.target = "_blank";
+          actionLink.rel = "noopener noreferrer";
+        }
+        actionLink.textContent = link.label;
+        li.appendChild(actionLink);
+      });
     }
 
     list.appendChild(li);
@@ -7171,6 +7368,9 @@ function bindEvents() {
   document.getElementById("county-refresh-btn").addEventListener("click", () => {
     loadCountyDashboard();
   });
+  document.getElementById("county-active-clients-card").addEventListener("click", () => {
+    openActiveClientsModal();
+  });
   document.getElementById("county-worker-search-input").addEventListener("input", (event) => {
     state.countyData.workerSearchQuery = event.target.value || "";
     renderWorkers();
@@ -7201,9 +7401,20 @@ function bindEvents() {
       closeWorkerProfile();
     }
   });
+  document.getElementById("county-active-clients-modal-close-btn").addEventListener("click", closeActiveClientsModal);
+  document.getElementById("county-active-clients-modal").addEventListener("click", (event) => {
+    if (event.target instanceof HTMLElement && event.target.dataset.activeClientsModalClose === "true") {
+      closeActiveClientsModal();
+    }
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && state.countyData.selectedWorkerId) {
       closeWorkerProfile();
+      return;
+    }
+
+    if (event.key === "Escape" && state.countyData.isActiveClientsModalOpen) {
+      closeActiveClientsModal();
     }
   });
 

@@ -82,5 +82,16 @@
     "organization_name": "Community Document Access Network",
     "passwordSalt": "c72d437d2cae7e54589433aebfcb8820",
     "passwordHash": "463512820421e2faa8dd670c5df6c22e4d67f2840d3ece785d352bd1d455e58f3211494fbcdcd1fc3c2ead2b5d6c7f9759d5e9173fe7f60cc9e8092c85c65164"
+  },
+  {
+    "id": "AD-09",
+    "role": "caseworker",
+    "workerId": "WK-07",
+    "name": "Kim Karl",
+    "email": "kimk@gmail.com",
+    "organization_id": "ORG-SHELTER",
+    "organization_name": "Paterson Shelter Navigation Team",
+    "passwordSalt": "d817e97934a6dca38f9818f3eaaea089",
+    "passwordHash": "88480cca3b382591601ab866a15c10f553b39331707624a324511d12c682a3c8c531743033e04855c60326687e6641c916d0f9f6739f46594b2e6d2050e30c61"
   }
 ]
