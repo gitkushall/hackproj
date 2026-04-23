@@ -462,15 +462,7 @@ function resolveAgencyRequestStatus(client, requestedAgencyId, wantsCaseWorker) 
     return "not_started";
   }
 
-  if (requestedAgencyId === COUNTY_ORGANIZATION_ID) {
-    return "accepted";
-  }
-
-  if (["accepted", "rejected", "pending_review"].includes(client?.agency_request_status)) {
-    return client.agency_request_status;
-  }
-
-  return "pending_review";
+  return "accepted";
 }
 
 function resolveAcceptedAgencyId(client, requestedAgencyId, agencyRequestStatus, assignedWorker) {
@@ -532,14 +524,6 @@ function isClientCompleted(client) {
 function getClientQueueState(client) {
   if (isClientCompleted(client)) {
     return "completed";
-  }
-
-  if (client?.case_worker_requested && client?.requested_agency_id && client?.agency_request_status === "pending_review") {
-    return "awaiting_agency_response";
-  }
-
-  if (client?.case_worker_requested && client?.requested_agency_id && client?.agency_request_status === "rejected") {
-    return "agency_declined";
   }
 
   if (client?.assigned_worker && client?.worker_status === "pending_approval") {
@@ -1193,8 +1177,6 @@ function ensureClientRecordForAccount(account, requestCaseWorker) {
   const wantsCaseWorker = Boolean(requestCaseWorker ?? account?.requestedCaseWorker);
   const requestedAgencyId = account?.requestedAgencyId || null;
   const requestedAgency = agencies.find((agency) => agency.id === requestedAgencyId) || null;
-  const isCountyRequest = requestedAgencyId === COUNTY_ORGANIZATION_ID;
-
   if (!client) {
     client = {
       id: account.clientId,
@@ -1209,9 +1191,9 @@ function ensureClientRecordForAccount(account, requestCaseWorker) {
       case_worker_requested: wantsCaseWorker,
       requested_agency_id: requestedAgencyId,
       requested_agency_name: requestedAgency?.name || "",
-      agency_request_status: wantsCaseWorker && requestedAgencyId ? (isCountyRequest ? "accepted" : "pending_review") : "not_started",
-      accepted_agency_id: isCountyRequest ? requestedAgencyId : null,
-      accepted_agency_name: isCountyRequest ? (requestedAgency?.name || "") : "",
+      agency_request_status: wantsCaseWorker && requestedAgencyId ? "accepted" : "not_started",
+      accepted_agency_id: wantsCaseWorker && requestedAgencyId ? requestedAgencyId : null,
+      accepted_agency_name: wantsCaseWorker && requestedAgencyId ? (requestedAgency?.name || "") : "",
       assigned_worker_organization_id: null,
       assigned_worker_organization_name: ""
     };
@@ -2149,9 +2131,7 @@ app.post("/api/auth/signup/phone", async (req, res) => {
   saveClientAccounts(clientAccounts);
   saveCountyState();
   const signupMessage = requestCaseWorker && requestedAgency
-    ? (isCountyRequest
-        ? `Your request is with ${requestedAgency.name}. Caseworker assignment can begin right away. Future updates will come here and by text.`
-        : `Your request was sent to ${requestedAgency.name}. That agency must accept before caseworker assignment can begin. Future updates will come here and by text.`)
+    ? `Your request is with ${requestedAgency.name}. They can assign a caseworker next. Future updates will come here and by text.`
     : requestCaseWorker
       ? "Your case worker request was sent. Future updates will come here and by text."
       : "Your account is ready. Future updates will come here and by text.";
@@ -2212,9 +2192,7 @@ app.post("/api/auth/signup/email", async (req, res) => {
   saveClientAccounts(clientAccounts);
   saveCountyState();
   const signupMessage = requestCaseWorker && requestedAgency
-    ? (isCountyRequest
-        ? `Your request is with ${requestedAgency.name}. Caseworker assignment can begin right away. Future updates will come here and by email.`
-        : `Your request was sent to ${requestedAgency.name}. That agency must accept before caseworker assignment can begin. Future updates will come here and by email.`)
+    ? `Your request is with ${requestedAgency.name}. They can assign a caseworker next. Future updates will come here and by email.`
     : requestCaseWorker
       ? "Your case worker request was sent. Future updates will come here and by email."
       : "Your account is ready. Future updates will come here and by email.";
@@ -2736,70 +2714,8 @@ app.post("/api/assign", async (req, res) => {
 });
 
 app.post("/api/agency-request-status", async (req, res) => {
-  const { client_id: clientId, organization_id: organizationId, action } = req.body || {};
-  syncClientsFromAccounts();
-  syncAllClientRelationships();
-  const client = clients.find((item) => item.id === clientId);
-  const agency = agencies.find((item) => item.id === organizationId);
-
-  if (!client || !agency) {
-    res.status(400).json({ error: "Client or organization not found." });
-    return;
-  }
-
-  if (client.requested_agency_id !== organizationId) {
-    res.status(400).json({ error: "This client did not request this organization." });
-    return;
-  }
-
-  if (!["accept", "reject"].includes(action)) {
-    res.status(400).json({ error: "Invalid action." });
-    return;
-  }
-
-  if (client.agency_request_status !== "pending_review") {
-    res.status(400).json({ error: "This request is no longer waiting for agency review." });
-    return;
-  }
-
-  if (action === "accept") {
-    client.agency_request_status = "accepted";
-    client.accepted_agency_id = organizationId;
-    client.accepted_agency_name = agency.name;
-    client.status = "pending";
-    client.worker_status = null;
-    client.assigned_worker = null;
-    touchClientRelationship(client, "agency_accept");
-    pushCountyNotification(`${agency.name} accepted ${client.name}'s request`, "system", getTimestamp(), {
-      organization_id: organizationId
-    });
-    await createClientNotification(client.id, {
-      title: "Agency request accepted",
-      message: `${agency.name} accepted your request. They can now assign a caseworker.`,
-      category: "status"
-    });
-  } else {
-    client.agency_request_status = "rejected";
-    client.accepted_agency_id = null;
-    client.accepted_agency_name = "";
-    client.assigned_worker = null;
-    client.worker_status = null;
-    client.status = "pending";
-    touchClientRelationship(client, "agency_reject");
-    pushCountyNotification(`${agency.name} declined ${client.name}'s request`, "system", getTimestamp(), {
-      organization_id: organizationId
-    });
-    await createClientNotification(client.id, {
-      title: "Agency request declined",
-      message: `${agency.name} declined your request. Please choose another agency or contact the county.`,
-      category: "status"
-    });
-  }
-
-  saveCountyState();
-  res.json({
-    success: true,
-    client: buildClientView(client)
+  res.status(410).json({
+    error: "Organization review is no longer required. Org-selected clients go directly to assignment."
   });
 });
 

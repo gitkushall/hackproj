@@ -575,12 +575,6 @@ function getStatusText(status) {
   if (status === "awaiting_assignment") {
     return state.lang === "es" ? "Esperando asignacion" : "Awaiting assignment";
   }
-  if (status === "awaiting_agency_response") {
-    return state.lang === "es" ? "Esperando agencia" : "Awaiting agency";
-  }
-  if (status === "agency_declined") {
-    return state.lang === "es" ? "Agencia rechazo" : "Agency declined";
-  }
   if (status === "awaiting_caseworker_response") {
     return state.lang === "es" ? "Esperando respuesta" : "Awaiting response";
   }
@@ -1934,8 +1928,6 @@ function removeShadowOrgRequest(clientId) {
 
 function buildShadowQueueState(client) {
   if (client.worker_status === "completed" || client.status === "completed") return "completed";
-  if (client.agency_request_status === "pending_review") return "awaiting_agency_response";
-  if (client.agency_request_status === "rejected") return "agency_declined";
   if (client.worker_status === "pending_approval") return "awaiting_caseworker_response";
   if (client.worker_status === "active") return "assigned_active";
   if (client.case_worker_requested) return "awaiting_assignment";
@@ -1955,7 +1947,6 @@ function mergeShadowClients(apiClients = []) {
 
 function buildShadowClientFromSignup(user, requestedAgencyId) {
   const agency = state.countyData.agencies.find((item) => item.id === requestedAgencyId) || null;
-  const isCountyRequest = requestedAgencyId === COUNTY_ORGANIZATION_ID;
 
   const client = {
     id: user.clientId,
@@ -1970,9 +1961,9 @@ function buildShadowClientFromSignup(user, requestedAgencyId) {
     case_worker_requested: true,
     requested_agency_id: requestedAgencyId || null,
     requested_agency_name: agency?.name || user.requestedAgencyName || "",
-    agency_request_status: isCountyRequest ? "accepted" : "pending_review",
-    accepted_agency_id: isCountyRequest ? requestedAgencyId : null,
-    accepted_agency_name: isCountyRequest ? (agency?.name || user.requestedAgencyName || "") : "",
+    agency_request_status: requestedAgencyId ? "accepted" : "not_started",
+    accepted_agency_id: requestedAgencyId || null,
+    accepted_agency_name: agency?.name || user.requestedAgencyName || "",
     assigned_worker_organization_id: null,
     assigned_worker_organization_name: "",
     linked_account_id: user.clientId,
@@ -2674,7 +2665,7 @@ function renderCountyMetrics() {
     const teamCount = getVisibleCountyWorkers().length;
     const requestedCount = visibleClients.filter((client) => (
       !client.is_completed &&
-      (client.queue_state === "awaiting_assignment" || client.queue_state === "awaiting_agency_response" || client.agency_request_status === "pending_review")
+      client.queue_state === "awaiting_assignment"
     )).length;
     const openTickets = (state.countyData.agencyTickets || []).filter((ticket) => ticket.status !== "closed").length;
 
@@ -3465,21 +3456,15 @@ function renderClients() {
     const organizationLabel = client.requested_agency_name || (state.lang === "es" ? "Passaic County" : "Passaic County");
     const workflowLabel = client.queue_state === "assigned_active"
       ? (state.lang === "es" ? "Caso activo con trabajador social" : "Case active with case worker")
-      : client.queue_state === "awaiting_agency_response"
-        ? (state.lang === "es" ? "Esperando aceptacion de la agencia antes de asignar trabajador" : "Waiting for agency acceptance before caseworker assignment")
       : client.queue_state === "awaiting_caseworker_response"
         ? (state.lang === "es" ? "Esperando aceptacion o rechazo del trabajador social" : "Waiting for case worker accept or reject")
-        : client.queue_state === "agency_declined"
-          ? (state.lang === "es" ? "La agencia rechazo la solicitud. Se necesita una nueva solicitud." : "The agency declined this request. A new request is needed.")
         : client.case_worker_requested
-          ? (state.lang === "es" ? "Esperando asignacion del condado" : "Waiting for county assignment")
+          ? (state.adminRole === "organization"
+              ? (state.lang === "es" ? "Listo para asignar dentro de su organizacion" : "Ready for assignment inside your organization")
+              : (state.lang === "es" ? "Esperando asignacion del condado" : "Waiting for county assignment"))
           : (state.lang === "es" ? "Trabajando individualmente" : "Working individually");
     const statusClass = client.queue_state || client.status;
-    const canOrganizationReview = state.adminRole === "organization" &&
-      client.requested_agency_id === orgId &&
-      client.agency_request_status === "pending_review";
-    const isAcceptedInsideOrganization = client.agency_request_status === "accepted" &&
-      client.accepted_agency_id === orgId;
+    const isAcceptedInsideOrganization = client.accepted_agency_id === orgId;
     const canAssignNow = workerOptions && (
       state.adminRole === "organization"
         ? isAcceptedInsideOrganization
@@ -3516,17 +3501,6 @@ function renderClients() {
         </div>
         <p class="small-text">${escapeHtml(workflowLabel)}</p>
 
-        ${canOrganizationReview ? `
-          <div class="worker-client-actions">
-            <button class="secondary-btn worker-approve-btn accept" type="button" data-agency-action="accept" data-client-id="${escapeHtml(client.id)}" data-organization-id="${escapeHtml(client.requested_agency_id || "")}">
-              ${state.lang === "es" ? "Aceptar solicitud" : "Accept request"}
-            </button>
-            <button class="secondary-btn worker-approve-btn reject" type="button" data-agency-action="reject" data-client-id="${escapeHtml(client.id)}" data-organization-id="${escapeHtml(client.requested_agency_id || "")}">
-              ${state.lang === "es" ? "Rechazar solicitud" : "Reject request"}
-            </button>
-          </div>
-        ` : ""}
-
         ${canAssignNow && workerOptions ? `
           <div class="assign-row">
             <select class="assign-worker-select" data-client-id="${escapeHtml(client.id)}">
@@ -3536,13 +3510,11 @@ function renderClients() {
               ${state.lang === "es" ? "Asignar" : "Assign"}
             </button>
           </div>
-        ` : !canOrganizationReview ? `<p class="small-text">${
-          client.agency_request_status === "pending_review"
-            ? (state.lang === "es" ? "La agencia debe aceptar esta solicitud antes de asignar un trabajador." : "The agency must accept this request before a caseworker can be assigned.")
-            : client.agency_request_status === "rejected"
-              ? (state.lang === "es" ? "Esta solicitud fue rechazada por la agencia seleccionada." : "This request was declined by the selected agency.")
-              : (state.lang === "es" ? "Esta solicitud fue dirigida a otra organizacion. El condado aun la monitorea aqui." : "This request was routed to another organization. County still monitors it here.")
-        }</p>` : ""}
+        ` : `<p class="small-text">${
+          state.adminRole === "organization"
+            ? (state.lang === "es" ? "No hay trabajadores disponibles en esta organizacion para asignar ahora mismo." : "No case workers are available in this organization to assign right now.")
+            : (state.lang === "es" ? "Esta solicitud fue dirigida a otra organizacion. El condado no la asigna aqui." : "This request was routed to another organization. County does not assign it here.")
+        }</p>`}
       </article>
     `;
   }).join("");
@@ -3553,15 +3525,6 @@ function renderClients() {
     });
   });
 
-  list.querySelectorAll("[data-agency-action]").forEach((button) => {
-    button.addEventListener("click", () => {
-      updateAgencyRequestStatus(
-        button.dataset.clientId,
-        button.dataset.organizationId,
-        button.dataset.agencyAction
-      );
-    });
-  });
 }
 
 function renderCountyDashboard() {
@@ -3915,61 +3878,6 @@ async function assignClient(clientId) {
       error.message === "SERVER_OFFLINE"
         ? showServerOfflineMessage()
         : (error.message || "Assignment could not be completed. Please try again."),
-      "error"
-    );
-  }
-}
-
-async function updateAgencyRequestStatus(clientId, organizationId, action) {
-  setCountyActionStatus("", "");
-
-  try {
-    await fetchJson("/api/agency-request-status", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_id: clientId,
-        organization_id: organizationId,
-        action
-      })
-    });
-
-    setCountyActionStatus(
-      action === "accept"
-        ? "Request accepted. You can now assign a case worker from this organization."
-        : "Request rejected. The client must choose another organization or return to county review.",
-      "success"
-    );
-    await loadCountyDashboard();
-  } catch (error) {
-    const shadowClient = getShadowClientById(clientId);
-    if (shadowClient && shadowClient.requested_agency_id === organizationId) {
-      shadowClient.agency_request_status = action === "accept" ? "accepted" : "rejected";
-      shadowClient.accepted_agency_id = action === "accept" ? organizationId : null;
-      shadowClient.accepted_agency_name = action === "accept" ? (shadowClient.requested_agency_name || "") : "";
-      shadowClient.assigned_worker = null;
-      shadowClient.worker_status = null;
-      shadowClient.status = "pending";
-      shadowClient.assigned_worker_name = "";
-      shadowClient.assigned_worker_email = "";
-      shadowClient.assigned_worker_organization_id = null;
-      shadowClient.assigned_worker_organization_name = "";
-      shadowClient.queue_state = buildShadowQueueState(shadowClient);
-      upsertShadowOrgRequest(shadowClient);
-      setCountyActionStatus(
-        action === "accept"
-          ? "Request accepted. You can now assign a case worker from this organization."
-          : "Request rejected. The client must choose another organization or return to county review.",
-        "success"
-      );
-      await loadCountyDashboard();
-      return;
-    }
-
-    setCountyActionStatus(
-      error.message === "SERVER_OFFLINE"
-        ? showServerOfflineMessage()
-        : (error.message || "Request status could not be updated."),
       "error"
     );
   }
