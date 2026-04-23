@@ -13,7 +13,8 @@ const { DOCUMENT_GUIDANCE, NJ_STATE_ID_LOCATION_COUNT, MVC_OFFICES, PASSAIC_LOCA
 const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "127.0.0.1";
-const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY || "";
+const LIBRETRANSLATE_URL = String(process.env.LIBRETRANSLATE_URL || "").trim();
+const LIBRETRANSLATE_API_KEY = String(process.env.LIBRETRANSLATE_API_KEY || "").trim();
 const SMTP_HOST = process.env.SMTP_HOST || "";
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
 const SMTP_USER = process.env.SMTP_USER || "";
@@ -183,6 +184,7 @@ const defaultAgencies = [
     name: COUNTY_ORGANIZATION_NAME,
     type: "county",
     status: "active",
+    address: "50 Ward Street, Paterson, NJ 07505",
     contact_email: "county@idhelp.org",
     contact_phone: "(973) 555-0199"
   },
@@ -191,6 +193,7 @@ const defaultAgencies = [
     name: "Paterson Shelter Navigation Team",
     type: "shelter",
     status: "active",
+    address: "176 Broadway, Paterson, NJ 07505",
     contact_email: "shelter@idhelp.org",
     contact_phone: "(973) 555-0181"
   },
@@ -199,6 +202,7 @@ const defaultAgencies = [
     name: "St. Joseph Hospital Support Team",
     type: "hospital",
     status: "active",
+    address: "703 Main Street, Paterson, NJ 07503",
     contact_email: "hospital@idhelp.org",
     contact_phone: "(973) 555-0182"
   },
@@ -207,6 +211,7 @@ const defaultAgencies = [
     name: "Community Document Access Network",
     type: "nonprofit",
     status: "active",
+    address: "233 Ellison Street, Paterson, NJ 07505",
     contact_email: "community@idhelp.org",
     contact_phone: "(973) 555-0183"
   }
@@ -638,6 +643,32 @@ function buildAgencyView(agency) {
   };
 }
 
+function getDefaultAgencyDetails(agencyId) {
+  return defaultAgencies.find((agency) => agency.id === agencyId) || null;
+}
+
+function syncAgencyMetadata() {
+  let changed = false;
+
+  agencies.forEach((agency) => {
+    const defaults = getDefaultAgencyDetails(agency.id);
+    if (!defaults) {
+      return;
+    }
+
+    ["address", "contact_email", "contact_phone"].forEach((field) => {
+      if (!agency[field] && defaults[field]) {
+        agency[field] = defaults[field];
+        changed = true;
+      }
+    });
+  });
+
+  if (changed) {
+    saveJsonArray(agenciesFilePath, agencies, { key: "agencies" });
+  }
+}
+
 function normalizeTicketPriority(priority) {
   const numericPriority = Number(priority);
   if ([1, 2, 3].includes(numericPriority)) {
@@ -814,9 +845,105 @@ function syncWorkerActiveCaseCounts() {
   });
 }
 
+function getNextAdminAccountId(adminAccounts) {
+  const maxNumericId = adminAccounts.reduce((maxId, account) => {
+    const numericId = Number.parseInt(String(account.id || "").replace("AD-", ""), 10);
+    return Number.isNaN(numericId) ? maxId : Math.max(maxId, numericId);
+  }, 0);
+
+  return `AD-${String(maxNumericId + 1).padStart(2, "0")}`;
+}
+
+function buildSyncedWorkerFromAdminAccount(account) {
+  return enrichWorkerProfile({
+    id: account.workerId,
+    name: account.name,
+    active_cases: 0,
+    title: "Case Worker",
+    phone: "",
+    email: account.email || account.demo_email || "",
+    office: "Passaic County Main Office",
+    languages: ["English"],
+    specialties: ["Case management"],
+    bio: `${account.name} supports ${(account.organization_name || COUNTY_ORGANIZATION_NAME)} clients and case follow-up.`,
+    availability: "Mon-Fri, 9:00 AM - 5:00 PM",
+    pronouns: "",
+    organization_id: account.organization_id || COUNTY_ORGANIZATION_ID,
+    organization_name: account.organization_name || COUNTY_ORGANIZATION_NAME
+  });
+}
+
+function syncCaseworkerAccess() {
+  const adminAccounts = loadAdminAccounts();
+  const workerById = new Map(workers.map((worker) => [worker.id, worker]));
+  const caseworkerAccountByWorkerId = new Map(
+    adminAccounts
+      .filter((account) => account.role === "caseworker" && account.workerId)
+      .map((account) => [account.workerId, account])
+  );
+  let workersChanged = false;
+  let adminAccountsChanged = false;
+
+  workers.forEach((worker) => {
+    const account = caseworkerAccountByWorkerId.get(worker.id);
+
+    if (!account) {
+      adminAccounts.push({
+        id: getNextAdminAccountId(adminAccounts),
+        role: "caseworker",
+        workerId: worker.id,
+        name: worker.name,
+        email: normalizeEmail(worker.email || ""),
+        organization_id: worker.organization_id || COUNTY_ORGANIZATION_ID,
+        organization_name: worker.organization_name || COUNTY_ORGANIZATION_NAME,
+        passwordSalt: "",
+        passwordHash: ""
+      });
+      adminAccountsChanged = true;
+      return;
+    }
+
+    const nextWorkerEmail = worker.email || account.email || account.demo_email || "";
+    if (
+      worker.name !== account.name ||
+      worker.organization_id !== (account.organization_id || COUNTY_ORGANIZATION_ID) ||
+      worker.organization_name !== (account.organization_name || COUNTY_ORGANIZATION_NAME) ||
+      worker.email !== nextWorkerEmail
+    ) {
+      worker.name = account.name || worker.name;
+      worker.organization_id = account.organization_id || worker.organization_id || COUNTY_ORGANIZATION_ID;
+      worker.organization_name = account.organization_name || worker.organization_name || COUNTY_ORGANIZATION_NAME;
+      worker.email = nextWorkerEmail;
+      workersChanged = true;
+    }
+  });
+
+  adminAccounts
+    .filter((account) => account.role === "caseworker" && account.workerId)
+    .forEach((account) => {
+      if (workerById.has(account.workerId)) {
+        return;
+      }
+
+      workers.push(buildSyncedWorkerFromAdminAccount(account));
+      workersChanged = true;
+    });
+
+  if (adminAccountsChanged) {
+    saveAdminAccounts(adminAccounts);
+  }
+
+  if (workersChanged) {
+    syncWorkerActiveCaseCounts();
+    saveJsonArray(workersFilePath, workers, { key: "workers" });
+  }
+}
+
 migrateClientAccounts();
 migrateClientNotificationStore();
 migrateClientStore();
+syncAgencyMetadata();
+syncCaseworkerAccess();
 syncAllClientRelationships();
 syncWorkerActiveCaseCounts();
 saveCountyState();
@@ -1035,6 +1162,7 @@ function sanitizeClientAccount(account) {
     name: account.name,
     phone: account.phone || "",
     email: account.email || "",
+    shelterAddress: account.shelterAddress || "",
     requestedCaseWorker: Boolean(account.requestedCaseWorker),
     requestedAgencyId: account.requestedAgencyId || null,
     requestedAgencyName: account.requestedAgencyName || "",
@@ -1190,6 +1318,10 @@ function findClientAccountByPhone(phone) {
 function findClientAccountByEmail(email) {
   const normalized = normalizeEmail(email);
   return clientAccounts.find((account) => normalizeEmail(account.email) === normalized) || null;
+}
+
+function findClientAccountById(clientId) {
+  return clientAccounts.find((account) => account.clientId === clientId) || null;
 }
 
 function ensureClientRecordForAccount(account, requestCaseWorker) {
@@ -1531,11 +1663,23 @@ function saveClientIntake(account, payload = {}) {
     birth: payload.intakeLocations?.birth || null,
     current: payload.intakeLocations?.current || null
   };
+  const contactDetails = {
+    phone: normalizePhone(payload.contactDetails?.phone || account.phone || ""),
+    email: normalizeEmail(payload.contactDetails?.email || account.email || ""),
+    shelterAddress: String(payload.contactDetails?.shelterAddress || account.shelterAddress || "").trim()
+  };
   const roadmapPlan = payload.roadmapPlan || null;
 
   account.hasCompletedIntake = true;
   account.documentAnswers = documentAnswers;
   account.intakeLocations = intakeLocations;
+  account.phone = contactDetails.phone;
+  account.email = contactDetails.email;
+  account.shelterAddress = contactDetails.shelterAddress;
+  account.authMethods = [
+    ...(contactDetails.phone ? ["phone"] : []),
+    ...(contactDetails.email ? ["email"] : [])
+  ];
   account.roadmapPlan = roadmapPlan;
   account.intakeCompletedAt = new Date().toISOString();
 
@@ -1603,6 +1747,11 @@ function migrateClientAccounts() {
 
     if (!("roadmapPlan" in account)) {
       account.roadmapPlan = null;
+      changed = true;
+    }
+
+    if (!("shelterAddress" in account)) {
+      account.shelterAddress = "";
       changed = true;
     }
 
@@ -1699,32 +1848,33 @@ function markClientNotificationsAsRead(clientId) {
   }
 }
 
-async function translateWithGoogle(text, targetLang, sourceLang = "en") {
-  if (!GOOGLE_TRANSLATE_API_KEY) {
-    const error = new Error("Google Translate API key is not configured.");
+async function translateWithLibre(text, targetLang, sourceLang = "en") {
+  if (!LIBRETRANSLATE_URL) {
+    const error = new Error("LibreTranslate URL is not configured.");
     error.statusCode = 503;
     throw error;
   }
 
-  const response = await fetch(`https://translation.googleapis.com/language/translate/v2?key=${encodeURIComponent(GOOGLE_TRANSLATE_API_KEY)}`, {
+  const response = await fetch(LIBRETRANSLATE_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      q: text,
+      q: String(text || ""),
       source: sourceLang,
       target: targetLang,
-      format: "text"
+      format: "text",
+      api_key: LIBRETRANSLATE_API_KEY || undefined
     })
   });
 
   if (!response.ok) {
-    let details = `Google Translate request failed with status ${response.status}.`;
+    let details = `LibreTranslate request failed with status ${response.status}.`;
 
     try {
       const errorData = await response.json();
-      details = errorData?.error?.message || details;
+      details = errorData?.error || errorData?.message || details;
     } catch (error) {
       // Keep the default status-based message when the response body is not JSON.
     }
@@ -1735,7 +1885,7 @@ async function translateWithGoogle(text, targetLang, sourceLang = "en") {
   }
 
   const data = await response.json();
-  return data?.data?.translations?.[0]?.translatedText || text;
+  return data?.translatedText || text;
 }
 
 function getNextClientIdNumber() {
@@ -1929,6 +2079,135 @@ app.get("/api/agencies", (req, res) => {
   res.json({
     agencies: visibleAgencies.map(buildAgencyView)
   });
+});
+
+function buildWorkerClientProfile(clientId, workerId = "") {
+  const client = clients.find((item) => item.id === clientId) || null;
+  if (!client) {
+    return null;
+  }
+
+  if (workerId && client.assigned_worker !== workerId) {
+    return false;
+  }
+
+  const account = findClientAccountById(clientId) || null;
+  const assignedWorker = workers.find((item) => item.id === client.assigned_worker) || null;
+  const supportAgencyId = client.assigned_worker_organization_id
+    || client.accepted_agency_id
+    || client.requested_agency_id
+    || COUNTY_ORGANIZATION_ID;
+  const supportAgency = agencies.find((agency) => agency.id === supportAgencyId) || getDefaultAgencyDetails(supportAgencyId) || null;
+  const missingDocuments = Array.isArray(client.missing_documents) ? client.missing_documents : [];
+  const hasIntake = Boolean(account?.hasCompletedIntake);
+  const allDocumentsReady = hasIntake && missingDocuments.length === 0;
+  const isAssigned = Boolean(client.assigned_worker);
+  const isCompleted = client.worker_status === "completed" || client.status === "completed";
+  const stages = [
+    {
+      key: "account",
+      title: "Account created",
+      note: "The client has a portal account and can receive updates.",
+      done: Boolean(account?.clientId)
+    },
+    {
+      key: "intake",
+      title: "Intake completed",
+      note: hasIntake ? "The client finished intake and location details are saved." : "The client still needs to finish intake.",
+      done: hasIntake
+    },
+    {
+      key: "assignment",
+      title: "Case worker assigned",
+      note: assignedWorker ? `${assignedWorker.name} is attached to this case.` : "This client is still waiting for a worker assignment.",
+      done: isAssigned
+    },
+    {
+      key: "documents",
+      title: "Documents ready",
+      note: allDocumentsReady ? "No missing document steps are listed right now." : `${missingDocuments.length} document step(s) are still missing.`,
+      done: allDocumentsReady
+    },
+    {
+      key: "case",
+      title: "Case completed",
+      note: isCompleted ? "The case has been marked complete." : "The case is still active or pending.",
+      done: isCompleted
+    }
+  ];
+  const completedCount = stages.filter((stage) => stage.done).length;
+  const progressPercent = Math.max(12, Math.round((completedCount / stages.length) * 100));
+  const uploadedDocuments = clientDocuments
+    .filter((document) => document.client_id === clientId)
+    .sort((left, right) => new Date(right.uploaded_at) - new Date(left.uploaded_at));
+  const uploadedDocumentTypes = Array.from(new Set(uploadedDocuments.map((document) => document.document_type))).filter(Boolean);
+
+  return {
+    client: {
+      id: client.id,
+      name: client.name,
+      city: client.city,
+      status: client.status,
+      worker_status: client.worker_status,
+      transportation_needed: Boolean(client.transportation_needed),
+      requested_agency_name: client.requested_agency_name || "",
+      assigned_worker_name: client.assigned_worker_name || assignedWorker?.name || "",
+      created_at: client.created_at || ""
+    },
+    contact: {
+      phone: account?.phone || "",
+      email: account?.email || ""
+    },
+    intake: {
+      completed: hasIntake,
+      current_location: account?.intakeLocations?.current || null,
+      birth_location: account?.intakeLocations?.birth || null
+    },
+    support: {
+      organization_name: supportAgency?.name || client.requested_agency_name || COUNTY_ORGANIZATION_NAME,
+      address: supportAgency?.address || "",
+      contact_phone: supportAgency?.contact_phone || "",
+      contact_email: supportAgency?.contact_email || ""
+    },
+    clientAddress: {
+      shelter_address: account?.shelterAddress || "",
+      current_location_label: account?.intakeLocations?.current
+        ? [account.intakeLocations.current.city, account.intakeLocations.current.county, account.intakeLocations.current.state].filter(Boolean).join(", ")
+        : ""
+    },
+    progress: {
+      percent: progressPercent,
+      stages
+    },
+    documents: {
+      missing: missingDocuments,
+      uploaded: uploadedDocumentTypes,
+      uploaded_count: uploadedDocuments.length
+    }
+  };
+}
+
+app.get("/api/worker-client-profile", (req, res) => {
+  const clientId = String(req.query.client_id || "").trim();
+  const workerId = String(req.query.worker_id || "").trim();
+
+  if (!clientId) {
+    res.status(400).json({ error: "client_id is required." });
+    return;
+  }
+
+  const profile = buildWorkerClientProfile(clientId, workerId);
+  if (profile === false) {
+    res.status(403).json({ error: "This client is not assigned to the requested worker." });
+    return;
+  }
+
+  if (!profile) {
+    res.status(404).json({ error: "Client not found." });
+    return;
+  }
+
+  res.json({ profile });
 });
 
 app.get("/api/notifications", (req, res) => {
@@ -2153,6 +2432,7 @@ app.post("/api/auth/signup/phone", async (req, res) => {
     name,
     phone,
     email: "",
+    shelterAddress: "",
     passwordHash: "",
     passwordSalt: "",
     authMethods: ["phone"],
@@ -2217,6 +2497,7 @@ app.post("/api/auth/signup/email", async (req, res) => {
     name,
     phone: "",
     email,
+    shelterAddress: "",
     passwordHash: hash,
     passwordSalt: salt,
     authMethods: ["email"],
@@ -2445,7 +2726,7 @@ app.post("/api/admin/caseworkers", (req, res) => {
 
   workers.push(newWorker);
   adminAccounts.push({
-    id: `AD-${String(adminAccounts.length + 1).padStart(2, "0")}`,
+    id: getNextAdminAccountId(adminAccounts),
     role: "caseworker",
     workerId,
     name,
@@ -2457,6 +2738,7 @@ app.post("/api/admin/caseworkers", (req, res) => {
   });
 
   saveAdminAccounts(adminAccounts);
+  const savedAccount = loadAdminAccounts().find((account) => account.role === "caseworker" && account.workerId === workerId) || null;
   pushCountyNotification(`New caseworker account created for ${name} (${workerId}) at ${organizationName}`, workerId, getTimestamp(), {
     organization_id: organizationId,
     category: "worker_created"
@@ -2471,6 +2753,7 @@ app.post("/api/admin/caseworkers", (req, res) => {
       workerId,
       name,
       email: normalizedEmail,
+      demo_email: savedAccount?.demo_email || normalizedEmail,
       organization_id: organizationId,
       organization_name: organizationName
     }
@@ -2545,6 +2828,7 @@ app.post("/api/auth/intake", (req, res) => {
 
   const documentAnswers = req.body?.documentAnswers || {};
   const intakeLocations = req.body?.intakeLocations || {};
+  const contactDetails = req.body?.contactDetails || {};
   const roadmapPlan = req.body?.roadmapPlan || null;
 
   const hasValidAnswers =
@@ -2569,7 +2853,27 @@ app.post("/api/auth/intake", (req, res) => {
     return;
   }
 
-  saveClientIntake(account, { documentAnswers, intakeLocations, roadmapPlan });
+  const normalizedPhone = normalizePhone(contactDetails.phone || account.phone || "");
+  const normalizedEmail = normalizeEmail(contactDetails.email || account.email || "");
+  const phoneConflict = normalizedPhone && clientAccounts.some((item) => item.clientId !== account.clientId && normalizePhone(item.phone) === normalizedPhone);
+  const emailConflict = normalizedEmail && clientAccounts.some((item) => item.clientId !== account.clientId && normalizeEmail(item.email) === normalizedEmail);
+
+  if (!normalizedPhone && !normalizedEmail) {
+    res.status(400).json({ error: "Add at least one phone number or email so your case worker can reach you." });
+    return;
+  }
+
+  if (phoneConflict) {
+    res.status(400).json({ error: "That phone number is already used by another account." });
+    return;
+  }
+
+  if (emailConflict) {
+    res.status(400).json({ error: "That email is already used by another account." });
+    return;
+  }
+
+  saveClientIntake(account, { documentAnswers, intakeLocations, contactDetails, roadmapPlan });
   const client = clients.find((item) => item.id === account.clientId);
   if (client) {
     const missingCount = Array.isArray(client.missing_documents) ? client.missing_documents.length : 0;
@@ -2619,7 +2923,7 @@ app.post("/api/translate", async (req, res) => {
   }
 
   try {
-    const translatedText = await translateWithGoogle(text, targetLang, sourceLang);
+    const translatedText = await translateWithLibre(text, targetLang, sourceLang);
     res.json({ translatedText });
   } catch (error) {
     res.status(error.statusCode || 500).json({
@@ -3117,6 +3421,18 @@ app.post("/api/admin-chat", async (req, res) => {
   });
 });
 
+app.use((error, _req, res, _next) => {
+  console.error("Unhandled server error:", error && error.stack ? error.stack : error);
+
+  if (res.headersSent) {
+    return;
+  }
+
+  res.status(500).json({
+    error: "Internal server error."
+  });
+});
+
 app.get("*", (req, res) => {
   // Do not return HTML for missing asset files. Let missing CSS/JS/image requests fail clearly.
   if (path.extname(req.path)) {
@@ -3130,7 +3446,19 @@ app.get("*", (req, res) => {
 module.exports = app;
 
 if (require.main === module) {
-  app.listen(PORT, HOST, () => {
+  process.on("unhandledRejection", (error) => {
+    console.error("Unhandled promise rejection:", error && error.stack ? error.stack : error);
+  });
+
+  process.on("uncaughtException", (error) => {
+    console.error("Uncaught exception:", error && error.stack ? error.stack : error);
+  });
+
+  const server = app.listen(PORT, HOST, () => {
     console.log(`Passaic County Housing Coordination System running at http://${HOST}:${PORT}`);
+  });
+
+  server.on("error", (error) => {
+    console.error("Server startup/runtime error:", error && error.stack ? error.stack : error);
   });
 }

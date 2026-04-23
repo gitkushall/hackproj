@@ -61,6 +61,18 @@ function getStorageMode() {
   return "filesystem";
 }
 
+function shouldUseSQLite(mode) {
+  if (String(process.env.RUNTIME_DISABLE_SQLITE || "").trim() === "1") {
+    return false;
+  }
+
+  if (mode === "tmp") {
+    return false;
+  }
+
+  return Boolean(getDatabaseSync());
+}
+
 function getTmpFilePath(filePath) {
   return path.join(TMP_ROOT, path.basename(filePath));
 }
@@ -170,6 +182,7 @@ function saveArrayToDatabase(db, key, filePath, value) {
 function loadJsonArray(filePath, fallbackValue, options = {}) {
   const key = options.key || filePath;
   const mode = getStorageMode();
+  const sqliteEnabled = shouldUseSQLite(mode);
 
   if (cache.has(key)) {
     return cache.get(key);
@@ -187,6 +200,21 @@ function loadJsonArray(filePath, fallbackValue, options = {}) {
         return persisted;
       } catch (error) {
         warnOnce(`Failed to read ${path.basename(filePath)} from temporary JSON fallback.`, error);
+      }
+    }
+
+    if (!sqliteEnabled) {
+      try {
+        const seeded = fs.existsSync(legacyFilePath)
+          ? readArrayFromFile(legacyFilePath)
+          : (fs.existsSync(filePath) ? readArrayFromFile(filePath) : fallbackClone);
+        saveArrayToLegacyFile(mode, filePath, seeded);
+        cache.set(key, seeded);
+        return seeded;
+      } catch (fileError) {
+        warnOnce(`Failed to read legacy fallback ${path.basename(filePath)}. Using defaults instead.`, fileError);
+        cache.set(key, fallbackClone);
+        return fallbackClone;
       }
     }
 
@@ -235,6 +263,7 @@ function loadJsonArray(filePath, fallbackValue, options = {}) {
 function saveJsonArray(filePath, value, options = {}) {
   const key = options.key || filePath;
   const mode = getStorageMode();
+  const sqliteEnabled = shouldUseSQLite(mode);
 
   cache.set(key, value);
 
@@ -244,6 +273,10 @@ function saveJsonArray(filePath, value, options = {}) {
     } catch (error) {
       const targetLabel = mode === "tmp" ? "temporary JSON fallback" : "JSON fallback";
       warnOnce(`Failed to persist ${path.basename(filePath)} to ${targetLabel}.`, error);
+    }
+
+    if (!sqliteEnabled) {
+      return;
     }
 
     try {
@@ -261,7 +294,7 @@ function saveJsonArray(filePath, value, options = {}) {
 
 function getRuntimeStorageInfo() {
   const mode = getStorageMode();
-  const sqliteAvailable = (mode === "filesystem" || mode === "tmp") && Boolean(getDatabaseSync());
+  const sqliteAvailable = shouldUseSQLite(mode);
   const sqliteTarget = mode === "filesystem"
     ? "SQLite database in project data/runtime.sqlite"
     : path.join(TMP_ROOT, "runtime.sqlite");

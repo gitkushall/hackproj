@@ -831,6 +831,18 @@
           </div>
         </div>
 
+        <div class="question-block">
+          <p>Contact details for your case worker</p>
+          <label for="client-contact-phone-input">Best phone number</label>
+          <input id="client-contact-phone-input" type="tel" inputmode="tel" autocomplete="tel" placeholder="(973) 555-0100" />
+
+          <label for="client-contact-email-input">Best email</label>
+          <input id="client-contact-email-input" type="email" autocomplete="email" placeholder="name@example.com" />
+
+          <label for="client-shelter-address-input">Shelter or current address</label>
+          <textarea id="client-shelter-address-input" rows="3" maxlength="240" placeholder="Enter your shelter, program, or current address"></textarea>
+        </div>
+
         <p class="error-text" id="plan-error-box" aria-live="polite"></p>
         <button class="big-btn" type="button" id="plan-btn">Save Intake</button>
       </section>
@@ -931,6 +943,20 @@
           <button class="chat-close-btn county-worker-modal-close" id="county-active-clients-modal-close-btn" type="button">X</button>
         </div>
         <div class="county-worker-modal-body" id="county-active-clients-modal-body"></div>
+      </aside>
+    </div>
+
+    <div class="county-worker-modal hidden" id="caseworker-client-profile-modal" hidden>
+      <div class="county-worker-modal-backdrop" data-caseworker-client-profile-close="true"></div>
+      <aside class="county-worker-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="caseworker-client-profile-title">
+        <div class="county-worker-modal-head">
+          <div>
+            <p class="eyebrow county-eyebrow">Case Worker Client View</p>
+            <h2 id="caseworker-client-profile-title">Client Profile</h2>
+          </div>
+          <button class="chat-close-btn county-worker-modal-close" id="caseworker-client-profile-close-btn" type="button">X</button>
+        </div>
+        <div class="county-worker-modal-body" id="caseworker-client-profile-modal-body"></div>
       </aside>
     </div>
 
