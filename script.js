@@ -20,11 +20,17 @@ const state = {
     isLoading: false,
     isCreatingWorker: false,
     isAiPanelOpen: false,
+    isAskingAi: false,
+    aiMessages: [],
+    isActiveClientsModalOpen: false,
     selectedWorkerId: null,
     selectedAgencyId: "all",
     workerSearchQuery: "",
     agencyTickets: [],
     selectedTicketId: null,
+    ticketReplyDrafts: {},
+    ticketListIncludeClosed: false,
+    hiddenClosedTicketId: null,
     selectedOrganizationStatsId: null,
     actionStatusMessage: "",
     actionStatusTone: ""
@@ -75,6 +81,10 @@ const state = {
     pendingChatImage: null,
     activeWorkspacePanel: null,
     showChatImagesOnly: false,
+    profileModalClientId: null,
+    profileModalData: null,
+    profileModalLoading: false,
+    profileModalError: "",
     refreshIntervalId: null,
     actionStatusMessage: "",
     actionStatusTone: ""
@@ -91,6 +101,10 @@ const state = {
 let activeScreenId = "login-screen";
 const COUNTY_ORGANIZATION_ID = "ORG-COUNTY";
 const ORG_REQUEST_SHADOW_STORAGE_KEY = "org_request_shadow_v1";
+const SHADOW_WORKER_STORAGE_KEY = "shadow_workers_v1";
+const SHADOW_ADMIN_ACCOUNT_STORAGE_KEY = "shadow_admin_accounts_v1";
+const SHADOW_CLIENT_ACCOUNT_STORAGE_KEY = "shadow_client_accounts_v1";
+const SHADOW_CLIENT_USER_STORAGE_KEY = "shadow_client_user_v1";
 
 const adminCases = {
   caseworker: [
@@ -146,7 +160,10 @@ const DOCUMENT_TYPES = [
 
 const NJ_BIRTH_CERTIFICATE_URL = "https://www.nj.gov/health/vital/order-vital/";
 const SSA_CARD_URL = "https://www.ssa.gov/number-card";
-const NJ_MVC_URL = "https://www.nj.gov/mvc/license/non-driverid.htm";
+const NJ_MVC_URL = "https://www.nj.gov/mvc/license/nondriverid.htm";
+const NJ_MVC_LOCATIONS_URL = "https://www.nj.gov/mvc/locations/liccenters.htm";
+const NJ_MVC_6_POINTS_URL = "https://www.nj.gov/mvc/license/6pointid.htm";
+const NJ_STATE_ID_LOCATION_COUNT = 29;
 const DEFAULT_DEMO_CASEWORKERS = [
   { workerId: "WK-01", name: "Sarah Ahmed", email: "sarah.ahmed@idhelp.org" },
   { workerId: "WK-02", name: "Daniel Kim", email: "daniel.kim@idhelp.org" },
@@ -404,26 +421,184 @@ const uiText = {
   }
 };
 
+const translationResultCache = new Map();
+const translationPromiseCache = new Map();
+const TRANSLATABLE_ATTRIBUTE_CONFIG = [
+  { attribute: "placeholder", datasetKey: "i18nOriginalPlaceholder" },
+  { attribute: "title", datasetKey: "i18nOriginalTitle" },
+  { attribute: "aria-label", datasetKey: "i18nOriginalAriaLabel" }
+];
+const VISIBLE_TRANSLATION_ROOT_SELECTORS = [
+  ".card:not(.hidden)",
+  "#help-chat-panel:not(.hidden)",
+  "#county-ai-panel:not(.hidden)",
+  "#county-worker-modal:not(.hidden)",
+  "#county-active-clients-modal:not(.hidden)"
+];
+
+let visibleTranslationTimerId = null;
+let visibleTranslationRunId = 0;
+
 async function translateText(text, targetLang) {
-  if (targetLang === "en") return text;
+  const normalizedText = String(text || "");
+  if (!normalizedText || targetLang === "en") return normalizedText;
 
-  try {
-    const response = await fetch("/api/translate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text,
-        sourceLang: "en",
-        targetLang
-      })
-    });
-
-    if (!response.ok) return text;
-    const data = await response.json();
-    return data.translatedText || text;
-  } catch (error) {
-    return text;
+  const cacheKey = `${targetLang}::${normalizedText}`;
+  if (translationResultCache.has(cacheKey)) {
+    return translationResultCache.get(cacheKey);
   }
+
+  if (translationPromiseCache.has(cacheKey)) {
+    return translationPromiseCache.get(cacheKey);
+  }
+
+  const request = (async () => {
+    try {
+      const response = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: normalizedText,
+          sourceLang: "en",
+          targetLang
+        })
+      });
+
+      if (!response.ok) return normalizedText;
+      const data = await response.json();
+      const translatedText = data.translatedText || normalizedText;
+      translationResultCache.set(cacheKey, translatedText);
+      return translatedText;
+    } catch (error) {
+      return normalizedText;
+    } finally {
+      translationPromiseCache.delete(cacheKey);
+    }
+  })();
+
+  translationPromiseCache.set(cacheKey, request);
+  return request;
+}
+
+function shouldAutoTranslateText(text) {
+  const value = String(text || "").trim();
+  if (!value) {
+    return false;
+  }
+
+  if (!/[A-Za-z]/.test(value)) {
+    return false;
+  }
+
+  if (/^(CL|WK|AD|ORG|TK|MSG|DOC|TR)-/i.test(value)) {
+    return false;
+  }
+
+  if (value.includes("@") || /^https?:\/\//i.test(value)) {
+    return false;
+  }
+
+  return true;
+}
+
+function getVisibleTranslationRoots() {
+  return VISIBLE_TRANSLATION_ROOT_SELECTORS
+    .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+    .filter((node, index, nodes) => nodes.indexOf(node) === index);
+}
+
+function getElementOriginalText(element) {
+  if (typeof element.dataset.i18nOriginalText !== "string" || !element.dataset.i18nOriginalText) {
+    element.dataset.i18nOriginalText = element.textContent || "";
+  }
+
+  return element.dataset.i18nOriginalText || "";
+}
+
+function getElementOriginalAttribute(element, attribute, datasetKey) {
+  if (!element.hasAttribute(attribute)) {
+    return "";
+  }
+
+  if (typeof element.dataset[datasetKey] !== "string" || !element.dataset[datasetKey]) {
+    element.dataset[datasetKey] = element.getAttribute(attribute) || "";
+  }
+
+  return element.dataset[datasetKey] || "";
+}
+
+async function translateVisiblePageCopy() {
+  const runId = ++visibleTranslationRunId;
+  const targetLang = state.lang;
+  const roots = getVisibleTranslationRoots();
+  const textTargets = [];
+  const attributeTargets = [];
+
+  roots.forEach((root) => {
+    [root, ...root.querySelectorAll("*")].forEach((element) => {
+      if (!(element instanceof HTMLElement) || element.dataset.translateSkip === "true") {
+        return;
+      }
+
+      TRANSLATABLE_ATTRIBUTE_CONFIG.forEach(({ attribute, datasetKey }) => {
+        const originalValue = getElementOriginalAttribute(element, attribute, datasetKey);
+        if (shouldAutoTranslateText(originalValue)) {
+          attributeTargets.push({ element, attribute, originalValue });
+        }
+      });
+
+      const hasElementChildren = Array.from(element.childNodes).some((node) => node.nodeType === Node.ELEMENT_NODE);
+      if (hasElementChildren) {
+        return;
+      }
+
+      const originalText = getElementOriginalText(element);
+      if (shouldAutoTranslateText(originalText)) {
+        textTargets.push({ element, originalText });
+      }
+    });
+  });
+
+  if (targetLang === "en") {
+    textTargets.forEach(({ element, originalText }) => {
+      element.textContent = originalText;
+    });
+    attributeTargets.forEach(({ element, attribute, originalValue }) => {
+      element.setAttribute(attribute, originalValue);
+    });
+    return;
+  }
+
+  const uniqueTexts = [...new Set([
+    ...textTargets.map((item) => item.originalText),
+    ...attributeTargets.map((item) => item.originalValue)
+  ])];
+  const translatedEntries = await Promise.all(uniqueTexts.map(async (textValue) => (
+    [textValue, await translateText(textValue, targetLang)]
+  )));
+
+  if (runId !== visibleTranslationRunId || state.lang !== targetLang) {
+    return;
+  }
+
+  const translatedMap = new Map(translatedEntries);
+  textTargets.forEach(({ element, originalText }) => {
+    element.textContent = translatedMap.get(originalText) || originalText;
+  });
+  attributeTargets.forEach(({ element, attribute, originalValue }) => {
+    element.setAttribute(attribute, translatedMap.get(originalValue) || originalValue);
+  });
+}
+
+function scheduleVisiblePageTranslation() {
+  if (visibleTranslationTimerId) {
+    window.clearTimeout(visibleTranslationTimerId);
+  }
+
+  visibleTranslationTimerId = window.setTimeout(() => {
+    visibleTranslationTimerId = null;
+    void translateVisiblePageCopy();
+  }, 0);
 }
 
 const staticTranslations = {
@@ -680,13 +855,22 @@ function generatePlan(answers, birthPlace, currentCity) {
   if (!answers.hasID) {
     steps.push({
       text: "You need a State ID.",
-      description: "Visit the official New Jersey MVC website to apply for a State ID or schedule an appointment.",
-      actionLabel: "Apply for State ID",
-      actionLink: NJ_MVC_URL,
+      description: `New Jersey state IDs are issued at ${NJ_STATE_ID_LOCATION_COUNT} MVC Licensing Centers. Use these official links before you go.`,
+      actionLinks: [
+        {
+          label: "NJ MVC Non-Driver ID",
+          href: NJ_MVC_URL
+        },
+        {
+          label: "NJ MVC Licensing Centers",
+          href: NJ_MVC_LOCATIONS_URL
+        },
+        {
+          label: "NJ MVC 6 Points of ID",
+          href: NJ_MVC_6_POINTS_URL
+        }
+      ],
       actionExternal: true
-    });
-    steps.push({
-      text: `Go to DMV/MVC in ${currentCity}.`
     });
   }
 
@@ -943,6 +1127,7 @@ function openScreen(screenId) {
     enforcePortalAuthScreen();
   }
   renderGuidedNavigatorPanels();
+  scheduleVisiblePageTranslation();
   void refreshCurrentScreenData(screenId);
 }
 
@@ -1051,10 +1236,10 @@ function applyLanguage() {
   document.documentElement.lang = state.lang;
 
   document.getElementById("login-eyebrow").textContent = state.lang === "es" ? "Portal de apoyo de vivienda" : "Housing support portal";
-  document.getElementById("login-title").textContent = state.lang === "es" ? "Bienvenido a su portal de vivienda" : "Welcome to your housing portal";
+  document.getElementById("login-title").textContent = state.lang === "es" ? "Bienvenido" : "Welcome";
   document.getElementById("login-subtitle").textContent = state.lang === "es"
-    ? "Solicite apoyo de vivienda, mantengase conectado con su trabajador social y reciba ayuda con documentos en un solo lugar."
-    : "Apply for housing support, stay connected with your case worker, and get help with documents in one place.";
+    ? "Obtenga apoyo, documentos y actualizaciones en un solo lugar."
+    : "Get support, documents, and updates in one place.";
   document.getElementById("landing-login-btn").textContent = state.lang === "es" ? "Ingresar" : "Login";
   document.getElementById("portal-select-back-btn").textContent = t.goBack;
   document.getElementById("organization-stats-back-btn").textContent = t.goBack;
@@ -1334,6 +1519,17 @@ function applyLanguage() {
   document.getElementById("county-apps-note").textContent = state.adminRole === "organization"
     ? (state.lang === "es" ? "Trabajadores sociales visibles para esta organizacion." : "Case workers visible inside this organization.")
     : (state.lang === "es" ? "Solicitudes que siguen en revision, documentos y asignacion." : "Requests still moving through review, documents, and assignment.");
+  document.getElementById("county-active-clients-kicker").textContent = state.lang === "es" ? "Casos en vivo" : "Live caseload";
+  document.getElementById("county-active-clients-label").textContent = state.lang === "es" ? "Clientes activos" : "Active clients";
+  document.getElementById("county-active-clients-note").textContent = state.lang === "es"
+    ? "Abra una lista agrupada de clientes activos por organizacion."
+    : "Open a grouped list of active clients by organization.";
+  document.getElementById("county-active-clients-modal-eyebrow").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Clientes activos de la organizacion" : "Organization active clients")
+    : (state.lang === "es" ? "Clientes activos del condado" : "County active clients");
+  document.getElementById("county-active-clients-modal-title").textContent = state.lang === "es"
+    ? "Clientes activos por organizacion"
+    : "Active Clients by Organization";
   document.getElementById("county-ai-kicker").textContent = state.adminRole === "organization"
     ? (state.lang === "es" ? "Linea al condado" : "County line")
     : (state.lang === "es" ? "Recomendacion IA" : "AI recommendation");
@@ -1401,14 +1597,19 @@ function applyLanguage() {
   document.getElementById("county-housing-pill").textContent = state.lang === "es" ? "Vivienda en vivo" : "Live housing";
   document.getElementById("county-worker-modal-eyebrow").textContent = state.lang === "es" ? "Vista de personal de Passaic County" : "Passaic County Staffing View";
   document.getElementById("county-worker-modal-title").textContent = state.lang === "es" ? "Perfil del trabajador social" : "Case Worker Profile";
-  document.getElementById("ai-response").textContent = state.lang === "es"
-    ? "La mayoria de las demoras ocurren en el paso de la ID estatal por citas y transporte."
-    : "Most delays are happening at the State ID step due to appointments and transportation issues.";
+  if (!state.countyData.aiMessages.length) {
+    state.countyData.aiMessages = [{
+      role: "assistant",
+      text: getDefaultCountyAiMessage()
+    }];
+  }
+  renderCountyAiMessages();
 
   refreshLocalizedScreens();
   renderGuidedNavigatorPanels();
   renderAgencySelectOptions();
   syncAuthPortalMode();
+  scheduleVisiblePageTranslation();
 
 }
 
@@ -1663,6 +1864,10 @@ function normalizePhone(phone) {
   return String(phone || "").replace(/\D/g, "");
 }
 
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
 function hasAuthenticatedClientUser() {
   return Boolean(state.clientPortalData.currentUser?.clientId);
 }
@@ -1711,6 +1916,9 @@ function loadIntakeFromCurrentUser() {
   }
 
   setupLocationDropdowns(savedLocations || undefined);
+  document.getElementById("client-contact-phone-input").value = user?.phone || "";
+  document.getElementById("client-contact-email-input").value = user?.email || "";
+  document.getElementById("client-shelter-address-input").value = user?.shelterAddress || "";
   state.lastPlan = user?.roadmapPlan || null;
   renderGuidedNavigatorPanels();
 }
@@ -1742,6 +1950,7 @@ function routeClientEntry() {
 function handleLoggedInUser(user) {
   state.clientPortalData.currentClientId = user.clientId;
   state.clientPortalData.currentUser = user;
+  storeShadowClientUser(user);
   routeClientEntry();
 }
 
@@ -1771,16 +1980,30 @@ function getStoredClientSessionToken() {
 }
 
 async function restoreClientSession() {
+  let serverOffline = false;
+
   try {
     const data = await fetchJson("/api/auth/me");
     if (data && data.authenticated && data.user) {
       state.clientPortalData.currentClientId = data.user.clientId;
       state.clientPortalData.currentUser = data.user;
+      storeShadowClientUser(data.user);
       routeClientEntry();
       return true;
     }
+
+    storeClientSessionToken("");
+    storeShadowClientUser(null);
   } catch (error) {
-    // Ignore session restore failures and keep the user on the login screen.
+    serverOffline = error.message === "SERVER_OFFLINE";
+  }
+
+  const shadowUser = serverOffline ? getStoredShadowClientUser() : null;
+  if (shadowUser?.clientId) {
+    state.clientPortalData.currentClientId = shadowUser.clientId;
+    state.clientPortalData.currentUser = shadowUser;
+    routeClientEntry();
+    return true;
   }
 
   return false;
@@ -1796,6 +2019,7 @@ async function logoutClientUser() {
   state.clientPortalData.currentClientId = null;
   state.clientPortalData.currentUser = null;
   storeClientSessionToken("");
+  storeShadowClientUser(null);
   state.clientPortalData.serviceRecommendations = {};
   state.clientPortalData.notifications = [];
   state.clientPortalData.unreadNotificationCount = 0;
@@ -1842,18 +2066,16 @@ async function createClientAccount() {
       body: JSON.stringify(body)
     });
 
-    if (requestCaseWorker && requestedAgencyId && requestedAgencyId !== COUNTY_ORGANIZATION_ID && data?.user) {
+    if ((requestCaseWorker || requestedAgencyId) && data?.user) {
       upsertShadowOrgRequest(buildShadowClientFromSignup(data.user, requestedAgencyId));
     }
 
-    if (state.createAccountMode === "phone") {
-      document.getElementById("phone-input").value = phone;
-      setLoginView("phone");
-    } else {
-      document.getElementById("worker-username-input").value = email;
-      document.getElementById("worker-password-input").value = "";
-      setLoginView("worker");
-    }
+    upsertShadowClientAccount({
+      ...data.user,
+      phone: state.createAccountMode === "phone" ? normalizePhone(phone) : "",
+      email: state.createAccountMode === "email" ? normalizeEmail(email) : "",
+      password: state.createAccountMode === "email" ? password : ""
+    });
 
     document.getElementById("create-account-name-input").value = "";
     document.getElementById("create-account-phone-input").value = "";
@@ -1862,14 +2084,41 @@ async function createClientAccount() {
     document.getElementById("create-account-request-worker-input").checked = false;
     document.getElementById("create-account-organization-select").value = COUNTY_ORGANIZATION_ID;
     errorBox.textContent = "";
-    openScreen("login-screen");
-    document.getElementById("login-error").textContent =
-      requestCaseWorker
-        ? t.createAccountSuccessRequested
-        : (state.createAccountMode === "phone" ? t.createAccountPhoneSuccess : t.createAccountEmailSuccess);
+    storeClientSessionToken(data.sessionToken || "");
+    document.getElementById("login-error").textContent = "";
+    handleLoggedInUser(data.user);
   } catch (error) {
-    errorBox.textContent =
-      error.message === "SERVER_OFFLINE" ? showServerOfflineMessage() : error.message;
+    if (error.message === "SERVER_OFFLINE") {
+      const shadowUser = buildShadowClientUserFromForm({
+        name,
+        phone,
+        email,
+        password,
+        requestedAgencyId,
+        requestCaseWorker
+      });
+
+      upsertShadowClientAccount(shadowUser);
+      if (requestCaseWorker || requestedAgencyId) {
+        upsertShadowOrgRequest(buildShadowClientFromSignup(shadowUser, requestedAgencyId || COUNTY_ORGANIZATION_ID));
+      }
+
+      document.getElementById("create-account-name-input").value = "";
+      document.getElementById("create-account-phone-input").value = "";
+      document.getElementById("create-account-email-input").value = "";
+      document.getElementById("create-account-password-input").value = "";
+      document.getElementById("create-account-request-worker-input").checked = false;
+      document.getElementById("create-account-organization-select").value = COUNTY_ORGANIZATION_ID;
+      errorBox.textContent = state.lang === "es"
+        ? "Cuenta guardada en este dispositivo para continuar la demostracion."
+        : "Account saved on this device so you can continue the demo.";
+      storeClientSessionToken("");
+      document.getElementById("login-error").textContent = "";
+      handleLoggedInUser(shadowUser);
+      return;
+    }
+
+    errorBox.textContent = error.message;
   }
 }
 
@@ -1887,9 +2136,9 @@ function getApiUrl(url) {
   return url;
 }
 
-function loadShadowOrgRequests() {
+function loadShadowItems(storageKey) {
   try {
-    const raw = window.localStorage.getItem(ORG_REQUEST_SHADOW_STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey);
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
@@ -1897,12 +2146,214 @@ function loadShadowOrgRequests() {
   }
 }
 
-function saveShadowOrgRequests(items) {
+function saveShadowItems(storageKey, items) {
   try {
-    window.localStorage.setItem(ORG_REQUEST_SHADOW_STORAGE_KEY, JSON.stringify(items));
+    window.localStorage.setItem(storageKey, JSON.stringify(items));
   } catch (error) {
     // Ignore storage failures and preserve live app behavior.
   }
+}
+
+function loadShadowOrgRequests() {
+  return loadShadowItems(ORG_REQUEST_SHADOW_STORAGE_KEY);
+}
+
+function saveShadowOrgRequests(items) {
+  saveShadowItems(ORG_REQUEST_SHADOW_STORAGE_KEY, items);
+}
+
+function loadShadowWorkers() {
+  return loadShadowItems(SHADOW_WORKER_STORAGE_KEY);
+}
+
+function saveShadowWorkers(items) {
+  saveShadowItems(SHADOW_WORKER_STORAGE_KEY, items);
+}
+
+function mergeShadowWorkers(apiWorkers = []) {
+  const shadowWorkers = loadShadowWorkers();
+  if (!shadowWorkers.length) {
+    return apiWorkers;
+  }
+
+  const apiIds = new Set(apiWorkers.map((worker) => worker.id));
+  const missingShadowWorkers = shadowWorkers.filter((worker) => !apiIds.has(worker.id));
+  return [...missingShadowWorkers, ...apiWorkers];
+}
+
+function upsertShadowWorker(worker) {
+  if (!worker?.id) {
+    return;
+  }
+
+  const next = loadShadowWorkers().filter((item) => item.id !== worker.id);
+  next.unshift({
+    ...worker,
+    is_shadow_local: true
+  });
+  saveShadowWorkers(next);
+}
+
+function loadShadowAdminAccounts() {
+  return loadShadowItems(SHADOW_ADMIN_ACCOUNT_STORAGE_KEY);
+}
+
+function saveShadowAdminAccounts(items) {
+  saveShadowItems(SHADOW_ADMIN_ACCOUNT_STORAGE_KEY, items);
+}
+
+function upsertShadowAdminAccount(account) {
+  if (!account?.email) {
+    return;
+  }
+
+  const email = normalizeEmail(account.email);
+  const existing = loadShadowAdminAccounts().find((item) => normalizeEmail(item.email) === email) || null;
+  const next = loadShadowAdminAccounts().filter((item) => normalizeEmail(item.email) !== email);
+  next.unshift({
+    ...existing,
+    ...account,
+    password: account.password || existing?.password || "",
+    email,
+    is_shadow_local: true
+  });
+  saveShadowAdminAccounts(next);
+}
+
+function findShadowAdminAccountByCredentials({ role, email, password, workerId }) {
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedWorkerId = String(workerId || "").trim().toUpperCase();
+
+  return loadShadowAdminAccounts().find((account) => (
+    account.role === role &&
+    (!normalizedEmail || normalizeEmail(account.email) === normalizedEmail || String(account.workerId || "").trim().toUpperCase() === normalizedWorkerId) &&
+    String(account.password || "") === String(password || "")
+  )) || null;
+}
+
+function loadShadowClientAccounts() {
+  return loadShadowItems(SHADOW_CLIENT_ACCOUNT_STORAGE_KEY);
+}
+
+function saveShadowClientAccounts(items) {
+  saveShadowItems(SHADOW_CLIENT_ACCOUNT_STORAGE_KEY, items);
+}
+
+function upsertShadowClientAccount(account) {
+  if (!account?.clientId) {
+    return;
+  }
+
+  const existing = getShadowClientAccountById(account.clientId);
+  const next = loadShadowClientAccounts().filter((item) => item.clientId !== account.clientId);
+  next.unshift({
+    ...existing,
+    ...account,
+    password: account.password || existing?.password || "",
+    phone: account.phone ?? existing?.phone ?? "",
+    email: account.email ?? existing?.email ?? "",
+    is_shadow_local: true
+  });
+  saveShadowClientAccounts(next);
+}
+
+function getShadowClientAccountByPhone(phone) {
+  const normalizedPhone = normalizePhone(phone);
+  return loadShadowClientAccounts().find((account) => normalizePhone(account.phone) === normalizedPhone) || null;
+}
+
+function getShadowClientAccountByEmail(email) {
+  const normalizedEmail = normalizeEmail(email);
+  return loadShadowClientAccounts().find((account) => normalizeEmail(account.email) === normalizedEmail) || null;
+}
+
+function getShadowClientAccountById(clientId) {
+  return loadShadowClientAccounts().find((account) => account.clientId === clientId) || null;
+}
+
+function storeShadowClientUser(user) {
+  try {
+    if (user?.clientId) {
+      window.localStorage.setItem(SHADOW_CLIENT_USER_STORAGE_KEY, JSON.stringify(user));
+      upsertShadowClientAccount(user);
+    } else {
+      window.localStorage.removeItem(SHADOW_CLIENT_USER_STORAGE_KEY);
+    }
+  } catch (error) {
+    // Ignore storage failures and preserve live app behavior.
+  }
+}
+
+function getStoredShadowClientUser() {
+  try {
+    const raw = window.localStorage.getItem(SHADOW_CLIENT_USER_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function buildShadowWorkerRecord(payload) {
+  const organizationId = payload.organization_id || COUNTY_ORGANIZATION_ID;
+  const organization = state.countyData.agencies.find((agency) => agency.id === organizationId) || null;
+  const organizationName = organization?.name || state.adminAccount?.organization_name || "Passaic County";
+
+  return {
+    id: String(payload.workerId || "").trim().toUpperCase(),
+    name: payload.name,
+    email: normalizeEmail(payload.email),
+    active_cases: 0,
+    title: "Case Worker",
+    phone: "",
+    office: "Passaic County Main Office",
+    languages: ["English"],
+    specialties: ["Case management"],
+    bio: `${payload.name} supports ${organizationName} clients and case follow-up.`,
+    availability: "Mon-Fri, 9:00 AM - 5:00 PM",
+    pronouns: "",
+    completed_cases: [],
+    completed_cases_count: 0,
+    handled_cases_count: 0,
+    organization_id: organizationId,
+    organization_name: organizationName
+  };
+}
+
+function buildShadowCaseworkerAdminAccount(payload, worker) {
+  return {
+    id: `LOCAL-${worker.id}`,
+    role: "caseworker",
+    workerId: worker.id,
+    name: worker.name,
+    email: worker.email,
+    demo_email: worker.email,
+    organization_id: worker.organization_id,
+    organization_name: worker.organization_name,
+    password: payload.password
+  };
+}
+
+function buildShadowClientUserFromForm({ name, phone, email, password, requestedAgencyId, requestCaseWorker }) {
+  const normalizedPhone = normalizePhone(phone);
+  const normalizedEmail = normalizeEmail(email);
+  const organization = state.countyData.agencies.find((agency) => agency.id === requestedAgencyId) || null;
+  const clientId = `CL-LOCAL-${Date.now().toString(36).toUpperCase()}`;
+
+  return {
+    clientId,
+    name,
+    phone: normalizedPhone || "",
+    email: normalizedEmail || "",
+    password: password || "",
+    requestedCaseWorker: Boolean(requestCaseWorker),
+    requestedAgencyId: requestedAgencyId || "",
+    requestedAgencyName: organization?.name || "",
+    hasCompletedIntake: false,
+    documentAnswers: null,
+    intakeLocations: null,
+    roadmapPlan: null,
+    intakeCompletedAt: null
+  };
 }
 
 function getShadowClientById(clientId) {
@@ -1947,6 +2398,7 @@ function mergeShadowClients(apiClients = []) {
 
 function buildShadowClientFromSignup(user, requestedAgencyId) {
   const agency = state.countyData.agencies.find((item) => item.id === requestedAgencyId) || null;
+  const requestedCaseWorker = Boolean(user?.requestedCaseWorker);
 
   const client = {
     id: user.clientId,
@@ -1954,16 +2406,16 @@ function buildShadowClientFromSignup(user, requestedAgencyId) {
     city: "Passaic",
     missing_documents: [],
     transportation_needed: false,
-    status: "pending",
+    status: requestedCaseWorker ? "pending" : "active",
     assigned_worker: null,
     worker_status: null,
     created_at: new Date().toISOString(),
-    case_worker_requested: true,
+    case_worker_requested: requestedCaseWorker,
     requested_agency_id: requestedAgencyId || null,
     requested_agency_name: agency?.name || user.requestedAgencyName || "",
-    agency_request_status: requestedAgencyId ? "accepted" : "not_started",
-    accepted_agency_id: requestedAgencyId || null,
-    accepted_agency_name: agency?.name || user.requestedAgencyName || "",
+    agency_request_status: requestedCaseWorker && requestedAgencyId ? "accepted" : "not_started",
+    accepted_agency_id: requestedCaseWorker ? (requestedAgencyId || null) : null,
+    accepted_agency_name: requestedCaseWorker ? (agency?.name || user.requestedAgencyName || "") : "",
     assigned_worker_organization_id: null,
     assigned_worker_organization_name: "",
     linked_account_id: user.clientId,
@@ -2087,6 +2539,7 @@ function renderAdminDemoCaseworkerOptions() {
   }
 
   state.adminSelectedDemoWorkerId = selectedValue;
+  scheduleVisiblePageTranslation();
 }
 
 function renderAdminDemoOrganizationOptions() {
@@ -2115,6 +2568,7 @@ function renderAdminDemoOrganizationOptions() {
   }
 
   state.adminSelectedDemoOrganizationId = selectedValue;
+  scheduleVisiblePageTranslation();
 }
 
 function syncAdminDemoWorkerSelection() {
@@ -2128,7 +2582,7 @@ function syncAdminDemoWorkerSelection() {
   const selectedWorker = state.adminDemoWorkers.find((worker) => worker.workerId === selectedWorkerId) || null;
 
   if (state.adminRole === "caseworker" && selectedWorker) {
-    document.getElementById("admin-email-input").value = selectedWorker.email || "";
+    document.getElementById("admin-email-input").value = selectedWorker.demo_email || selectedWorker.email || "";
     document.getElementById("admin-password-input").value = "Demo login";
   }
 
@@ -2162,6 +2616,21 @@ async function loadAdminDemoCaseworkers() {
   } catch (error) {
     state.adminDemoWorkers = DEFAULT_DEMO_CASEWORKERS.slice();
   }
+
+  const shadowWorkers = loadShadowAdminAccounts()
+    .filter((account) => account.role === "caseworker" && account.workerId)
+    .map((account) => ({
+      workerId: account.workerId,
+      name: account.name,
+      email: account.email,
+      demo_email: account.demo_email || account.email,
+      organization_id: account.organization_id,
+      organization_name: account.organization_name
+    }));
+
+  state.adminDemoWorkers = [...shadowWorkers, ...state.adminDemoWorkers].filter((worker, index, items) => (
+    items.findIndex((item) => String(item.workerId || "") === String(worker.workerId || "")) === index
+  ));
 
   renderAdminDemoCaseworkerOptions();
   syncAdminDemoWorkerSelection();
@@ -2228,6 +2697,7 @@ function renderAgencySelectOptions() {
         `;
     countyFilter.value = state.adminRole === "organization" ? organizationId : currentFilter;
   }
+  scheduleVisiblePageTranslation();
 }
 
 function getVisibleCountyClients() {
@@ -2240,12 +2710,7 @@ function getVisibleCountyClients() {
     ));
   }
 
-  return state.countyData.clients.filter((client) => (
-    !client.requested_agency_id ||
-    client.requested_agency_id === COUNTY_ORGANIZATION_ID ||
-    client.accepted_agency_id === COUNTY_ORGANIZATION_ID ||
-    client.assigned_worker_organization_id === COUNTY_ORGANIZATION_ID
-  ));
+  return state.countyData.clients;
 }
 
 function getVisibleCountyWorkers() {
@@ -2255,6 +2720,27 @@ function getVisibleCountyWorkers() {
   }
 
   return state.countyData.workers;
+}
+
+function getAllowedAssignmentOrganizationId(client) {
+  if (state.adminRole === "organization") {
+    return state.adminAccount?.organization_id || "";
+  }
+
+  if (client?.accepted_agency_id) {
+    return client.accepted_agency_id;
+  }
+
+  if (client?.requested_agency_id && client.requested_agency_id !== COUNTY_ORGANIZATION_ID) {
+    return client.requested_agency_id;
+  }
+
+  return COUNTY_ORGANIZATION_ID;
+}
+
+function getAssignableWorkersForClientView(client) {
+  const allowedOrganizationId = getAllowedAssignmentOrganizationId(client);
+  return state.countyData.workers.filter((worker) => worker.organization_id === allowedOrganizationId);
 }
 
 function getOrganizationScopeQuery() {
@@ -2294,6 +2780,7 @@ function renderClientNotifications() {
 
   if (!notifications.length) {
     list.innerHTML = `<div class="county-empty-state">${state.lang === "es" ? "Todavia no hay actualizaciones." : "No updates yet."}</div>`;
+    scheduleVisiblePageTranslation();
     return;
   }
 
@@ -2307,6 +2794,7 @@ function renderClientNotifications() {
       <span class="small-text client-notification-delivery">${escapeHtml(getClientDeliveryMethodLabel(item.delivery?.channel, ""))}</span>
     </article>
   `).join("");
+  scheduleVisiblePageTranslation();
 }
 
 async function loadClientNotifications() {
@@ -2506,6 +2994,38 @@ function formatTicketTimestamp(value) {
   return timestamp.toLocaleString(getLocale(), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function getTicketStatusText(status) {
+  if (status === "closed") {
+    return state.lang === "es" ? "Cerrado" : "Closed";
+  }
+
+  return state.lang === "es" ? "Abierto" : "Open";
+}
+
+function getSelectedAgencyTicket(tickets = state.countyData.agencyTickets || []) {
+  const openTickets = tickets.filter((ticket) => ticket.status !== "closed");
+  const selectedTicket = tickets.find((ticket) => ticket.id === state.countyData.selectedTicketId)
+    || openTickets[0]
+    || tickets[0]
+    || null;
+  if (selectedTicket && !state.countyData.selectedTicketId) {
+    state.countyData.selectedTicketId = selectedTicket.id;
+  }
+  return selectedTicket;
+}
+
+function scrollTicketThreadToBottom(force = false) {
+  const thread = document.getElementById("county-ticket-thread");
+  if (!thread) {
+    return;
+  }
+
+  const nearBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 60;
+  if (force || nearBottom) {
+    thread.scrollTop = thread.scrollHeight;
+  }
+}
+
 function renderTicketOrgOptions() {
   const select = document.getElementById("county-ticket-org-select");
   if (!select) {
@@ -2522,6 +3042,7 @@ function renderAgencyTickets() {
   const panel = document.getElementById("county-ticket-panel");
   const list = document.getElementById("county-ticket-list");
   const detail = document.getElementById("county-ticket-detail");
+  const createCard = document.querySelector("#county-ticket-body .county-ticket-create-card");
   const openButton = document.getElementById("county-ticket-open-btn");
   const openLabel = document.getElementById("county-ticket-open-label");
   const openCount = document.getElementById("county-ticket-open-count");
@@ -2588,10 +3109,12 @@ function renderAgencyTickets() {
     list.innerHTML = `<div class="county-empty-state">${state.lang === "es" ? "No hay tickets todavia." : "No tickets yet."}</div>`;
   } else {
     list.innerHTML = tickets.map((ticket) => `
-      <button class="county-ticket-card ${ticket.id === state.countyData.selectedTicketId ? "selected" : ""} priority-${escapeHtml(String(ticket.priority))} ${ticket.escalated_by_age ? "aged" : ""}" type="button" data-ticket-id="${escapeHtml(ticket.id)}">
+      <button class="county-ticket-card ${ticket.id === state.countyData.selectedTicketId ? "selected" : ""} priority-${escapeHtml(String(ticket.priority))} ${ticket.escalated_by_age ? "aged" : ""} ${ticket.status === "closed" ? "closed" : ""}" type="button" data-ticket-id="${escapeHtml(ticket.id)}">
         <div>
           <strong>${escapeHtml(ticket.subject)}</strong>
+          <p class="small-text">${state.lang === "es" ? "Ticket" : "Ticket"} #${escapeHtml(ticket.id)}</p>
           <p class="small-text">${escapeHtml(ticket.organization_name)} • ${escapeHtml(formatTicketTimestamp(ticket.last_message_at || ticket.updated_at))}</p>
+          <p class="small-text">${escapeHtml(getTicketStatusText(ticket.status))}</p>
         </div>
         <span class="county-ticket-priority">${escapeHtml(getPriorityText(ticket))}</span>
       </button>
@@ -2601,17 +3124,41 @@ function renderAgencyTickets() {
   list.querySelectorAll(".county-ticket-card").forEach((button) => {
     button.addEventListener("click", () => {
       state.countyData.selectedTicketId = button.dataset.ticketId || null;
+      state.countyData.hiddenClosedTicketId = null;
       renderAgencyTickets();
     });
   });
 
-  const selectedTicket = tickets.find((ticket) => ticket.id === state.countyData.selectedTicketId) || tickets[0] || null;
-  if (selectedTicket && !state.countyData.selectedTicketId) {
-    state.countyData.selectedTicketId = selectedTicket.id;
+  const selectedTicket = getSelectedAgencyTicket(tickets);
+  if (createCard) {
+    const shouldHideComposer = Boolean(selectedTicket && selectedTicket.status === "closed");
+    createCard.classList.toggle("hidden", shouldHideComposer);
+    createCard.hidden = shouldHideComposer;
   }
-
   if (!selectedTicket) {
     detail.innerHTML = `<div class="county-empty-state">${state.lang === "es" ? "Seleccione un ticket para revisar la conversacion." : "Select a ticket to review the conversation."}</div>`;
+    return;
+  }
+
+  const draftValue = state.countyData.ticketReplyDrafts[selectedTicket.id] || "";
+  const canCloseTicket = isCounty && selectedTicket.status !== "closed";
+  const canReplyToTicket = selectedTicket.status !== "closed";
+  const hideClosedWorkspace = selectedTicket.status === "closed" && state.countyData.hiddenClosedTicketId === selectedTicket.id;
+  const roleLabel = isCounty
+    ? (state.lang === "es" ? "Conversacion con la organizacion" : "Conversation with organization")
+    : (state.lang === "es" ? "Conversacion con Passaic County" : "Conversation with Passaic County");
+
+  if (hideClosedWorkspace) {
+    detail.innerHTML = `
+      <div class="county-ticket-detail-head">
+        <div>
+          <p class="panel-kicker">${escapeHtml(selectedTicket.organization_name)}</p>
+          <strong>${escapeHtml(selectedTicket.subject)}</strong>
+          <p class="small-text">${state.lang === "es" ? "Ticket" : "Ticket"} #${escapeHtml(selectedTicket.id)} • ${escapeHtml(getTicketStatusText(selectedTicket.status))}</p>
+        </div>
+      </div>
+      <div class="county-empty-state">${state.lang === "es" ? "Ticket cerrado. La conversacion fue removida de esta vista." : "Ticket closed. The conversation was removed from this view."}</div>
+    `;
     return;
   }
 
@@ -2620,11 +3167,18 @@ function renderAgencyTickets() {
       <div>
         <p class="panel-kicker">${escapeHtml(selectedTicket.organization_name)}</p>
         <strong>${escapeHtml(selectedTicket.subject)}</strong>
-        <p class="small-text">${escapeHtml(getPriorityText(selectedTicket))} • ${escapeHtml(selectedTicket.status)}</p>
+        <p class="small-text">${state.lang === "es" ? "Ticket" : "Ticket"} #${escapeHtml(selectedTicket.id)} • ${escapeHtml(getPriorityText(selectedTicket))} • ${escapeHtml(getTicketStatusText(selectedTicket.status))}</p>
       </div>
-      ${isCounty && selectedTicket.status !== "closed" ? `<button class="secondary-btn county-clear-btn" type="button" id="county-ticket-close-btn">${state.lang === "es" ? "Cerrar ticket" : "Close ticket"}</button>` : ""}
+      ${canCloseTicket ? `<button class="secondary-btn county-ticket-close-action" type="button" id="county-ticket-close-btn">${state.lang === "es" ? "Cerrar ticket" : "Close ticket"}</button>` : ""}
     </div>
-    <div class="county-ticket-thread">
+    <div class="county-ticket-chat-head">
+      <div>
+        <strong>${escapeHtml(roleLabel)}</strong>
+        <p class="small-text">${escapeHtml(formatTicketTimestamp(selectedTicket.last_message_at || selectedTicket.updated_at))}</p>
+      </div>
+      <span class="county-ticket-status-badge ${selectedTicket.status === "closed" ? "closed" : "open"}">${escapeHtml(getTicketStatusText(selectedTicket.status))}</span>
+    </div>
+    <div class="county-ticket-thread" id="county-ticket-thread">
       ${(selectedTicket.messages || []).map((message) => `
         <div class="county-ticket-message ${message.sender_role === "county" ? "from-county" : "from-org"}">
           <strong>${escapeHtml(message.sender)}</strong>
@@ -2633,15 +3187,31 @@ function renderAgencyTickets() {
         </div>
       `).join("")}
     </div>
-    ${selectedTicket.status !== "closed" ? `
+    ${canReplyToTicket ? `
       <div class="county-ticket-reply">
-        <textarea id="county-ticket-reply-input" rows="3" maxlength="1200" placeholder="${escapeHtml(isCounty ? "Reply to this organization..." : "Add an update for the county...")}"></textarea>
-        <button class="secondary-btn assign-worker-btn" type="button" id="county-ticket-reply-btn">${state.lang === "es" ? "Responder" : "Reply"}</button>
+        <label for="county-ticket-reply-input">${state.lang === "es" ? "Responder en este ticket" : "Reply in this ticket"}</label>
+        <textarea id="county-ticket-reply-input" rows="4" maxlength="1200" placeholder="${escapeHtml(isCounty ? "Reply to this organization..." : "Add an update for the county...")}">${escapeHtml(draftValue)}</textarea>
+        <div class="county-ticket-reply-actions">
+          <p class="small-text">${state.lang === "es" ? "Presione Enter para enviar. Use Shift+Enter para una nueva linea." : "Press Enter to send. Use Shift+Enter for a new line."}</p>
+          <button class="secondary-btn assign-worker-btn" type="button" id="county-ticket-reply-btn">${state.lang === "es" ? "Responder" : "Reply"}</button>
+        </div>
       </div>
-    ` : `<p class="small-text">${state.lang === "es" ? "Este ticket esta cerrado." : "This ticket is closed."}</p>`}
+    ` : `<div class="county-ticket-closed-note"><strong>${state.lang === "es" ? "Ticket cerrado" : "Ticket closed"}</strong><p class="small-text">${state.lang === "es" ? "La conversacion esta en solo lectura. El condado puede abrir un ticket nuevo si hace falta seguimiento." : "This conversation is now read-only. The county can open a new ticket if follow-up is needed."}</p></div>`}
   `;
 
+  const replyInput = document.getElementById("county-ticket-reply-input");
   const replyButton = document.getElementById("county-ticket-reply-btn");
+  if (replyInput) {
+    replyInput.addEventListener("input", () => {
+      state.countyData.ticketReplyDrafts[selectedTicket.id] = replyInput.value;
+    });
+    replyInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendAgencyTicketReply(selectedTicket.id);
+      }
+    });
+  }
   if (replyButton) {
     replyButton.addEventListener("click", () => {
       sendAgencyTicketReply(selectedTicket.id);
@@ -2654,12 +3224,17 @@ function renderAgencyTickets() {
       closeAgencyTicket(selectedTicket.id);
     });
   }
+
+  window.requestAnimationFrame(() => {
+    scrollTicketThreadToBottom();
+  });
 }
 
 function renderCountyMetrics() {
   const visibleClients = getVisibleCountyClients();
   const assignedCount = visibleClients.filter((client) => client.queue_state === "assigned_active").length;
   const openCount = visibleClients.filter((client) => !client.is_completed && client.queue_state !== "assigned_active").length;
+  document.getElementById("county-active-clients-number").textContent = String(visibleClients.filter((client) => !client.is_completed).length);
 
   if (state.adminRole === "organization") {
     const teamCount = getVisibleCountyWorkers().length;
@@ -3042,6 +3617,7 @@ function renderOrganizationStatsPage() {
       openWorkerProfile(button.dataset.workerId);
     });
   });
+  scheduleVisiblePageTranslation();
 }
 
 function openOrganizationStats(organizationId) {
@@ -3149,6 +3725,11 @@ async function createCountyCaseWorker() {
       ...state.countyData.workers.filter((worker) => worker.id !== data.worker.id),
       data.worker
     ].sort((left, right) => String(left.id).localeCompare(String(right.id)));
+    upsertShadowWorker(data.worker);
+    upsertShadowAdminAccount({
+      ...buildShadowCaseworkerAdminAccount(payload, data.worker),
+      demo_email: data.account?.demo_email || data.worker.email
+    });
     state.countyData.recommendedWorkerId = data.worker.id;
     renderCountyDashboard();
     resetCountyAddWorkerForm();
@@ -3158,11 +3739,32 @@ async function createCountyCaseWorker() {
     ]);
     setCountyAddWorkerMessage(
       state.adminRole === "organization"
-        ? `${data.worker.name} (${data.worker.id}) was added to ${data.worker.organization_name || "your organization"}. County can now see this worker.`
-        : `${data.worker.name} (${data.worker.id}) is now in the case worker list.`,
+        ? `${data.worker.name} (${data.worker.id}) was added to ${data.worker.organization_name || "your organization"}. Demo login is ready and assignments will use this worker immediately.`
+        : `${data.worker.name} (${data.worker.id}) is now in the case worker list with demo login ready.`,
       "success"
     );
   } catch (error) {
+    if (error.message === "SERVER_OFFLINE") {
+      const shadowWorker = buildShadowWorkerRecord(payload);
+      upsertShadowWorker(shadowWorker);
+      upsertShadowAdminAccount(buildShadowCaseworkerAdminAccount(payload, shadowWorker));
+      state.countyData.workers = [
+        ...state.countyData.workers.filter((worker) => worker.id !== shadowWorker.id),
+        shadowWorker
+      ].sort((left, right) => String(left.id).localeCompare(String(right.id)));
+      state.countyData.recommendedWorkerId = shadowWorker.id;
+      renderCountyDashboard();
+      resetCountyAddWorkerForm();
+      await loadAdminDemoCaseworkers();
+      setCountyAddWorkerMessage(
+        state.adminRole === "organization"
+          ? `${shadowWorker.name} (${shadowWorker.id}) was saved on this device for ${shadowWorker.organization_name}.`
+          : `${shadowWorker.name} (${shadowWorker.id}) was saved on this device and is ready to assign.`,
+        "success"
+      );
+      return;
+    }
+
     setCountyAddWorkerMessage(error.message || "Unable to create the case worker account.", "error");
   } finally {
     state.countyData.isCreatingWorker = false;
@@ -3297,6 +3899,261 @@ function openWorkerProfile(workerId) {
 function closeWorkerProfile() {
   state.countyData.selectedWorkerId = null;
   renderWorkerProfileModal();
+}
+
+function closeCaseworkerClientProfileModal() {
+  state.caseWorkerData.profileModalClientId = null;
+  state.caseWorkerData.profileModalData = null;
+  state.caseWorkerData.profileModalLoading = false;
+  state.caseWorkerData.profileModalError = "";
+  renderCaseworkerClientProfileModal();
+}
+
+function buildWorkerProfileStageMarkup(stages = []) {
+  return stages.map((stage) => {
+    const stageState = stage.done ? "done" : "todo";
+    return `
+      <article class="worker-profile-stage ${stageState}">
+        <span class="worker-profile-stage-icon" aria-hidden="true">${stage.done ? "✓" : "○"}</span>
+        <div>
+          <strong>${escapeHtml(stage.title)}</strong>
+          <p class="small-text">${escapeHtml(stage.note)}</p>
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+function renderCaseworkerClientProfileModal() {
+  const overlay = document.getElementById("caseworker-client-profile-modal");
+  const body = document.getElementById("caseworker-client-profile-modal-body");
+
+  if (!state.caseWorkerData.profileModalClientId) {
+    overlay.classList.add("hidden");
+    overlay.hidden = true;
+    body.innerHTML = "";
+    return;
+  }
+
+  if (state.caseWorkerData.profileModalLoading) {
+    body.innerHTML = `<div class="county-empty-state">${localizeText("Loading...")}</div>`;
+    overlay.classList.remove("hidden");
+    overlay.hidden = false;
+    return;
+  }
+
+  if (state.caseWorkerData.profileModalError) {
+    body.innerHTML = `<div class="county-empty-state">${escapeHtml(state.caseWorkerData.profileModalError)}</div>`;
+    overlay.classList.remove("hidden");
+    overlay.hidden = false;
+    return;
+  }
+
+  const profile = state.caseWorkerData.profileModalData;
+  if (!profile) {
+    body.innerHTML = `<div class="county-empty-state">${localizeText("No client profile available.")}</div>`;
+    overlay.classList.remove("hidden");
+    overlay.hidden = false;
+    return;
+  }
+
+  const uploadedDocumentLabels = (profile.documents?.uploaded || []).map((item) => formatDocumentLabel(item));
+  const missingDocumentLabels = (profile.documents?.missing || []).map((item) => formatDocumentLabel(item));
+  const currentLocation = profile.intake?.current_location || null;
+  const progressStages = profile.progress?.stages || [];
+  const supportLabel = profile.support?.organization_name || "Support location";
+  const shelterAddressLabel = profile.clientAddress?.shelter_address || profile.clientAddress?.current_location_label || "Address not yet shared";
+  const currentLocationLabel = currentLocation
+    ? [currentLocation.city, currentLocation.county, currentLocation.state].filter(Boolean).join(", ")
+    : "Not yet shared";
+
+  body.innerHTML = `
+    <div class="worker-client-profile-shell">
+      <div class="worker-client-profile-hero">
+        <div>
+          <span class="panel-kicker">Client profile</span>
+          <h3>${escapeHtml(profile.client?.name || "Client")}</h3>
+          <p class="small-text">${escapeHtml(profile.client?.id || "")} • ${escapeHtml(profile.client?.city || "")}</p>
+        </div>
+        <div class="worker-client-profile-score">
+          <span class="small-text">Overall progress</span>
+          <strong>${escapeHtml(String(profile.progress?.percent || 0))}%</strong>
+        </div>
+      </div>
+
+      <div class="worker-client-profile-grid">
+        <article class="county-worker-profile-card">
+          <span class="metric-kicker">Contact</span>
+          <strong>${escapeHtml(profile.contact?.phone || profile.contact?.email || "No direct contact on file")}</strong>
+          <div class="worker-client-contact-links">
+            ${profile.contact?.phone ? `<a class="secondary-btn worker-profile-link-btn" href="tel:${escapeHtml(String(profile.contact.phone).replace(/\D/g, ""))}">Call client</a>` : ""}
+            ${profile.contact?.email ? `<a class="secondary-btn worker-profile-link-btn" href="mailto:${escapeHtml(profile.contact.email)}">Email client</a>` : ""}
+          </div>
+        </article>
+        <article class="county-worker-profile-card">
+          <span class="metric-kicker">Shelter / address</span>
+          <strong>${escapeHtml(shelterAddressLabel)}</strong>
+          <p class="small-text">${profile.clientAddress?.shelter_address ? "Shared by the client after login." : "Using current location until a shelter address is added."}</p>
+        </article>
+        <article class="county-worker-profile-card">
+          <span class="metric-kicker">Support organization</span>
+          <strong>${escapeHtml(supportLabel)}</strong>
+          <p class="small-text">${escapeHtml(profile.support?.address || "Address not available")}</p>
+        </article>
+        <article class="county-worker-profile-card">
+          <span class="metric-kicker">Current location</span>
+          <strong>${escapeHtml(currentLocationLabel)}</strong>
+          <p class="small-text">${profile.intake?.completed ? "Shared during intake." : "Waiting for intake completion."}</p>
+        </article>
+        <article class="county-worker-profile-card">
+          <span class="metric-kicker">Documents uploaded</span>
+          <strong>${escapeHtml(String(profile.documents?.uploaded_count || 0))}</strong>
+          <div class="client-tag-row">
+            ${uploadedDocumentLabels.length
+              ? uploadedDocumentLabels.map((label) => `<span class="document-tag">${escapeHtml(label)}</span>`).join("")
+              : `<span class="small-text">No uploaded documents yet.</span>`}
+          </div>
+        </article>
+        <article class="county-worker-profile-card">
+          <span class="metric-kicker">Still needed</span>
+          <strong>${escapeHtml(String(missingDocumentLabels.length))}</strong>
+          <div class="client-tag-row">
+            ${missingDocumentLabels.length
+              ? missingDocumentLabels.map((label) => `<span class="document-tag">${escapeHtml(label)}</span>`).join("")
+              : `<span class="small-text">No missing documents listed.</span>`}
+          </div>
+        </article>
+        <article class="county-worker-profile-card">
+          <span class="metric-kicker">Case status</span>
+          <strong>${escapeHtml(getCaseStatusLabel(profile.client || {}))}</strong>
+          <p class="small-text">${profile.client?.transportation_needed ? "Transportation help needed." : "No transport barrier marked right now."}</p>
+        </article>
+      </div>
+
+      <section class="worker-client-progress-panel">
+        <div class="county-section-head">
+          <div>
+            <p class="panel-kicker">Progress board</p>
+            <strong>Case readiness snapshot</strong>
+            <p class="small-text">A worker-facing view of intake, assignment, documents, and completion status.</p>
+          </div>
+        </div>
+        <div class="worker-client-progress-bar">
+          <span style="width: ${escapeHtml(String(profile.progress?.percent || 0))}%"></span>
+        </div>
+        <div class="worker-client-progress-stage-list">
+          ${buildWorkerProfileStageMarkup(progressStages)}
+        </div>
+      </section>
+    </div>
+  `;
+
+  overlay.classList.remove("hidden");
+  overlay.hidden = false;
+}
+
+async function openCaseworkerClientProfile(clientId) {
+  state.caseWorkerData.profileModalClientId = clientId;
+  state.caseWorkerData.profileModalData = null;
+  state.caseWorkerData.profileModalError = "";
+  state.caseWorkerData.profileModalLoading = true;
+  renderCaseworkerClientProfileModal();
+
+  try {
+    const data = await fetchJson(`/api/worker-client-profile?client_id=${encodeURIComponent(clientId)}&worker_id=${encodeURIComponent(state.caseWorkerData.currentWorkerId)}`);
+    state.caseWorkerData.profileModalData = data.profile || null;
+  } catch (error) {
+    state.caseWorkerData.profileModalError = error.message || "Unable to load client profile.";
+  } finally {
+    state.caseWorkerData.profileModalLoading = false;
+    renderCaseworkerClientProfileModal();
+  }
+}
+
+function getActiveCountyClientsByOrganization() {
+  const groups = new Map();
+  const activeClients = getVisibleCountyClients().filter((client) => !client.is_completed);
+
+  activeClients.forEach((client) => {
+    const organizationName = client.assigned_worker_organization_name
+      || client.accepted_agency_name
+      || client.requested_agency_name
+      || "Passaic County";
+    const organizationId = client.assigned_worker_organization_id
+      || client.accepted_agency_id
+      || client.requested_agency_id
+      || "ORG-COUNTY";
+
+    if (!groups.has(organizationId)) {
+      groups.set(organizationId, {
+        organizationId,
+        organizationName,
+        clients: []
+      });
+    }
+
+    groups.get(organizationId).clients.push(client);
+  });
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      clients: group.clients.slice().sort((left, right) => String(left.name).localeCompare(String(right.name)))
+    }))
+    .sort((left, right) => String(left.organizationName).localeCompare(String(right.organizationName)));
+}
+
+function renderActiveClientsModal() {
+  const overlay = document.getElementById("county-active-clients-modal");
+  const body = document.getElementById("county-active-clients-modal-body");
+
+  if (!state.countyData.isActiveClientsModalOpen) {
+    overlay.classList.add("hidden");
+    overlay.hidden = true;
+    body.innerHTML = "";
+    return;
+  }
+
+  const groups = getActiveCountyClientsByOrganization();
+  body.innerHTML = groups.length ? `
+    <div class="county-active-clients-group-list">
+      ${groups.map((group) => `
+        <section class="county-active-clients-group">
+          <div class="county-active-clients-group-head">
+            <div>
+              <span class="panel-kicker">${escapeHtml(state.lang === "es" ? "Organizacion" : "Organization")}</span>
+              <strong>${escapeHtml(group.organizationName)}</strong>
+            </div>
+            <span class="county-count-pill">${group.clients.length} ${escapeHtml(state.lang === "es" ? "activos" : "active")}</span>
+          </div>
+          <div class="county-active-clients-name-list">
+            ${group.clients.map((client) => `
+              <article class="county-active-clients-name-item">
+                <div>
+                  <strong>${escapeHtml(client.name)}</strong>
+                  <p class="small-text">${escapeHtml(client.city || "")} • ${escapeHtml(client.id)}</p>
+                </div>
+                <span class="small-text">${escapeHtml(client.assigned_worker_name || (state.lang === "es" ? "Sin asignar" : "Unassigned"))}</span>
+              </article>
+            `).join("")}
+          </div>
+        </section>
+      `).join("")}
+    </div>
+  ` : `<div class="county-empty-state">${escapeHtml(state.lang === "es" ? "No hay clientes activos en este momento." : "There are no active clients right now.")}</div>`;
+
+  overlay.classList.remove("hidden");
+  overlay.hidden = false;
+}
+
+function openActiveClientsModal() {
+  state.countyData.isActiveClientsModalOpen = true;
+  renderActiveClientsModal();
+}
+
+function closeActiveClientsModal() {
+  state.countyData.isActiveClientsModalOpen = false;
+  renderActiveClientsModal();
 }
 
 function renderNotifications() {
@@ -3438,12 +4295,8 @@ function renderClients() {
 
   list.innerHTML = sortedClients.map((client) => {
     const selectedWorkerId = client.assigned_worker || state.countyData.recommendedWorkerId || "";
-    const assignableWorkers = state.adminRole === "organization"
-      ? state.countyData.workers.filter((worker) => worker.organization_id === orgId)
-      : state.countyData.workers.filter((worker) => (
-          (!client.requested_agency_id || client.requested_agency_id === COUNTY_ORGANIZATION_ID) &&
-          (!client.accepted_agency_id || worker.organization_id === client.accepted_agency_id)
-        ));
+    const allowedOrganizationId = getAllowedAssignmentOrganizationId(client);
+    const assignableWorkers = getAssignableWorkersForClientView(client);
     const workerOptions = assignableWorkers.map((worker) => (
       `<option value="${escapeHtml(worker.id)}" ${worker.id === selectedWorkerId ? "selected" : ""}>${escapeHtml(worker.name)} (${worker.active_cases})</option>`
     )).join("");
@@ -3468,7 +4321,7 @@ function renderClients() {
     const canAssignNow = workerOptions && (
       state.adminRole === "organization"
         ? isAcceptedInsideOrganization
-        : (!client.requested_agency_id || client.requested_agency_id === COUNTY_ORGANIZATION_ID)
+        : allowedOrganizationId === COUNTY_ORGANIZATION_ID
     );
 
     return `
@@ -3536,10 +4389,12 @@ function renderCountyDashboard() {
   renderTransportRequests();
   renderCountyHousingAvailability();
   renderClients();
+  renderActiveClientsModal();
   setCountyActionStatus(state.countyData.actionStatusMessage, state.countyData.actionStatusTone);
   if (activeScreenId === "organization-stats-screen") {
     renderOrganizationStatsPage();
   }
+  scheduleVisiblePageTranslation();
 }
 
 async function loadCountyDashboard() {
@@ -3550,6 +4405,7 @@ async function loadCountyDashboard() {
   state.countyData.isLoading = true;
   const previousLatestNotificationId = state.countyData.notifications[0]?.id || null;
   const organizationScopeQuery = getOrganizationScopeQuery();
+  const ticketQuerySuffix = organizationScopeQuery;
 
   try {
     const [clientsData, workersData, notificationsData, transportRequestsData, agenciesData, ticketsData] = await Promise.all([
@@ -3558,11 +4414,11 @@ async function loadCountyDashboard() {
       fetchJson(`/api/notifications${organizationScopeQuery}`),
       fetchJson(`/api/transport-requests${organizationScopeQuery}`),
       fetchJson(`/api/agencies${organizationScopeQuery}`),
-      fetchJson(`/api/agency-tickets${organizationScopeQuery}`)
+      fetchJson(`/api/agency-tickets${ticketQuerySuffix}`)
     ]);
 
     state.countyData.clients = mergeShadowClients(clientsData.clients || []);
-    state.countyData.workers = workersData.workers || [];
+    state.countyData.workers = mergeShadowWorkers(workersData.workers || []);
     state.countyData.agencies = agenciesData.agencies || [];
     state.countyData.notifications = filterNotificationsByCutoff(
       notificationsData.notifications || [],
@@ -3585,28 +4441,15 @@ async function loadCountyDashboard() {
 
     renderCountyDashboard();
   } catch (error) {
-    document.getElementById("client-request-list").innerHTML = `
-      <div class="county-empty-state">
-        ${showServerOfflineMessage()}
-      </div>
-    `;
-    document.getElementById("worker-load-list").innerHTML = `
-      <div class="county-empty-state">${showServerOfflineMessage()}</div>
-    `;
-    document.getElementById("county-notification-list").innerHTML = `
-      <div class="county-empty-state">${showServerOfflineMessage()}</div>
-    `;
-    document.getElementById("county-transport-request-list").innerHTML = `
-      <div class="county-empty-state">${showServerOfflineMessage()}</div>
-    `;
-    document.getElementById("county-housing-availability").innerHTML = `
-      <div class="county-empty-state">${showServerOfflineMessage()}</div>
-    `;
-    document.getElementById("organization-stats-page").innerHTML = `
-      <div class="county-empty-state">${showServerOfflineMessage()}</div>
-    `;
+    state.countyData.clients = mergeShadowClients(state.countyData.clients || []);
+    state.countyData.workers = mergeShadowWorkers(state.countyData.workers || []);
+    renderCountyDashboard();
     setCountyActionStatus(showServerOfflineMessage(), "error");
-    document.getElementById("ai-response").innerText = showServerOfflineMessage();
+    state.countyData.aiMessages = [{
+      role: "assistant",
+      text: showServerOfflineMessage()
+    }];
+    renderCountyAiMessages();
   } finally {
     state.countyData.isLoading = false;
   }
@@ -3641,6 +4484,7 @@ async function createAgencyTicket() {
 
     subjectInput.value = "";
     messageInput.value = "";
+    state.countyData.hiddenClosedTicketId = null;
     state.countyData.selectedTicketId = data.ticket?.id || null;
     status.textContent = state.lang === "es" ? "Ticket enviado." : "Ticket sent.";
     if (data.ticket?.id) {
@@ -3669,7 +4513,10 @@ async function sendAgencyTicketReply(ticketId) {
       })
     });
 
+    state.countyData.ticketReplyDrafts[ticketId] = "";
+    state.countyData.hiddenClosedTicketId = null;
     await loadCountyDashboard();
+    scrollTicketThreadToBottom(true);
   } catch (error) {
     document.getElementById("county-ticket-message-status").textContent = error.message || "Unable to reply.";
   }
@@ -3683,6 +4530,10 @@ async function closeAgencyTicket(ticketId) {
       body: JSON.stringify({ status: "closed" })
     });
 
+    state.countyData.hiddenClosedTicketId = ticketId;
+    document.getElementById("county-ticket-message-status").textContent = state.lang === "es"
+      ? "Ticket cerrado. La conversacion fue removida de esta vista."
+      : "Ticket closed. The conversation was removed from this view.";
     await loadCountyDashboard();
   } catch (error) {
     document.getElementById("county-ticket-message-status").textContent = error.message || "Unable to close ticket.";
@@ -3698,8 +4549,8 @@ function stopCountyAutoRefresh() {
 
 function syncCountyAutoRefresh() {
   const shouldRefresh =
-    state.adminRole === "passaic" &&
-    !document.getElementById("admin-dashboard-screen").classList.contains("hidden");
+    (state.adminRole === "passaic" || state.adminRole === "organization") &&
+    ["admin-dashboard-screen", "county-ticket-screen", "organization-stats-screen"].includes(activeScreenId);
 
   if (!shouldRefresh) {
     stopCountyAutoRefresh();
@@ -3766,6 +4617,7 @@ function openCountyAiPanel() {
   const panel = document.getElementById("county-ai-panel");
   panel.classList.remove("hidden");
   panel.hidden = false;
+  renderCountyAiMessages();
   document.getElementById("ai-input").focus();
 }
 
@@ -3799,6 +4651,46 @@ function resetCountyAiPanel() {
   if (state.countyData.isAiPanelOpen) {
     closeCountyAiPanel();
   }
+}
+
+function getDefaultCountyAiMessage() {
+  return state.lang === "es"
+    ? "La mayoria de las demoras ocurren en el paso de la ID estatal por citas y transporte."
+    : "Most delays are happening at the State ID step due to appointments and transportation issues.";
+}
+
+function ensureCountyAiMessages() {
+  if (!state.countyData.aiMessages.length) {
+    state.countyData.aiMessages = [{
+      role: "assistant",
+      text: getDefaultCountyAiMessage()
+    }];
+  }
+}
+
+function renderCountyAiMessages() {
+  const responseBox = document.getElementById("ai-response");
+  if (!responseBox) {
+    return;
+  }
+
+  ensureCountyAiMessages();
+  responseBox.innerHTML = state.countyData.aiMessages.length
+    ? state.countyData.aiMessages.map((message) => `
+        <div class="worker-chat-message ${message.role === "user" ? "client" : "worker"}">
+          <div class="worker-chat-message-top">
+            <strong>${escapeHtml(message.role === "user"
+              ? (state.lang === "es" ? "Usted" : "You")
+              : "AI")}</strong>
+            <span class="small-text">${message.pending ? (state.lang === "es" ? "Pensando..." : "Thinking...") : ""}</span>
+          </div>
+          <p>${escapeHtml(message.text || "")}</p>
+        </div>
+      `).join("")
+    : `<p class="admin-ai-response-empty">${escapeHtml(getDefaultCountyAiMessage())}</p>`;
+
+  responseBox.scrollTop = responseBox.scrollHeight;
+  scheduleVisiblePageTranslation();
 }
 
 async function submitTransportRequest(clientId) {
@@ -3850,14 +4742,23 @@ async function assignClient(clientId) {
     );
     await loadCountyDashboard();
   } catch (error) {
-    const shadowClient = getShadowClientById(clientId);
-    if (shadowClient && state.adminRole === "organization") {
+    const liveClient = state.countyData.clients.find((client) => client.id === clientId) || null;
+    const shadowClient = getShadowClientById(clientId) || (liveClient ? { ...liveClient, is_shadow_local: true } : null);
+    if (shadowClient) {
+      const acceptedOrganizationId = state.adminRole === "organization"
+        ? (state.adminAccount?.organization_id || shadowClient.accepted_agency_id)
+        : (selectedWorker?.organization_id || shadowClient.accepted_agency_id);
+      const acceptedOrganizationName = state.adminRole === "organization"
+        ? (state.adminAccount?.organization_name || shadowClient.accepted_agency_name)
+        : (selectedWorker?.organization_name || shadowClient.accepted_agency_name);
+
       shadowClient.assigned_worker = select.value;
       shadowClient.worker_status = "pending_approval";
       shadowClient.status = "pending";
+      shadowClient.case_worker_requested = true;
       shadowClient.agency_request_status = "accepted";
-      shadowClient.accepted_agency_id = state.adminAccount?.organization_id || shadowClient.accepted_agency_id;
-      shadowClient.accepted_agency_name = state.adminAccount?.organization_name || shadowClient.accepted_agency_name;
+      shadowClient.accepted_agency_id = acceptedOrganizationId || null;
+      shadowClient.accepted_agency_name = acceptedOrganizationName || "";
       shadowClient.assigned_worker_name = selectedWorker?.name || "";
       shadowClient.assigned_worker_email = selectedWorker?.email || "";
       shadowClient.assigned_worker_organization_id = selectedWorker?.organization_id || null;
@@ -3885,10 +4786,19 @@ async function assignClient(clientId) {
 
 async function askAI() {
   const input = document.getElementById("ai-input");
-  const responseBox = document.getElementById("ai-response");
   const question = input.value.trim();
 
-  if (!question) return;
+  if (!question || state.countyData.isAskingAi) return;
+
+  state.countyData.isAskingAi = true;
+  state.countyData.aiMessages.push({ role: "user", text: question });
+  state.countyData.aiMessages.push({
+    role: "assistant",
+    text: state.lang === "es" ? "Pensando..." : "Thinking...",
+    pending: true
+  });
+  input.value = "";
+  renderCountyAiMessages();
 
   try {
     const data = await fetchJson("/api/admin-chat", {
@@ -3896,15 +4806,22 @@ async function askAI() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question })
     });
-    responseBox.innerText = data.response;
+    state.countyData.aiMessages[state.countyData.aiMessages.length - 1] = {
+      role: "assistant",
+      text: data.response || getDefaultCountyAiMessage()
+    };
   } catch (error) {
-    responseBox.innerText =
-      error.message === "SERVER_OFFLINE"
+    state.countyData.aiMessages[state.countyData.aiMessages.length - 1] = {
+      role: "assistant",
+      text: error.message === "SERVER_OFFLINE"
         ? showServerOfflineMessage()
-        : "Most delays are happening at the State ID step. This is driven by appointments and transportation barriers. You should focus on faster scheduling and travel support.";
+        : getDefaultCountyAiMessage()
+    };
+  } finally {
+    state.countyData.isAskingAi = false;
+    renderCountyAiMessages();
+    input.focus();
   }
-
-  input.value = "";
 }
 
 function resetCodeEntry() {
@@ -4715,6 +5632,7 @@ function renderClientProgressDashboard() {
       ${renderClientActionLinks(action.links)}
     </article>
   `).join("");
+  scheduleVisiblePageTranslation();
 }
 
 async function openClientProgressDashboard() {
@@ -5307,6 +6225,7 @@ function renderClientDocumentsView() {
       renderClientDocumentsView();
     });
   });
+  scheduleVisiblePageTranslation();
 }
 
 function renderClientPortalChat() {
@@ -5395,6 +6314,7 @@ function renderClientPortalChat() {
       });
     }
   }
+  scheduleVisiblePageTranslation();
 }
 
 async function loadClientPortalChat() {
@@ -5404,8 +6324,8 @@ async function loadClientPortalChat() {
       fetchJson("/api/workers")
     ]);
     state.caseWorkerData.clients = mergeShadowClients(clientsData.clients);
-    state.caseWorkerData.workers = workersData.workers || [];
-    state.countyData.workers = workersData.workers || state.countyData.workers;
+    state.caseWorkerData.workers = mergeShadowWorkers(workersData.workers || []);
+    state.countyData.workers = mergeShadowWorkers(workersData.workers || state.countyData.workers);
     const currentClient = state.caseWorkerData.clients.find((item) => item.id === state.clientPortalData.currentClientId);
 
     await loadClientMessages(state.clientPortalData.currentClientId, currentClient?.assigned_worker || null);
@@ -5417,6 +6337,9 @@ async function loadClientPortalChat() {
       renderClientPortalChat();
     }
   } catch (error) {
+    state.caseWorkerData.clients = mergeShadowClients(state.caseWorkerData.clients || []);
+    state.caseWorkerData.workers = mergeShadowWorkers(state.caseWorkerData.workers || []);
+    state.countyData.workers = mergeShadowWorkers(state.countyData.workers || []);
     if (!document.getElementById("client-progress-screen").classList.contains("hidden")) {
       renderClientProgressDashboard();
     }
@@ -5528,6 +6451,7 @@ function renderWorkerClientList(clients) {
         ${client.missing_documents.map((doc) => `<span class="document-tag">${escapeHtml(formatDocumentLabel(doc))}</span>`).join("")}
       </div>
       <div class="worker-client-actions">
+        <button class="secondary-btn worker-profile-btn" type="button" data-profile-client-id="${escapeHtml(client.id)}">View Profile</button>
         <button class="secondary-btn worker-select-btn" type="button" data-client-id="${escapeHtml(client.id)}">${client.worker_status === "pending_approval" ? localizeText("Review") : localizeText("Open")}</button>
         ${client.worker_status === "pending_approval" ? `
           <button class="secondary-btn worker-approve-btn accept" type="button" data-approval-action="accept" data-client-id="${escapeHtml(client.id)}">${localizeText("Accept")}</button>
@@ -5540,6 +6464,12 @@ function renderWorkerClientList(clients) {
   list.querySelectorAll(".worker-select-btn").forEach((button) => {
     button.addEventListener("click", async () => {
       await openCase(button.dataset.clientId);
+    });
+  });
+
+  list.querySelectorAll("[data-profile-client-id]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await openCaseworkerClientProfile(button.dataset.profileClientId);
     });
   });
 
@@ -5597,12 +6527,50 @@ async function loadMessages(clientId) {
   return state.caseWorkerData.messagesByClient[clientId] || [];
 }
 
+function getClientProfileDocumentSummary(client, documents = []) {
+  const uploadedByType = DOCUMENT_TYPES.map((item) => {
+    const files = getDocumentsForType(documents, item.key);
+    return {
+      key: item.key,
+      label: getDocumentTypeLabel(item.key),
+      count: files.length
+    };
+  });
+  const uploadedTypes = uploadedByType.filter((item) => item.count > 0);
+  const uploadedTypeKeys = new Set(uploadedTypes.map((item) => item.key));
+  const missingTypes = Array.isArray(client?.missing_documents)
+    ? client.missing_documents.map((item) => ({
+        key: item,
+        label: formatDocumentLabel(item)
+      }))
+    : [];
+  const missingTypeKeys = new Set(missingTypes.map((item) => item.key));
+  const notUploadedTypes = DOCUMENT_TYPES
+    .filter((item) => !uploadedTypeKeys.has(item.key))
+    .map((item) => ({
+      key: item.key,
+      label: getDocumentTypeLabel(item.key),
+      isRequired: missingTypeKeys.has(item.key)
+    }));
+
+  return {
+    uploadedTypes,
+    missingTypes,
+    notUploadedTypes
+  };
+}
+
 async function openCase(clientId) {
   state.caseWorkerData.selectedClientId = clientId;
   state.caseWorkerData.fullCaseViewId = clientId;
   state.caseWorkerData.activeWorkspacePanel = null;
   state.caseWorkerData.showChatImagesOnly = false;
   clearPendingChatImage("worker");
+  try {
+    await loadClientDocuments(clientId, "worker");
+  } catch (error) {
+    state.caseWorkerData.documents = [];
+  }
   await loadMessages(clientId);
   renderCaseFileView();
   openScreen("caseworker-client-screen");
@@ -5984,6 +6952,7 @@ function renderCaseFileView() {
   }
 
   const isPendingApproval = selectedClient.worker_status === "pending_approval";
+  const profileSummary = getClientProfileDocumentSummary(selectedClient, state.caseWorkerData.documents || []);
 
   container.innerHTML = `
     <div class="caseworker-file-shell">
@@ -6039,6 +7008,29 @@ function renderCaseFileView() {
         </div>
 
         <aside class="caseworker-file-side">
+          <div class="caseworker-panel">
+            <strong>Client Profile</strong>
+            <p class="small-text">${escapeHtml(selectedClient.name)} • ${escapeHtml(selectedClient.city)} • ${escapeHtml(selectedClient.id)}</p>
+            <p class="small-text">Documents on file: ${profileSummary.uploadedTypes.length ? String(profileSummary.uploadedTypes.length) : "0"} type(s)</p>
+            <div class="client-tag-row">
+              ${profileSummary.uploadedTypes.length
+                ? profileSummary.uploadedTypes.map((item) => `<span class="document-tag">${escapeHtml(item.label)} (${item.count})</span>`).join("")
+                : `<span class="small-text">No uploaded documents on file yet.</span>`}
+            </div>
+            <p class="small-text">Still missing from intake: ${profileSummary.missingTypes.length ? String(profileSummary.missingTypes.length) : "0"} item(s)</p>
+            <div class="client-tag-row">
+              ${profileSummary.missingTypes.length
+                ? profileSummary.missingTypes.map((item) => `<span class="document-tag">${escapeHtml(item.label)}</span>`).join("")
+                : `<span class="small-text">No missing documents listed.</span>`}
+            </div>
+            <p class="small-text">Not yet uploaded to the portal:</p>
+            <div class="client-tag-row">
+              ${profileSummary.notUploadedTypes.length
+                ? profileSummary.notUploadedTypes.map((item) => `<span class="document-tag">${escapeHtml(item.label)}${item.isRequired ? " (needed)" : ""}</span>`).join("")
+                : `<span class="small-text">All tracked document types have at least one file uploaded.</span>`}
+            </div>
+          </div>
+
           <div class="caseworker-panel">
             <strong>Client Summary</strong>
             <p class="small-text">Current status: ${selectedClient.worker_status === "pending_approval" ? "Pending approval" : (selectedClient.worker_status === "completed" ? "Completed" : "Active")}</p>
@@ -6198,6 +7190,7 @@ function renderCaseFileView() {
       }
     });
   }
+  scheduleVisiblePageTranslation();
 }
 
 function renderCaseWorkerDashboard() {
@@ -6221,6 +7214,7 @@ function renderCaseWorkerDashboard() {
   renderWorkerClientList(visibleCases);
   renderWorkerNotifications();
   setWorkerActionStatus(state.caseWorkerData.actionStatusMessage, state.caseWorkerData.actionStatusTone);
+  scheduleVisiblePageTranslation();
 }
 
 async function loadCaseWorkerDashboard() {
@@ -6234,8 +7228,8 @@ async function loadCaseWorkerDashboard() {
       fetchJson(`/api/worker-notifications?worker_id=${encodeURIComponent(state.caseWorkerData.currentWorkerId)}`)
     ]);
 
-    state.caseWorkerData.clients = clientsData.clients;
-    state.caseWorkerData.workers = workersData.workers;
+    state.caseWorkerData.clients = mergeShadowClients(clientsData.clients || []);
+    state.caseWorkerData.workers = mergeShadowWorkers(workersData.workers || []);
     state.caseWorkerData.notifications = filterNotificationsByCutoff(
       notificationsData.notifications || [],
       state.caseWorkerData.clearedNotificationCutoff
@@ -6263,6 +7257,21 @@ async function loadCaseWorkerDashboard() {
     applyLanguage();
     renderCaseWorkerDashboard();
   } catch (error) {
+    const shadowWorkers = mergeShadowWorkers(state.caseWorkerData.workers || []);
+    const currentWorkerExists = shadowWorkers.some((worker) => worker.id === state.caseWorkerData.currentWorkerId);
+    if (currentWorkerExists) {
+      state.caseWorkerData.workers = shadowWorkers;
+      state.caseWorkerData.clients = mergeShadowClients(state.caseWorkerData.clients || []);
+      state.caseWorkerData.notifications = state.caseWorkerData.notifications || [];
+      const visibleCases = getVisibleWorkerCases();
+      if (!state.caseWorkerData.selectedClientId && visibleCases.length) {
+        state.caseWorkerData.selectedClientId = visibleCases[0].id;
+      }
+      renderCaseWorkerDashboard();
+      setWorkerActionStatus(showServerOfflineMessage(), "error");
+      return;
+    }
+
     const workerPortalMessage = error.message === "SERVER_OFFLINE"
       ? showServerOfflineMessage()
       : (error.message || "Unable to load this case worker portal.");
@@ -6465,6 +7474,14 @@ function attachChoiceHandlers() {
 async function showPlan() {
   const errorBox = document.getElementById("plan-error-box");
   errorBox.textContent = "";
+  const contactPhone = document.getElementById("client-contact-phone-input").value.trim();
+  const contactEmail = document.getElementById("client-contact-email-input").value.trim();
+  const shelterAddress = document.getElementById("client-shelter-address-input").value.trim();
+
+  if (!normalizePhone(contactPhone) && !normalizeEmail(contactEmail)) {
+    errorBox.textContent = "Add at least one phone number or email so your case worker can reach you.";
+    return;
+  }
 
   if (
     state.answers.hasBirth === null ||
@@ -6496,6 +7513,12 @@ async function showPlan() {
       description: step.description ? await translateText(step.description, state.lang) : "",
       actionLabel: step.actionLabel ? await translateText(step.actionLabel, state.lang) : "",
       actionLink: step.actionLink || "",
+      actionLinks: Array.isArray(step.actionLinks)
+        ? await Promise.all(step.actionLinks.map(async (link) => ({
+            label: await translateText(link.label || "", state.lang),
+            href: link.href || ""
+          })))
+        : [],
       actionExternal: Boolean(step.actionExternal)
     });
   }
@@ -6531,6 +7554,24 @@ async function showPlan() {
       li.appendChild(actionLink);
     }
 
+    if (Array.isArray(step.actionLinks) && step.actionLinks.length) {
+      step.actionLinks.forEach((link) => {
+        if (!link.href || !link.label) {
+          return;
+        }
+
+        const actionLink = document.createElement("a");
+        actionLink.className = "secondary-btn plan-step-link";
+        actionLink.href = link.href;
+        if (step.actionExternal) {
+          actionLink.target = "_blank";
+          actionLink.rel = "noopener noreferrer";
+        }
+        actionLink.textContent = link.label;
+        li.appendChild(actionLink);
+      });
+    }
+
     list.appendChild(li);
   });
 
@@ -6554,14 +7595,60 @@ async function showPlan() {
           birth: birthLocation,
           current: currentLocation
         },
+        contactDetails: {
+          phone: contactPhone,
+          email: contactEmail,
+          shelterAddress
+        },
         roadmapPlan: plan
       })
     });
 
     state.clientPortalData.currentUser = data.user;
+    storeShadowClientUser(data.user);
   } catch (error) {
-    errorBox.textContent =
-      error.message === "SERVER_OFFLINE" ? showServerOfflineMessage() : error.message;
+    if (error.message === "Unauthorized.") {
+      state.clientPortalData.currentClientId = null;
+      state.clientPortalData.currentUser = null;
+      storeClientSessionToken("");
+      storeShadowClientUser(null);
+      state.authView = "user";
+      state.loginPortal = "client";
+      applyLanguage();
+      openScreen("login-screen");
+      document.getElementById("login-error").textContent = state.lang === "es"
+        ? "Su sesion vencio. Inicie sesion otra vez para guardar el intake."
+        : "Your session expired. Sign in again to save your intake.";
+      return;
+    }
+
+    if (error.message === "SERVER_OFFLINE" && state.clientPortalData.currentUser?.clientId) {
+      const nextUser = {
+        ...state.clientPortalData.currentUser,
+        hasCompletedIntake: true,
+        documentAnswers: {
+          hasBirth: state.answers.hasBirth,
+          hasSSN: state.answers.hasSSN,
+          hasID: state.answers.hasID
+        },
+        intakeLocations: {
+          birth: birthLocation,
+          current: currentLocation
+        },
+        phone: contactPhone,
+        email: contactEmail,
+        shelterAddress,
+        roadmapPlan: plan,
+        intakeCompletedAt: new Date().toISOString()
+      };
+      state.clientPortalData.currentUser = nextUser;
+      upsertShadowClientAccount(nextUser);
+      storeShadowClientUser(nextUser);
+      showResultScreen();
+      return;
+    }
+
+    errorBox.textContent = error.message;
     return;
   }
 
@@ -6647,12 +7734,35 @@ async function loginAdminWithRole(role, options = {}) {
   const { demo = false, email = "", password = "", workerId = "", preferredWorkerId = "" } = options;
   const endpoint = demo ? "/api/admin/demo-login" : "/api/admin/login";
   const payload = demo ? { role, workerId } : { role, email, password };
+  let data;
 
-  const data = await fetchJson(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
+  try {
+    data = await fetchJson(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    if (role === "caseworker" && !demo) {
+      const shadowAccount = findShadowAdminAccountByCredentials({
+        role,
+        email,
+        password,
+        workerId: preferredWorkerId || workerId
+      });
+
+      if (shadowAccount) {
+        data = {
+          account: shadowAccount,
+          workerId: shadowAccount.workerId
+        };
+      } else {
+        throw error;
+      }
+    } else {
+      throw error;
+    }
+  }
 
   state.adminRole = role;
   state.adminAccount = data.account || null;
@@ -6866,8 +7976,19 @@ function bindEvents() {
         document.getElementById("login-error").textContent = t.codeSent;
         document.getElementById("code-input").focus();
       } catch (error) {
-        document.getElementById("login-error").textContent =
-          error.message === "SERVER_OFFLINE" ? showServerOfflineMessage() : error.message;
+        const shadowAccount = getShadowClientAccountByPhone(phone);
+        if (error.message === "SERVER_OFFLINE" && shadowAccount) {
+          state.otpSent = true;
+          state.pendingPhoneNumber = phone;
+          document.getElementById("code-entry-block").classList.remove("hidden");
+          document.getElementById("login-error").textContent = state.lang === "es"
+            ? "Servidor OTP no disponible. Ingrese 0000 para continuar en este dispositivo."
+            : "OTP server unavailable. Enter 0000 to continue on this device.";
+          document.getElementById("code-input").focus();
+        } else {
+          document.getElementById("login-error").textContent =
+            error.message === "SERVER_OFFLINE" ? showServerOfflineMessage() : error.message;
+        }
       }
     })();
   });
@@ -6900,6 +8021,15 @@ function bindEvents() {
         storeClientSessionToken(data.sessionToken || "");
         handleLoggedInUser(data.user);
       } catch (error) {
+        const shadowAccount = getShadowClientAccountByPhone(state.pendingPhoneNumber);
+        if (error.message === "SERVER_OFFLINE" && shadowAccount && code === "0000") {
+          resetCodeEntry();
+          document.getElementById("login-error").textContent = "";
+          storeClientSessionToken("");
+          handleLoggedInUser(shadowAccount);
+          return;
+        }
+
         document.getElementById("login-error").textContent =
           error.message === "SERVER_OFFLINE" ? showServerOfflineMessage() : error.message;
       }
@@ -6930,6 +8060,14 @@ function bindEvents() {
         storeClientSessionToken(data.sessionToken || "");
         handleLoggedInUser(data.user);
       } catch (error) {
+        const shadowAccount = getShadowClientAccountByEmail(email);
+        if (shadowAccount && String(shadowAccount.password || "") === password) {
+          document.getElementById("login-error").textContent = "";
+          storeClientSessionToken("");
+          handleLoggedInUser(shadowAccount);
+          return;
+        }
+
         document.getElementById("login-error").textContent =
           error.message === "SERVER_OFFLINE" ? showServerOfflineMessage() : error.message;
       }
@@ -6951,6 +8089,7 @@ function bindEvents() {
         )) || DEFAULT_DEMO_CASEWORKERS.find((worker) => (
           worker.workerId === selectedWorkerId
         )) || state.adminDemoWorkers.find((worker) => (
+          String(worker.demo_email || worker.email || "").trim().toLowerCase() === email.toLowerCase() ||
           String(worker.email || "").trim().toLowerCase() === email.toLowerCase()
         )) || DEFAULT_DEMO_CASEWORKERS.find((worker) => (
           String(worker.email || "").trim().toLowerCase() === email.toLowerCase()
@@ -6962,7 +8101,7 @@ function bindEvents() {
 
         state.adminSelectedDemoWorkerId = matchingDemoWorker.workerId;
         document.getElementById("admin-demo-caseworker-select").value = matchingDemoWorker.workerId;
-        document.getElementById("admin-email-input").value = matchingDemoWorker.email || email;
+        document.getElementById("admin-email-input").value = matchingDemoWorker.demo_email || matchingDemoWorker.email || email;
         await loginAdminWithRole("caseworker", {
           demo: true,
           workerId: matchingDemoWorker.workerId,
@@ -7013,7 +8152,7 @@ function bindEvents() {
 
     document.getElementById("admin-demo-caseworker-select").value = selectedWorker.workerId || "";
     state.adminSelectedDemoWorkerId = selectedWorker.workerId || "";
-    document.getElementById("admin-email-input").value = selectedWorker.email || "";
+    document.getElementById("admin-email-input").value = selectedWorker.demo_email || selectedWorker.email || "";
     document.getElementById("admin-password-input").value = "Demo login";
     document.getElementById("admin-login-form").requestSubmit();
   });
@@ -7171,6 +8310,9 @@ function bindEvents() {
   document.getElementById("county-refresh-btn").addEventListener("click", () => {
     loadCountyDashboard();
   });
+  document.getElementById("county-active-clients-card").addEventListener("click", () => {
+    openActiveClientsModal();
+  });
   document.getElementById("county-worker-search-input").addEventListener("input", (event) => {
     state.countyData.workerSearchQuery = event.target.value || "";
     renderWorkers();
@@ -7201,9 +8343,31 @@ function bindEvents() {
       closeWorkerProfile();
     }
   });
+  document.getElementById("caseworker-client-profile-close-btn").addEventListener("click", closeCaseworkerClientProfileModal);
+  document.getElementById("caseworker-client-profile-modal").addEventListener("click", (event) => {
+    if (event.target instanceof HTMLElement && event.target.dataset.caseworkerClientProfileClose === "true") {
+      closeCaseworkerClientProfileModal();
+    }
+  });
+  document.getElementById("county-active-clients-modal-close-btn").addEventListener("click", closeActiveClientsModal);
+  document.getElementById("county-active-clients-modal").addEventListener("click", (event) => {
+    if (event.target instanceof HTMLElement && event.target.dataset.activeClientsModalClose === "true") {
+      closeActiveClientsModal();
+    }
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && state.countyData.selectedWorkerId) {
       closeWorkerProfile();
+      return;
+    }
+
+    if (event.key === "Escape" && state.caseWorkerData.profileModalClientId) {
+      closeCaseworkerClientProfileModal();
+      return;
+    }
+
+    if (event.key === "Escape" && state.countyData.isActiveClientsModalOpen) {
+      closeActiveClientsModal();
     }
   });
 

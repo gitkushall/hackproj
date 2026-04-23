@@ -121,11 +121,73 @@ function mergeDefaultAdminAccounts(accounts) {
   return { accounts: mergedAccounts, changed };
 }
 
+function slugifyNamePart(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.+|\.+$/g, "");
+}
+
+function buildCaseworkerDemoEmail(account, accounts) {
+  const nameSlug = slugifyNamePart(account.name) || slugifyNamePart(account.workerId) || "caseworker";
+  const workerSlug = slugifyNamePart(account.workerId) || "worker";
+  const baseLocalPart = [nameSlug, workerSlug].filter(Boolean).join(".");
+  const takenEmails = new Set(accounts
+    .filter((item) => item !== account)
+    .flatMap((item) => [item.email, item.demo_email])
+    .map((email) => normalizeEmail(email))
+    .filter(Boolean));
+
+  let candidate = `${baseLocalPart}@idhelp.org`;
+  let suffix = 2;
+
+  while (takenEmails.has(candidate)) {
+    candidate = `${baseLocalPart}.${suffix}@idhelp.org`;
+    suffix += 1;
+  }
+
+  return candidate;
+}
+
+function ensureCaseworkerDemoEmails(accounts) {
+  let changed = false;
+
+  accounts.forEach((account) => {
+    if (account.role !== "caseworker") {
+      return;
+    }
+
+    const normalizedPrimaryEmail = normalizeEmail(account.email);
+    if (account.email !== normalizedPrimaryEmail) {
+      account.email = normalizedPrimaryEmail;
+      changed = true;
+    }
+
+    const shouldReusePrimaryForDemo = normalizedPrimaryEmail.endsWith("@idhelp.org");
+    const normalizedStoredDemoEmail = normalizeEmail(account.demo_email);
+    const shouldRebuildDemoEmail = !normalizedStoredDemoEmail || (
+      normalizedStoredDemoEmail === normalizedPrimaryEmail && !shouldReusePrimaryForDemo
+    );
+    const targetDemoEmail = shouldRebuildDemoEmail
+      ? (shouldReusePrimaryForDemo ? normalizedPrimaryEmail : buildCaseworkerDemoEmail(account, accounts))
+      : normalizedStoredDemoEmail;
+
+    if (account.demo_email !== targetDemoEmail) {
+      account.demo_email = targetDemoEmail;
+      changed = true;
+    }
+  });
+
+  return changed;
+}
+
 function loadAdminAccounts() {
   const loadedAccounts = loadJsonArray(adminAccountsFilePath, defaultAdminAccounts, { key: "admin-accounts" });
   const { accounts, changed } = mergeDefaultAdminAccounts(loadedAccounts);
+  const demoEmailsChanged = ensureCaseworkerDemoEmails(accounts);
 
-  if (changed) {
+  if (changed || demoEmailsChanged) {
     saveJsonArray(adminAccountsFilePath, accounts, { key: "admin-accounts" });
   }
 
@@ -133,6 +195,7 @@ function loadAdminAccounts() {
 }
 
 function saveAdminAccounts(accounts) {
+  ensureCaseworkerDemoEmails(accounts);
   saveJsonArray(adminAccountsFilePath, accounts, { key: "admin-accounts" });
 }
 
@@ -185,6 +248,7 @@ function sanitizeAdminAccount(account) {
     role: account.role,
     name: account.name,
     email: account.email,
+    demo_email: account.demo_email || account.email || "",
     workerId: account.workerId || null,
     organization_id: account.organization_id || organization.organization_id,
     organization_name: account.organization_name || organization.organization_name
@@ -192,8 +256,12 @@ function sanitizeAdminAccount(account) {
 }
 
 function verifyAdminLogin(role, email, password) {
+  const normalizedEmail = normalizeEmail(email);
   const account = loadAdminAccounts().find((item) => (
-    item.role === role && normalizeEmail(item.email) === normalizeEmail(email)
+    item.role === role && (
+      normalizeEmail(item.email) === normalizedEmail ||
+      normalizeEmail(item.demo_email) === normalizedEmail
+    )
   ));
 
   if (!account) {

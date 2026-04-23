@@ -4,6 +4,7 @@
     "name": "Passaic County Housing Coordination",
     "type": "county",
     "status": "active",
+    "address": "50 Ward Street, Paterson, NJ 07505",
     "contact_email": "county@idhelp.org",
     "contact_phone": "(973) 555-0199"
   },
@@ -12,6 +13,7 @@
     "name": "Paterson Shelter Navigation Team",
     "type": "shelter",
     "status": "active",
+    "address": "176 Broadway, Paterson, NJ 07505",
     "contact_email": "shelter@idhelp.org",
     "contact_phone": "(973) 555-0181"
   },
@@ -20,6 +22,7 @@
     "name": "St. Joseph Hospital Support Team",
     "type": "hospital",
     "status": "active",
+    "address": "703 Main Street, Paterson, NJ 07503",
     "contact_email": "hospital@idhelp.org",
     "contact_phone": "(973) 555-0182"
   },
@@ -28,6 +31,7 @@
     "name": "Community Document Access Network",
     "type": "nonprofit",
     "status": "active",
+    "address": "233 Ellison Street, Paterson, NJ 07505",
     "contact_email": "community@idhelp.org",
     "contact_phone": "(973) 555-0183"
   }

@@ -18,7 +18,8 @@
     "organization_id": "ORG-COUNTY",
     "organization_name": "Passaic County Housing Coordination",
     "passwordSalt": "b510a31de7121df2ad078ca10959b6c5",
-    "passwordHash": "6a0e28c1407e7128cd3516f9a4fa03c6291774e7514e09c0260d3fc065e929e9e83ba72361b0137775eedb9aa10cbed377e9030963fd5f33a521a743afab9830"
+    "passwordHash": "6a0e28c1407e7128cd3516f9a4fa03c6291774e7514e09c0260d3fc065e929e9e83ba72361b0137775eedb9aa10cbed377e9030963fd5f33a521a743afab9830",
+    "demo_email": "sarah.ahmed@idhelp.org"
   },
   {
     "id": "AD-03",
@@ -29,7 +30,8 @@
     "organization_id": "ORG-SHELTER",
     "organization_name": "Paterson Shelter Navigation Team",
     "passwordSalt": "6f17771f8c77d0d63293e9ca0f368ba1",
-    "passwordHash": "bef1f20b9b0677523817191924a38098781cc98427e828cd0763ed1cfa35ab45c2ad49a91efaf2c05473cb0f28f2b141f8d992d2a1af788e6b1b5de74c336475"
+    "passwordHash": "bef1f20b9b0677523817191924a38098781cc98427e828cd0763ed1cfa35ab45c2ad49a91efaf2c05473cb0f28f2b141f8d992d2a1af788e6b1b5de74c336475",
+    "demo_email": "daniel.kim@idhelp.org"
   },
   {
     "id": "AD-04",
@@ -40,7 +42,8 @@
     "organization_id": "ORG-HOSPITAL",
     "organization_name": "St. Joseph Hospital Support Team",
     "passwordSalt": "545bb21cfd5e848eb9acf4b12c57b5de",
-    "passwordHash": "df80dcd5a13a8368a3a08d87cfe78258ca8e8b3be6094a202d1f3bf78700d01976573e820bae2b45a820d37f71d4fe28f30f45aa674b947119f885cf35300a84"
+    "passwordHash": "df80dcd5a13a8368a3a08d87cfe78258ca8e8b3be6094a202d1f3bf78700d01976573e820bae2b45a820d37f71d4fe28f30f45aa674b947119f885cf35300a84",
+    "demo_email": "priya.shah@idhelp.org"
   },
   {
     "id": "AD-05",
@@ -51,7 +54,8 @@
     "organization_id": "ORG-NONPROFIT",
     "organization_name": "Community Document Access Network",
     "passwordSalt": "8c35a9059d54d9ca769959470d02ed34",
-    "passwordHash": "373c1603d21694212e898811392935aa05d4c9cbd9918a98b06cb473dbb6dca30c14fc1f3290a282fddb1a726c111b7b710aac5f02cc19864ce0f0b33a534a39"
+    "passwordHash": "373c1603d21694212e898811392935aa05d4c9cbd9918a98b06cb473dbb6dca30c14fc1f3290a282fddb1a726c111b7b710aac5f02cc19864ce0f0b33a534a39",
+    "demo_email": "marcus.hill@idhelp.org"
   },
   {
     "id": "AD-ORG-SHELTER",
@@ -82,5 +86,29 @@
     "organization_name": "Community Document Access Network",
     "passwordSalt": "c72d437d2cae7e54589433aebfcb8820",
     "passwordHash": "463512820421e2faa8dd670c5df6c22e4d67f2840d3ece785d352bd1d455e58f3211494fbcdcd1fc3c2ead2b5d6c7f9759d5e9173fe7f60cc9e8092c85c65164"
+  },
+  {
+    "id": "AD-09",
+    "role": "caseworker",
+    "workerId": "WK-07",
+    "name": "Kim Karl",
+    "email": "kimk@gmail.com",
+    "organization_id": "ORG-SHELTER",
+    "organization_name": "Paterson Shelter Navigation Team",
+    "passwordSalt": "d817e97934a6dca38f9818f3eaaea089",
+    "passwordHash": "88480cca3b382591601ab866a15c10f553b39331707624a324511d12c682a3c8c531743033e04855c60326687e6641c916d0f9f6739f46594b2e6d2050e30c61",
+    "demo_email": "kim.karl.wk.07@idhelp.org"
+  },
+  {
+    "id": "AD-10",
+    "role": "caseworker",
+    "workerId": "WK-10",
+    "name": "Peter Rijal",
+    "email": "peterj@gmail.com",
+    "organization_id": "ORG-SHELTER",
+    "organization_name": "Paterson Shelter Navigation Team",
+    "passwordSalt": "202b2bf1b5b1f95598589559a842972c",
+    "passwordHash": "786cb98ea4936875d942db15790ae6dd092e6b652c95f3e36ab22dd181ad0804e3691429b4a0e70610e73ea26d61b18f468832907d44e2e92d4d8d66d3633a25",
+    "demo_email": "peter.rijal.wk.10@idhelp.org"
   }
 ]

@@ -908,8 +908,22 @@ textarea:focus {
   border-top: 4px solid #6a6798;
 }
 
+#admin-dashboard-screen.county-mode .metric-teal {
+  border-top: 4px solid #2f8c8a;
+}
+
 #admin-dashboard-screen.county-mode .metric-highlight {
   border-color: rgba(103, 105, 152, 0.22);
+}
+
+#admin-dashboard-screen.county-mode .county-active-clients-card {
+  text-align: left;
+  cursor: pointer;
+}
+
+#admin-dashboard-screen.county-mode .county-active-clients-card:focus-visible {
+  outline: 3px solid rgba(45, 92, 154, 0.2);
+  outline-offset: 2px;
 }
 
 #admin-dashboard-screen.county-mode .county-panel {
@@ -973,6 +987,19 @@ textarea:focus {
 
 #admin-dashboard-screen.county-mode .county-transport-requests-panel {
   border-top: 4px solid #5e7b97;
+}
+
+.county-transport-links {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.county-transport-links .worker-link-btn {
+  width: auto;
+  min-height: 40px;
+  padding: 10px 14px;
 }
 
 #admin-dashboard-screen.county-mode .insight-summary-panel {
@@ -2124,6 +2151,10 @@ textarea:focus {
   box-shadow: 0 14px 30px rgba(37, 99, 235, 0.12);
 }
 
+.county-ticket-card.closed {
+  opacity: 0.82;
+}
+
 .county-ticket-card.priority-1 {
   border-left-color: #dc2626;
 }
@@ -2157,6 +2188,7 @@ textarea:focus {
   max-height: 340px;
   margin: 16px 0;
   overflow-y: auto;
+  padding-right: 6px;
 }
 
 .county-ticket-message {
@@ -2179,10 +2211,69 @@ textarea:focus {
 
 .county-ticket-message p {
   margin: 6px 0;
+  white-space: pre-wrap;
 }
 
 .county-ticket-reply textarea {
   resize: vertical;
+}
+
+.county-ticket-chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(31, 41, 55, 0.08);
+}
+
+.county-ticket-status-badge {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.county-ticket-status-badge.open {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.county-ticket-status-badge.closed {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.county-ticket-close-action {
+  border-color: rgba(185, 28, 28, 0.16);
+  color: #991b1b;
+}
+
+.county-ticket-reply {
+  display: grid;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.county-ticket-reply-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.county-ticket-closed-note {
+  padding: 14px;
+  border-radius: 16px;
+  background: #f8fafc;
+  border: 1px solid rgba(31, 41, 55, 0.08);
+}
+
+.county-ticket-closed-note p {
+  margin: 6px 0 0;
 }
 
 #admin-dashboard-screen.organization-mode .county-ticket-panel {
@@ -2306,6 +2397,161 @@ textarea:focus {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin-top: 20px;
+}
+
+.worker-client-profile-shell {
+  display: grid;
+  gap: 18px;
+}
+
+.worker-client-profile-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(241, 247, 255, 0.96), rgba(255, 255, 255, 0.96));
+  border: 1px solid rgba(94, 114, 145, 0.16);
+}
+
+.worker-client-profile-hero h3 {
+  margin: 4px 0 6px;
+  font-size: 1.55rem;
+  line-height: 1.12;
+  color: #203449;
+}
+
+.worker-client-profile-score {
+  min-width: 120px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid rgba(73, 130, 255, 0.14);
+  box-shadow: 0 10px 24px rgba(45, 92, 154, 0.08);
+  text-align: center;
+}
+
+.worker-client-profile-score strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 1.9rem;
+  color: #2457cf;
+}
+
+.worker-client-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.worker-client-contact-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.worker-profile-link-btn {
+  width: auto;
+  min-width: 120px;
+  margin-top: 0;
+}
+
+.worker-client-progress-panel {
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(94, 114, 145, 0.14);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.worker-client-progress-bar {
+  height: 12px;
+  margin-top: 12px;
+  border-radius: 999px;
+  background: rgba(210, 222, 239, 0.8);
+  overflow: hidden;
+}
+
+.worker-client-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #3572ff 0%, #63a7ff 100%);
+}
+
+.worker-client-progress-stage-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.worker-profile-stage {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(94, 114, 145, 0.12);
+  background: rgba(248, 251, 255, 0.92);
+}
+
+.worker-profile-stage.done {
+  border-color: rgba(22, 163, 74, 0.16);
+  background: rgba(240, 253, 244, 0.98);
+}
+
+.worker-profile-stage-icon {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(37, 87, 207, 0.12);
+  color: #2457cf;
+  font-weight: 800;
+}
+
+.county-active-clients-dialog {
+  width: min(720px, 100%);
+}
+
+.county-active-clients-group-list {
+  display: grid;
+  gap: 16px;
+}
+
+.county-active-clients-group {
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(94, 114, 145, 0.16);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 24px rgba(47, 64, 89, 0.08);
+}
+
+.county-active-clients-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.county-active-clients-name-list {
+  display: grid;
+  gap: 10px;
+}
+
+.county-active-clients-name-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(244, 248, 252, 0.92);
+  border: 1px solid rgba(94, 114, 145, 0.12);
 }
 
 .county-worker-profile-card {
@@ -2499,6 +2745,15 @@ textarea:focus {
   background: linear-gradient(135deg, #3572ff 0%, #2457cf 100%);
   border-color: transparent;
   box-shadow: 0 10px 22px rgba(41, 84, 180, 0.22);
+}
+
+.worker-profile-btn {
+  width: auto;
+  min-width: 118px;
+  margin-top: 0;
+  color: #16324f;
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(22, 50, 79, 0.14);
 }
 
 .worker-approve-btn {
@@ -3587,12 +3842,24 @@ textarea:focus {
 
 .admin-ai-response {
   min-height: 156px;
+  display: grid;
+  gap: 10px;
   padding: 16px;
   border: 1px solid rgba(125, 82, 221, 0.16);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.92);
   color: var(--text);
   line-height: 1.45;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.admin-ai-response .worker-chat-message {
+  width: min(92%, 100%);
+}
+
+.admin-ai-response-empty {
+  margin: 0;
 }
 
 .admin-ai-note {
@@ -4568,7 +4835,7 @@ h2,
 
 .landing-story-grid,
 .portal-select-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .landing-detail-grid {
@@ -4619,9 +4886,15 @@ h2,
 .portal-card {
   display: grid;
   gap: 8px;
+  min-height: 150px;
+  align-content: start;
   text-align: left;
   cursor: pointer;
   transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.portal-card strong {
+  font-size: 1.08rem;
 }
 
 .county-organization-filter-row {
@@ -5286,13 +5559,25 @@ textarea:focus {
   .county-ticket-head,
   .county-ticket-actions,
   .county-ticket-detail-head,
-  .county-ticket-reply {
+  .county-ticket-reply,
+  .county-ticket-chat-head,
+  .county-ticket-reply-actions {
     align-items: stretch;
     flex-direction: column;
   }
 
   .county-ticket-create-grid,
   .county-ticket-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .worker-client-profile-hero,
+  .worker-client-contact-links {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .worker-client-profile-grid {
     grid-template-columns: 1fr;
   }
 
