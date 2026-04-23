@@ -30,6 +30,8 @@
   .client-progress-metric-grid,
   .client-progress-content-grid,
   .county-bottom-grid,
+  .organization-stats-grid,
+  .organization-stats-breakdown,
   .county-system-grid,
   .caseworker-system-grid,
   .assign-row,
@@ -48,6 +50,7 @@
   .client-request-meta,
   .county-section-head,
   .client-request-head,
+  .organization-stats-hero,
   .worker-load-card,
   .county-worker-profile-head,
   .worker-client-head,
@@ -264,6 +267,11 @@
   }
 
   #admin-dashboard-screen.caseworker-mode {
+    padding: 18px;
+  }
+
+  #organization-stats-screen.county-mode,
+  #organization-stats-screen.organization-mode {
     padding: 18px;
   }
 }

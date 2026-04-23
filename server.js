@@ -44,6 +44,7 @@ const messagesFilePath = path.join(dataDirectory, "messages.json");
 const clientDocumentsFilePath = path.join(dataDirectory, "client-documents.json");
 const workerCaseHistoryFilePath = path.join(dataDirectory, "worker-case-history.json");
 const agenciesFilePath = path.join(dataDirectory, "agencies.json");
+const agencyTicketsFilePath = path.join(dataDirectory, "agency-tickets.json");
 const COUNTY_ADMIN_ID = "PASSAIC-COUNTY";
 const COUNTY_ADMIN_NAME = "Passaic County";
 const COUNTY_ORGANIZATION_ID = "ORG-COUNTY";
@@ -210,6 +211,8 @@ const defaultAgencies = [
     contact_phone: "(973) 555-0183"
   }
 ];
+
+const defaultAgencyTickets = [];
 
 function buildDefaultWorker(id, name, activeCases) {
   return {
@@ -424,13 +427,70 @@ function getTimestamp() {
   return new Date().toISOString();
 }
 
-function pushCountyNotification(message, workerId = "system", timestamp = getTimestamp()) {
+function getOrganizationIdFromWorker(workerId) {
+  const worker = workers.find((item) => item.id === workerId);
+  return worker?.organization_id || null;
+}
+
+function getClientOrganizationIds(client) {
+  return new Set([
+    client?.requested_agency_id,
+    client?.accepted_agency_id,
+    client?.assigned_worker_organization_id,
+    getOrganizationIdFromWorker(client?.assigned_worker)
+  ].filter(Boolean));
+}
+
+function clientBelongsToOrganization(client, organizationId) {
+  return !organizationId || getClientOrganizationIds(client).has(organizationId);
+}
+
+function pushCountyNotification(message, workerId = "system", timestamp = getTimestamp(), options = {}) {
+  const organizationId = options.organization_id || getOrganizationIdFromWorker(workerId) || null;
+
   notifications.unshift({
     id: `NT-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
     message,
     worker_id: workerId,
+    organization_id: organizationId,
     timestamp
   });
+}
+
+function resolveAgencyRequestStatus(client, requestedAgencyId, wantsCaseWorker) {
+  if (!wantsCaseWorker || !requestedAgencyId) {
+    return "not_started";
+  }
+
+  if (requestedAgencyId === COUNTY_ORGANIZATION_ID) {
+    return "accepted";
+  }
+
+  if (["accepted", "rejected", "pending_review"].includes(client?.agency_request_status)) {
+    return client.agency_request_status;
+  }
+
+  return "pending_review";
+}
+
+function resolveAcceptedAgencyId(client, requestedAgencyId, agencyRequestStatus, assignedWorker) {
+  if (!requestedAgencyId) {
+    return assignedWorker?.organization_id || null;
+  }
+
+  if (assignedWorker?.organization_id) {
+    return assignedWorker.organization_id;
+  }
+
+  if (requestedAgencyId === COUNTY_ORGANIZATION_ID) {
+    return requestedAgencyId;
+  }
+
+  if (agencyRequestStatus === "accepted") {
+    return client?.accepted_agency_id || requestedAgencyId;
+  }
+
+  return null;
 }
 
 function syncClientRelationships(client) {
@@ -440,23 +500,26 @@ function syncClientRelationships(client) {
 
   const linkedAccount = clientAccounts.find((account) => account.clientId === client.id) || null;
   const assignedWorker = workers.find((worker) => worker.id === client.assigned_worker) || null;
-  const assignedAgencyId = assignedWorker?.organization_id || client.accepted_agency_id || client.requested_agency_id || null;
+  const wantsCaseWorker = Boolean(client.case_worker_requested);
+  const agencyRequestStatus = resolveAgencyRequestStatus(client, client.requested_agency_id, wantsCaseWorker);
+  const acceptedAgencyId = resolveAcceptedAgencyId(client, client.requested_agency_id, agencyRequestStatus, assignedWorker);
+  const assignedAgencyId = assignedWorker?.organization_id || acceptedAgencyId || null;
   const assignedAgency = agencies.find((agency) => agency.id === assignedAgencyId) || null;
 
   client.county_id = COUNTY_ADMIN_ID;
   client.county_name = COUNTY_ADMIN_NAME;
   client.requested_agency_id = client.requested_agency_id || null;
   client.requested_agency_name = client.requested_agency_name || "";
-  client.agency_request_status = client.agency_request_status || "not_started";
-  client.accepted_agency_id = client.accepted_agency_id || assignedAgency?.id || null;
-  client.accepted_agency_name = client.accepted_agency_name || assignedAgency?.name || "";
+  client.agency_request_status = agencyRequestStatus;
+  client.accepted_agency_id = acceptedAgencyId;
+  client.accepted_agency_name = acceptedAgencyId ? (assignedAgency?.name || client.accepted_agency_name || "") : "";
   client.linked_account_id = linkedAccount?.clientId || client.linked_account_id || client.id;
   client.account_linked = Boolean(linkedAccount);
   client.account_name = linkedAccount?.name || client.name || "";
   client.assigned_worker_name = assignedWorker?.name || "";
   client.assigned_worker_email = assignedWorker?.email || "";
-  client.assigned_worker_organization_id = assignedWorker?.organization_id || client.assigned_worker_organization_id || null;
-  client.assigned_worker_organization_name = assignedWorker?.organization_name || client.assigned_worker_organization_name || "";
+  client.assigned_worker_organization_id = assignedWorker?.organization_id || null;
+  client.assigned_worker_organization_name = assignedWorker?.organization_name || "";
   client.updated_at = client.updated_at || getTimestamp();
 
   return client;
@@ -469,6 +532,14 @@ function isClientCompleted(client) {
 function getClientQueueState(client) {
   if (isClientCompleted(client)) {
     return "completed";
+  }
+
+  if (client?.case_worker_requested && client?.requested_agency_id && client?.agency_request_status === "pending_review") {
+    return "awaiting_agency_response";
+  }
+
+  if (client?.case_worker_requested && client?.requested_agency_id && client?.agency_request_status === "rejected") {
+    return "agency_declined";
   }
 
   if (client?.assigned_worker && client?.worker_status === "pending_approval") {
@@ -563,6 +634,89 @@ function buildAgencyView(agency) {
   };
 }
 
+function normalizeTicketPriority(priority) {
+  const numericPriority = Number(priority);
+  if ([1, 2, 3].includes(numericPriority)) {
+    return numericPriority;
+  }
+
+  return 2;
+}
+
+function getTicketPriorityLabel(priority) {
+  if (priority === 1) return "High";
+  if (priority === 3) return "Low";
+  return "Medium";
+}
+
+function getTicketAgeDays(ticket, nowMs = Date.now()) {
+  const createdMs = new Date(ticket.created_at || ticket.updated_at || nowMs).getTime();
+  if (Number.isNaN(createdMs)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor((nowMs - createdMs) / (1000 * 60 * 60 * 24)));
+}
+
+function getTicketSortScore(ticket, nowMs = Date.now()) {
+  const priority = normalizeTicketPriority(ticket.priority);
+  const ageDays = getTicketAgeDays(ticket, nowMs);
+  const isOpen = ticket.status !== "closed";
+  const isOverdue = isOpen && ageDays >= 2;
+
+  return {
+    effective_priority: isOverdue ? 0 : priority,
+    age_days: ageDays,
+    escalated_by_age: isOverdue,
+    priority_label: getTicketPriorityLabel(priority)
+  };
+}
+
+function buildTicketView(ticket) {
+  const agency = agencies.find((item) => item.id === ticket.organization_id) || null;
+  const score = getTicketSortScore(ticket);
+
+  return {
+    ...ticket,
+    organization_name: ticket.organization_name || agency?.name || "Organization",
+    ...score,
+    messages: Array.isArray(ticket.messages) ? ticket.messages : []
+  };
+}
+
+function sortTicketViews(tickets) {
+  return tickets
+    .map(buildTicketView)
+    .sort((left, right) => {
+      if (left.status !== right.status) {
+        if (left.status === "closed") return 1;
+        if (right.status === "closed") return -1;
+      }
+
+      if (left.effective_priority !== right.effective_priority) {
+        return left.effective_priority - right.effective_priority;
+      }
+
+      if (left.escalated_by_age !== right.escalated_by_age) {
+        return left.escalated_by_age ? -1 : 1;
+      }
+
+      const leftDate = new Date(left.last_message_at || left.updated_at || left.created_at).getTime();
+      const rightDate = new Date(right.last_message_at || right.updated_at || right.created_at).getTime();
+      return (Number.isNaN(rightDate) ? 0 : rightDate) - (Number.isNaN(leftDate) ? 0 : leftDate);
+    });
+}
+
+function createTicketMessage({ sender, senderRole, text }) {
+  return {
+    id: `TM-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
+    sender,
+    sender_role: senderRole,
+    text,
+    timestamp: getTimestamp()
+  };
+}
+
 function recordCompletedWorkerCase(client, worker) {
   if (!client || !worker) {
     return;
@@ -620,6 +774,10 @@ function saveClientDocuments() {
   saveJsonArray(clientDocumentsFilePath, clientDocuments, { key: "client-documents" });
 }
 
+function saveAgencyTickets() {
+  saveJsonArray(agencyTicketsFilePath, agencyTickets, { key: "agency-tickets" });
+}
+
 function removeItemsInPlace(items, predicate) {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     if (predicate(items[index], index)) {
@@ -638,6 +796,7 @@ const workerCaseHistory = loadJsonArray(workerCaseHistoryFilePath, defaultWorker
 const clientAccounts = loadJsonArray(clientAccountsFilePath, defaultClientAccounts, { key: "client-accounts" });
 const messages = loadJsonArray(messagesFilePath, defaultMessages, { key: "messages" });
 const clientDocuments = loadJsonArray(clientDocumentsFilePath, defaultClientDocuments, { key: "client-documents" });
+const agencyTickets = loadJsonArray(agencyTicketsFilePath, defaultAgencyTickets, { key: "agency-tickets" });
 const phoneOtpStore = new Map();
 const authSessions = new Map();
 let mailTransporter = null;
@@ -965,6 +1124,7 @@ function ensureClientRecordForAccount(account, requestCaseWorker) {
   const wantsCaseWorker = Boolean(requestCaseWorker ?? account?.requestedCaseWorker);
   const requestedAgencyId = account?.requestedAgencyId || null;
   const requestedAgency = agencies.find((agency) => agency.id === requestedAgencyId) || null;
+  const isCountyRequest = requestedAgencyId === COUNTY_ORGANIZATION_ID;
 
   if (!client) {
     client = {
@@ -980,9 +1140,9 @@ function ensureClientRecordForAccount(account, requestCaseWorker) {
       case_worker_requested: wantsCaseWorker,
       requested_agency_id: requestedAgencyId,
       requested_agency_name: requestedAgency?.name || "",
-      agency_request_status: wantsCaseWorker && requestedAgencyId ? "pending_review" : "not_started",
-      accepted_agency_id: null,
-      accepted_agency_name: "",
+      agency_request_status: wantsCaseWorker && requestedAgencyId ? (isCountyRequest ? "accepted" : "pending_review") : "not_started",
+      accepted_agency_id: isCountyRequest ? requestedAgencyId : null,
+      accepted_agency_name: isCountyRequest ? (requestedAgency?.name || "") : "",
       assigned_worker_organization_id: null,
       assigned_worker_organization_name: ""
     };
@@ -994,9 +1154,16 @@ function ensureClientRecordForAccount(account, requestCaseWorker) {
   client.case_worker_requested = wantsCaseWorker;
   client.requested_agency_id = requestedAgencyId;
   client.requested_agency_name = requestedAgency?.name || "";
-  client.agency_request_status = wantsCaseWorker && requestedAgencyId
-    ? (client.agency_request_status === "accepted" ? "accepted" : "pending_review")
-    : "not_started";
+  client.agency_request_status = resolveAgencyRequestStatus(client, requestedAgencyId, wantsCaseWorker);
+  client.accepted_agency_id = resolveAcceptedAgencyId(
+    client,
+    requestedAgencyId,
+    client.agency_request_status,
+    workers.find((worker) => worker.id === client.assigned_worker) || null
+  );
+  client.accepted_agency_name = client.accepted_agency_id
+    ? (agencies.find((agency) => agency.id === client.accepted_agency_id)?.name || client.accepted_agency_name || "")
+    : "";
   touchClientRelationship(client, wantsCaseWorker ? "client_signup_request" : "client_signup");
 }
 
@@ -1443,7 +1610,9 @@ function addAccountCreationNotification(account, requestCaseWorker) {
     : "";
   const message = `New portal account: ${account.name}. Case worker requested: ${requestCaseWorker ? "Yes" : "No"}.${organizationLabel}`;
 
-  pushCountyNotification(message);
+  pushCountyNotification(message, "system", getTimestamp(), {
+    organization_id: account.requestedAgencyId || null
+  });
 }
 
 function markClientNotificationsAsRead(clientId) {
@@ -1562,35 +1731,121 @@ function createPortalHelpFallback(questionRaw, language = "en") {
     : "I'm Portal Help. I can help with login, documents, transportation, notifications, and portal steps. For questions or changes about your case, use the case worker chat.";
 }
 
-app.get("/api/clients", (_req, res) => {
+function normalizeOrganizationFilter(req) {
+  return String(req.query.organization_id || "").trim();
+}
+
+function getRecommendedWorkerForOrganization(organizationId) {
+  syncWorkerActiveCaseCounts();
+  const eligibleWorkers = organizationId
+    ? workers.filter((worker) => worker.organization_id === organizationId)
+    : workers;
+
+  if (!eligibleWorkers.length) {
+    return null;
+  }
+
+  return eligibleWorkers.reduce((lowest, worker) => (
+    worker.active_cases < lowest.active_cases ? worker : lowest
+  ), eligibleWorkers[0]);
+}
+
+function notificationBelongsToOrganization(notification, organizationId) {
+  if (!organizationId) {
+    return true;
+  }
+
+  if (notification.organization_id === organizationId) {
+    return true;
+  }
+
+  const workerOrganizationId = getOrganizationIdFromWorker(notification.worker_id);
+  if (workerOrganizationId === organizationId) {
+    return true;
+  }
+
+  const organization = agencies.find((agency) => agency.id === organizationId) || null;
+  if (
+    notification.message &&
+    notification.message.includes("Organization selected:") &&
+    organization?.name &&
+    !notification.message.includes(organization.name)
+  ) {
+    return false;
+  }
+
+  const matchingClient = clients.find((client) => (
+    notification.message &&
+    (notification.message.includes(client.name) || notification.message.includes(client.id))
+  ));
+
+  return matchingClient ? clientBelongsToOrganization(matchingClient, organizationId) : false;
+}
+
+function transportRequestBelongsToOrganization(request, organizationId) {
+  if (!organizationId) {
+    return true;
+  }
+
+  const workerOrganizationId = getOrganizationIdFromWorker(request.worker_id);
+  if (workerOrganizationId === organizationId) {
+    return true;
+  }
+
+  const client = clients.find((item) => item.id === request.client_id);
+  return clientBelongsToOrganization(client, organizationId);
+}
+
+app.get("/api/clients", (req, res) => {
+  const organizationId = normalizeOrganizationFilter(req);
   syncClientsFromAccounts();
   syncAllClientRelationships();
   syncWorkerActiveCaseCounts();
+  const visibleClients = organizationId
+    ? clients.filter((client) => clientBelongsToOrganization(client, organizationId))
+    : clients;
+  const recommendedWorker = getRecommendedWorkerForOrganization(organizationId) || getRecommendedWorker();
+
   res.json({
-    clients: clients.map(buildClientView),
-    recommended_worker_id: getRecommendedWorker().id
+    clients: visibleClients.map(buildClientView),
+    recommended_worker_id: recommendedWorker?.id || null
   });
 });
 
-app.get("/api/workers", (_req, res) => {
+app.get("/api/workers", (req, res) => {
+  const organizationId = normalizeOrganizationFilter(req);
   syncClientsFromAccounts();
   syncWorkerActiveCaseCounts();
+  const visibleWorkers = organizationId
+    ? workers.filter((worker) => worker.organization_id === organizationId)
+    : workers;
+  const recommendedWorker = getRecommendedWorkerForOrganization(organizationId);
+
   res.json({
-    workers: workers.map(buildWorkerView),
-    recommended_worker_id: getRecommendedWorker().id
+    workers: visibleWorkers.map(buildWorkerView),
+    recommended_worker_id: recommendedWorker?.id || getRecommendedWorker().id
   });
 });
 
-app.get("/api/agencies", (_req, res) => {
+app.get("/api/agencies", (req, res) => {
+  const organizationId = normalizeOrganizationFilter(req);
   syncClientsFromAccounts();
+  const visibleAgencies = organizationId
+    ? agencies.filter((agency) => agency.id === organizationId)
+    : agencies;
+
   res.json({
-    agencies: agencies.map(buildAgencyView)
+    agencies: visibleAgencies.map(buildAgencyView)
   });
 });
 
-app.get("/api/notifications", (_req, res) => {
+app.get("/api/notifications", (req, res) => {
+  const organizationId = normalizeOrganizationFilter(req);
   res.json({
-    notifications: notifications.slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    notifications: notifications
+      .filter((notification) => notificationBelongsToOrganization(notification, organizationId))
+      .slice()
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
   });
 });
 
@@ -1626,10 +1881,160 @@ app.post("/api/client-notifications/read-all", (req, res) => {
   res.json({ success: true, unread_count: 0 });
 });
 
-app.get("/api/transport-requests", (_req, res) => {
+app.get("/api/transport-requests", (req, res) => {
+  const organizationId = normalizeOrganizationFilter(req);
   res.json({
-    transport_requests: transportRequests.slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    transport_requests: transportRequests
+      .filter((request) => transportRequestBelongsToOrganization(request, organizationId))
+      .slice()
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
   });
+});
+
+app.get("/api/agency-tickets", (req, res) => {
+  const organizationId = normalizeOrganizationFilter(req);
+  const includeClosed = String(req.query.include_closed || "").trim() === "true";
+  const visibleTickets = organizationId
+    ? agencyTickets.filter((ticket) => ticket.organization_id === organizationId)
+    : agencyTickets;
+  const tickets = sortTicketViews(
+    includeClosed
+      ? visibleTickets
+      : visibleTickets.filter((ticket) => ticket.status !== "closed")
+  );
+
+  res.json({
+    tickets,
+    open_count: tickets.filter((ticket) => ticket.status !== "closed").length,
+    urgent_count: tickets.filter((ticket) => ticket.status !== "closed" && ticket.effective_priority <= 1).length
+  });
+});
+
+app.post("/api/agency-tickets", (req, res) => {
+  const organizationId = String(req.body?.organization_id || "").trim();
+  const subject = String(req.body?.subject || "").trim();
+  const messageText = String(req.body?.message || "").trim();
+  const senderRole = String(req.body?.sender_role || "organization").trim() === "county" ? "county" : "organization";
+  const priority = normalizeTicketPriority(req.body?.priority);
+  const agency = agencies.find((item) => item.id === organizationId) || null;
+
+  if (!agency) {
+    res.status(400).json({ error: "Select a valid organization." });
+    return;
+  }
+
+  if (!subject || !messageText) {
+    res.status(400).json({ error: "Subject and message are required." });
+    return;
+  }
+
+  if (subject.length > 120 || messageText.length > 1200) {
+    res.status(400).json({ error: "Ticket subject or message is too long." });
+    return;
+  }
+
+  const timestamp = getTimestamp();
+  const ticket = {
+    id: `TK-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`,
+    organization_id: agency.id,
+    organization_name: agency.name,
+    subject,
+    priority,
+    status: "open",
+    created_by: senderRole,
+    created_at: timestamp,
+    updated_at: timestamp,
+    last_message_at: timestamp,
+    messages: [
+      createTicketMessage({
+        sender: senderRole === "county" ? COUNTY_ADMIN_NAME : agency.name,
+        senderRole,
+        text: messageText
+      })
+    ]
+  };
+
+  agencyTickets.unshift(ticket);
+  saveAgencyTickets();
+
+  if (senderRole === "organization") {
+    pushCountyNotification(`${agency.name} opened a county support ticket: ${subject}`, "system", timestamp, {
+      organization_id: agency.id
+    });
+    saveCountyState();
+  }
+
+  res.json({ success: true, ticket: buildTicketView(ticket) });
+});
+
+app.post("/api/agency-tickets/:ticketId/messages", (req, res) => {
+  const ticketId = String(req.params.ticketId || "").trim();
+  const messageText = String(req.body?.message || "").trim();
+  const senderRole = String(req.body?.sender_role || "").trim() === "county" ? "county" : "organization";
+  const ticket = agencyTickets.find((item) => item.id === ticketId) || null;
+
+  if (!ticket) {
+    res.status(404).json({ error: "Ticket not found." });
+    return;
+  }
+
+  if (!messageText) {
+    res.status(400).json({ error: "Message is required." });
+    return;
+  }
+
+  if (messageText.length > 1200) {
+    res.status(400).json({ error: "Message is too long." });
+    return;
+  }
+
+  if (ticket.status === "closed") {
+    res.status(400).json({ error: "This ticket is closed." });
+    return;
+  }
+
+  const timestamp = getTimestamp();
+  const sender = senderRole === "county"
+    ? COUNTY_ADMIN_NAME
+    : (ticket.organization_name || "Organization");
+
+  ticket.messages = Array.isArray(ticket.messages) ? ticket.messages : [];
+  ticket.messages.push(createTicketMessage({ sender, senderRole, text: messageText }));
+  ticket.updated_at = timestamp;
+  ticket.last_message_at = timestamp;
+  ticket.status = "open";
+  saveAgencyTickets();
+
+  if (senderRole === "organization") {
+    pushCountyNotification(`${ticket.organization_name} updated county ticket: ${ticket.subject}`, "system", timestamp, {
+      organization_id: ticket.organization_id
+    });
+    saveCountyState();
+  }
+
+  res.json({ success: true, ticket: buildTicketView(ticket) });
+});
+
+app.post("/api/agency-tickets/:ticketId/status", (req, res) => {
+  const ticketId = String(req.params.ticketId || "").trim();
+  const status = String(req.body?.status || "").trim();
+  const ticket = agencyTickets.find((item) => item.id === ticketId) || null;
+
+  if (!ticket) {
+    res.status(404).json({ error: "Ticket not found." });
+    return;
+  }
+
+  if (!["open", "closed"].includes(status)) {
+    res.status(400).json({ error: "Invalid ticket status." });
+    return;
+  }
+
+  ticket.status = status;
+  ticket.updated_at = getTimestamp();
+  saveAgencyTickets();
+
+  res.json({ success: true, ticket: buildTicketView(ticket) });
 });
 
 app.post("/api/auth/signup/phone", async (req, res) => {
@@ -1638,6 +2043,7 @@ app.post("/api/auth/signup/phone", async (req, res) => {
   const requestCaseWorker = Boolean(req.body?.request_case_worker);
   const requestedAgencyId = String(req.body?.requested_agency_id || "").trim();
   const requestedAgency = agencies.find((agency) => agency.id === requestedAgencyId) || null;
+  const isCountyRequest = requestedAgency?.id === COUNTY_ORGANIZATION_ID;
 
   if (!name || !phone) {
     res.status(400).json({ error: "Enter your name and phone number." });
@@ -1674,7 +2080,9 @@ app.post("/api/auth/signup/phone", async (req, res) => {
   saveClientAccounts(clientAccounts);
   saveCountyState();
   const signupMessage = requestCaseWorker && requestedAgency
-    ? `Your request was sent to ${requestedAgency.name}. Future updates will come here and by text.`
+    ? (isCountyRequest
+        ? `Your request is with ${requestedAgency.name}. Caseworker assignment can begin right away. Future updates will come here and by text.`
+        : `Your request was sent to ${requestedAgency.name}. That agency must accept before caseworker assignment can begin. Future updates will come here and by text.`)
     : requestCaseWorker
       ? "Your case worker request was sent. Future updates will come here and by text."
       : "Your account is ready. Future updates will come here and by text.";
@@ -1697,6 +2105,7 @@ app.post("/api/auth/signup/email", async (req, res) => {
   const requestCaseWorker = Boolean(req.body?.request_case_worker);
   const requestedAgencyId = String(req.body?.requested_agency_id || "").trim();
   const requestedAgency = agencies.find((agency) => agency.id === requestedAgencyId) || null;
+  const isCountyRequest = requestedAgency?.id === COUNTY_ORGANIZATION_ID;
 
   if (!name || !email || !password) {
     res.status(400).json({ error: "Enter your name, email, and password." });
@@ -1734,7 +2143,9 @@ app.post("/api/auth/signup/email", async (req, res) => {
   saveClientAccounts(clientAccounts);
   saveCountyState();
   const signupMessage = requestCaseWorker && requestedAgency
-    ? `Your request was sent to ${requestedAgency.name}. Future updates will come here and by email.`
+    ? (isCountyRequest
+        ? `Your request is with ${requestedAgency.name}. Caseworker assignment can begin right away. Future updates will come here and by email.`
+        : `Your request was sent to ${requestedAgency.name}. That agency must accept before caseworker assignment can begin. Future updates will come here and by email.`)
     : requestCaseWorker
       ? "Your case worker request was sent. Future updates will come here and by email."
       : "Your account is ready. Future updates will come here and by email.";
@@ -1896,7 +2307,11 @@ app.post("/api/admin/caseworkers", (req, res) => {
   const email = String(req.body?.email || "").trim();
   const password = String(req.body?.password || "").trim();
   const requestedWorkerId = String(req.body?.workerId || "").trim();
+  const requestedOrganizationId = String(req.body?.organization_id || COUNTY_ORGANIZATION_ID).trim();
   const workerId = formatWorkerId(requestedWorkerId);
+  const organization = agencies.find((agency) => agency.id === requestedOrganizationId) || agencies.find((agency) => agency.id === COUNTY_ORGANIZATION_ID);
+  const organizationId = organization?.id || COUNTY_ORGANIZATION_ID;
+  const organizationName = organization?.name || COUNTY_ORGANIZATION_NAME;
 
   if (!name || !email || !password || !workerId) {
     res.status(400).json({ success: false, error: "Name, email, password, and caseworker number are required." });
@@ -1926,11 +2341,11 @@ app.post("/api/admin/caseworkers", (req, res) => {
     office: "Passaic County Main Office",
     languages: ["English"],
     specialties: ["Case management"],
-    bio: `${name} supports Passaic County clients and case follow-up.`,
+    bio: `${name} supports ${organizationName} clients and case follow-up.`,
     availability: "Mon-Fri, 9:00 AM - 5:00 PM",
     pronouns: "",
-    organization_id: COUNTY_ORGANIZATION_ID,
-    organization_name: COUNTY_ORGANIZATION_NAME
+    organization_id: organizationId,
+    organization_name: organizationName
   });
 
   workers.push(newWorker);
@@ -1940,14 +2355,16 @@ app.post("/api/admin/caseworkers", (req, res) => {
     workerId,
     name,
     email: normalizedEmail,
-    organization_id: COUNTY_ORGANIZATION_ID,
-    organization_name: COUNTY_ORGANIZATION_NAME,
+    organization_id: organizationId,
+    organization_name: organizationName,
     passwordSalt: salt,
     passwordHash: hash
   });
 
   saveAdminAccounts(adminAccounts);
-  pushCountyNotification(`New caseworker account created for ${name} (${workerId})`, workerId);
+  pushCountyNotification(`New caseworker account created for ${name} (${workerId}) at ${organizationName}`, workerId, getTimestamp(), {
+    organization_id: organizationId
+  });
   saveCountyState();
 
   res.json({
@@ -1958,8 +2375,8 @@ app.post("/api/admin/caseworkers", (req, res) => {
       workerId,
       name,
       email: normalizedEmail,
-      organization_id: COUNTY_ORGANIZATION_ID,
-      organization_name: COUNTY_ORGANIZATION_NAME
+      organization_id: organizationId,
+      organization_name: organizationName
     }
   });
 });
@@ -2192,12 +2609,27 @@ app.get("/api/worker-notifications", (req, res) => {
 });
 
 app.post("/api/assign", async (req, res) => {
-  const { client_id: clientId, worker_id: workerId } = req.body || {};
+  const { client_id: clientId, worker_id: workerId, organization_id: organizationId } = req.body || {};
   const client = clients.find((item) => item.id === clientId);
   const worker = workers.find((item) => item.id === workerId);
 
   if (!client || !worker) {
     res.status(400).json({ error: "Client or worker not found." });
+    return;
+  }
+
+  if (client.requested_agency_id && client.requested_agency_id !== COUNTY_ORGANIZATION_ID && client.agency_request_status !== "accepted") {
+    res.status(400).json({ error: "The requested agency must accept this client before a caseworker can be assigned." });
+    return;
+  }
+
+  if (client.accepted_agency_id && client.accepted_agency_id !== COUNTY_ORGANIZATION_ID && client.accepted_agency_id !== String(organizationId || "").trim()) {
+    res.status(400).json({ error: "This case must be assigned from the accepted organization portal." });
+    return;
+  }
+
+  if (client.accepted_agency_id && worker.organization_id !== client.accepted_agency_id) {
+    res.status(400).json({ error: "This worker does not belong to the accepted agency for this client." });
     return;
   }
 
@@ -2234,8 +2666,79 @@ app.post("/api/assign", async (req, res) => {
   });
 });
 
+app.post("/api/agency-request-status", async (req, res) => {
+  const { client_id: clientId, organization_id: organizationId, action } = req.body || {};
+  syncClientsFromAccounts();
+  syncAllClientRelationships();
+  const client = clients.find((item) => item.id === clientId);
+  const agency = agencies.find((item) => item.id === organizationId);
+
+  if (!client || !agency) {
+    res.status(400).json({ error: "Client or organization not found." });
+    return;
+  }
+
+  if (client.requested_agency_id !== organizationId) {
+    res.status(400).json({ error: "This client did not request this organization." });
+    return;
+  }
+
+  if (!["accept", "reject"].includes(action)) {
+    res.status(400).json({ error: "Invalid action." });
+    return;
+  }
+
+  if (client.agency_request_status !== "pending_review") {
+    res.status(400).json({ error: "This request is no longer waiting for agency review." });
+    return;
+  }
+
+  if (action === "accept") {
+    client.agency_request_status = "accepted";
+    client.accepted_agency_id = organizationId;
+    client.accepted_agency_name = agency.name;
+    client.status = "pending";
+    client.worker_status = null;
+    client.assigned_worker = null;
+    touchClientRelationship(client, "agency_accept");
+    pushCountyNotification(`${agency.name} accepted ${client.name}'s request`, "system", getTimestamp(), {
+      organization_id: organizationId
+    });
+    await createClientNotification(client.id, {
+      title: "Agency request accepted",
+      message: `${agency.name} accepted your request. They can now assign a caseworker.`,
+      category: "status"
+    });
+  } else {
+    client.agency_request_status = "rejected";
+    client.accepted_agency_id = null;
+    client.accepted_agency_name = "";
+    client.assigned_worker = null;
+    client.worker_status = null;
+    client.status = "pending";
+    touchClientRelationship(client, "agency_reject");
+    pushCountyNotification(`${agency.name} declined ${client.name}'s request`, "system", getTimestamp(), {
+      organization_id: organizationId
+    });
+    await createClientNotification(client.id, {
+      title: "Agency request declined",
+      message: `${agency.name} declined your request. Please choose another agency or contact the county.`,
+      category: "status"
+    });
+  }
+
+  saveCountyState();
+  res.json({
+    success: true,
+    client: buildClientView(client)
+  });
+});
+
 app.post("/api/case-status", async (req, res) => {
   const { client_id: clientId, worker_id: workerId, action } = req.body || {};
+  syncClientsFromAccounts();
+  syncAllClientRelationships();
+  syncWorkerActiveCaseCounts();
   const client = clients.find((item) => item.id === clientId);
   const worker = workers.find((item) => item.id === workerId);
 
@@ -2245,6 +2748,11 @@ app.post("/api/case-status", async (req, res) => {
   }
 
   if (action === "accept") {
+    if (client.worker_status !== "pending_approval") {
+      res.status(400).json({ error: "This case is not waiting for worker acceptance." });
+      return;
+    }
+
     client.status = "active";
     client.worker_status = "active";
     client.case_worker_requested = true;
@@ -2257,6 +2765,11 @@ app.post("/api/case-status", async (req, res) => {
       category: "status"
     });
   } else if (action === "complete") {
+    if (client.worker_status !== "active") {
+      res.status(400).json({ error: "Only active cases can be completed." });
+      return;
+    }
+
     pushCountyNotification(`${worker.name} completed ${client.name}`, worker.id);
     recordCompletedWorkerCase(client, worker);
     markClientCaseCompleted(client, worker);
@@ -2266,6 +2779,11 @@ app.post("/api/case-status", async (req, res) => {
       category: "status"
     });
   } else if (action === "reject") {
+    if (client.worker_status !== "pending_approval") {
+      res.status(400).json({ error: "This case is not waiting for worker review." });
+      return;
+    }
+
     client.worker_status = "rejected";
     client.status = "pending";
     client.assigned_worker = null;

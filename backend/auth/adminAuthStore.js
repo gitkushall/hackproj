@@ -60,7 +60,7 @@ const defaultAdminAccounts = [
     passwordHash: "373c1603d21694212e898811392935aa05d4c9cbd9918a98b06cb473dbb6dca30c14fc1f3290a282fddb1a726c111b7b710aac5f02cc19864ce0f0b33a534a39"
   },
   {
-    id: "AD-06",
+    id: "AD-ORG-SHELTER",
     role: "organization",
     name: "Shelter Organization Admin",
     email: "shelter@idhelp.org",
@@ -91,8 +91,45 @@ const defaultAdminAccounts = [
   }
 ];
 
+function mergeDefaultAdminAccounts(accounts) {
+  const defaultById = new Map(defaultAdminAccounts.map((account) => [account.id, account]));
+  const seenIds = new Set();
+  let changed = false;
+
+  const mergedAccounts = accounts.map((account) => {
+    seenIds.add(account.id);
+
+    if (!defaultById.has(account.id)) {
+      return account;
+    }
+
+    const mergedAccount = { ...defaultById.get(account.id), ...account };
+    if (JSON.stringify(mergedAccount) !== JSON.stringify(account)) {
+      changed = true;
+    }
+
+    return mergedAccount;
+  });
+
+  defaultAdminAccounts.forEach((account) => {
+    if (!seenIds.has(account.id)) {
+      mergedAccounts.push({ ...account });
+      changed = true;
+    }
+  });
+
+  return { accounts: mergedAccounts, changed };
+}
+
 function loadAdminAccounts() {
-  return loadJsonArray(adminAccountsFilePath, defaultAdminAccounts, { key: "admin-accounts" });
+  const loadedAccounts = loadJsonArray(adminAccountsFilePath, defaultAdminAccounts, { key: "admin-accounts" });
+  const { accounts, changed } = mergeDefaultAdminAccounts(loadedAccounts);
+
+  if (changed) {
+    saveJsonArray(adminAccountsFilePath, accounts, { key: "admin-accounts" });
+  }
+
+  return accounts;
 }
 
 function saveAdminAccounts(accounts) {

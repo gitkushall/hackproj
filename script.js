@@ -21,11 +21,19 @@ const state = {
     isCreatingWorker: false,
     isAiPanelOpen: false,
     selectedWorkerId: null,
-    selectedAgencyId: "all"
+    selectedAgencyId: "all",
+    workerSearchQuery: "",
+    agencyTickets: [],
+    selectedTicketId: null,
+    selectedOrganizationStatsId: null,
+    actionStatusMessage: "",
+    actionStatusTone: ""
   },
   adminAccount: null,
   adminDemoWorkers: [],
   adminSelectedDemoWorkerId: "",
+  adminDemoOrganizations: [],
+  adminSelectedDemoOrganizationId: "",
   clientPortalData: {
     currentClientId: null,
     currentUser: null,
@@ -67,7 +75,9 @@ const state = {
     pendingChatImage: null,
     activeWorkspacePanel: null,
     showChatImagesOnly: false,
-    refreshIntervalId: null
+    refreshIntervalId: null,
+    actionStatusMessage: "",
+    actionStatusTone: ""
   },
   answers: {
     hasBirth: null,
@@ -564,6 +574,12 @@ function getStatusText(status) {
   if (status === "awaiting_assignment") {
     return state.lang === "es" ? "Esperando asignacion" : "Awaiting assignment";
   }
+  if (status === "awaiting_agency_response") {
+    return state.lang === "es" ? "Esperando agencia" : "Awaiting agency";
+  }
+  if (status === "agency_declined") {
+    return state.lang === "es" ? "Agencia rechazo" : "Agency declined";
+  }
   if (status === "awaiting_caseworker_response") {
     return state.lang === "es" ? "Esperando respuesta" : "Awaiting response";
   }
@@ -890,14 +906,14 @@ function openScreen(screenId) {
     screenId = "questions-screen";
   }
 
-  ["login-screen", "portal-select-screen", "auth-screen", "create-account-screen", "admin-dashboard-screen", "caseworker-client-screen", "caseworker-documents-screen", "client-documents-screen", "dashboard-screen", "client-progress-screen", "client-chat-screen", "client-notifications-screen", "questions-screen", "result-screen"].forEach((id) => {
+  ["login-screen", "portal-select-screen", "auth-screen", "create-account-screen", "admin-dashboard-screen", "county-ticket-screen", "organization-stats-screen", "caseworker-client-screen", "caseworker-documents-screen", "client-documents-screen", "dashboard-screen", "client-progress-screen", "client-chat-screen", "client-notifications-screen", "questions-screen", "result-screen"].forEach((id) => {
     document.getElementById(id).classList.toggle("hidden", id !== screenId);
   });
   activeScreenId = screenId;
   document.getElementById("login-error").textContent = "";
   document.getElementById("create-account-error").textContent = "";
 
-  const isAdminScreen = screenId === "admin-dashboard-screen" || screenId === "caseworker-client-screen" || screenId === "caseworker-documents-screen";
+  const isAdminScreen = screenId === "admin-dashboard-screen" || screenId === "county-ticket-screen" || screenId === "organization-stats-screen" || screenId === "caseworker-client-screen" || screenId === "caseworker-documents-screen";
   const isPreLoginScreen = ["login-screen", "portal-select-screen", "auth-screen", "create-account-screen"].includes(screenId);
   const showHelp = !isPreLoginScreen && !isAdminScreen;
   const adminPortalBtn = document.getElementById("admin-portal-btn");
@@ -914,7 +930,7 @@ function openScreen(screenId) {
     closeHelpChat();
   }
 
-  if (screenId !== "admin-dashboard-screen" || state.adminRole !== "passaic") {
+  if (!["admin-dashboard-screen", "organization-stats-screen"].includes(screenId) || state.adminRole !== "passaic") {
     closeWorkerProfile();
   }
 
@@ -940,7 +956,7 @@ async function refreshCurrentScreenData(screenId = activeScreenId) {
     return;
   }
 
-  if (state.adminRole === "passaic" && screenId === "admin-dashboard-screen") {
+  if ((state.adminRole === "passaic" || state.adminRole === "organization") && (screenId === "admin-dashboard-screen" || screenId === "county-ticket-screen" || screenId === "organization-stats-screen")) {
     await loadCountyDashboard();
     return;
   }
@@ -993,17 +1009,37 @@ async function refreshCurrentScreenData(screenId = activeScreenId) {
 
 function syncAdminLayoutMode(screenId) {
   const onCaseworkerScreen = screenId === "admin-dashboard-screen" || screenId === "caseworker-client-screen" || screenId === "caseworker-documents-screen";
-  const onAdminDashboard = screenId === "admin-dashboard-screen";
+  const onAdminDashboard = screenId === "admin-dashboard-screen" || screenId === "county-ticket-screen" || screenId === "organization-stats-screen";
   const adminDashboard = document.getElementById("admin-dashboard-screen");
+  const ticketScreen = document.getElementById("county-ticket-screen");
+  const organizationStatsScreen = document.getElementById("organization-stats-screen");
   const caseworkerClientScreen = document.getElementById("caseworker-client-screen");
   const caseworkerDocumentsScreen = document.getElementById("caseworker-documents-screen");
   const appWrap = document.querySelector(".app-wrap");
 
   adminDashboard.classList.toggle("county-mode", onAdminDashboard && (state.adminRole === "passaic" || state.adminRole === "organization"));
+  adminDashboard.classList.toggle("organization-mode", onAdminDashboard && state.adminRole === "organization");
+  adminDashboard.classList.toggle("organization-theme-shelter", onAdminDashboard && state.adminRole === "organization" && state.adminAccount?.organization_id === "ORG-SHELTER");
+  adminDashboard.classList.toggle("organization-theme-hospital", onAdminDashboard && state.adminRole === "organization" && state.adminAccount?.organization_id === "ORG-HOSPITAL");
+  adminDashboard.classList.toggle("organization-theme-community", onAdminDashboard && state.adminRole === "organization" && state.adminAccount?.organization_id === "ORG-NONPROFIT");
   adminDashboard.classList.toggle("caseworker-mode", onAdminDashboard && state.adminRole === "caseworker");
+  ticketScreen.classList.toggle("county-mode", screenId === "county-ticket-screen" && (state.adminRole === "passaic" || state.adminRole === "organization"));
+  ticketScreen.classList.toggle("organization-mode", screenId === "county-ticket-screen" && state.adminRole === "organization");
+  ticketScreen.classList.toggle("organization-theme-shelter", screenId === "county-ticket-screen" && state.adminRole === "organization" && state.adminAccount?.organization_id === "ORG-SHELTER");
+  ticketScreen.classList.toggle("organization-theme-hospital", screenId === "county-ticket-screen" && state.adminRole === "organization" && state.adminAccount?.organization_id === "ORG-HOSPITAL");
+  ticketScreen.classList.toggle("organization-theme-community", screenId === "county-ticket-screen" && state.adminRole === "organization" && state.adminAccount?.organization_id === "ORG-NONPROFIT");
+  organizationStatsScreen.classList.toggle("county-mode", screenId === "organization-stats-screen" && (state.adminRole === "passaic" || state.adminRole === "organization"));
+  organizationStatsScreen.classList.toggle("organization-mode", screenId === "organization-stats-screen" && state.adminRole === "organization");
+  organizationStatsScreen.classList.toggle("organization-theme-shelter", screenId === "organization-stats-screen" && state.adminRole === "organization" && state.adminAccount?.organization_id === "ORG-SHELTER");
+  organizationStatsScreen.classList.toggle("organization-theme-hospital", screenId === "organization-stats-screen" && state.adminRole === "organization" && state.adminAccount?.organization_id === "ORG-HOSPITAL");
+  organizationStatsScreen.classList.toggle("organization-theme-community", screenId === "organization-stats-screen" && state.adminRole === "organization" && state.adminAccount?.organization_id === "ORG-NONPROFIT");
   caseworkerClientScreen.classList.toggle("caseworker-mode", screenId === "caseworker-client-screen");
   caseworkerDocumentsScreen.classList.toggle("caseworker-mode", screenId === "caseworker-documents-screen");
   appWrap.classList.toggle("county-expanded", onAdminDashboard && (state.adminRole === "passaic" || state.adminRole === "organization"));
+  appWrap.classList.toggle("organization-expanded", onAdminDashboard && state.adminRole === "organization");
+  appWrap.classList.toggle("organization-theme-shelter", onAdminDashboard && state.adminRole === "organization" && state.adminAccount?.organization_id === "ORG-SHELTER");
+  appWrap.classList.toggle("organization-theme-hospital", onAdminDashboard && state.adminRole === "organization" && state.adminAccount?.organization_id === "ORG-HOSPITAL");
+  appWrap.classList.toggle("organization-theme-community", onAdminDashboard && state.adminRole === "organization" && state.adminAccount?.organization_id === "ORG-NONPROFIT");
   appWrap.classList.toggle("caseworker-expanded", onCaseworkerScreen && state.adminRole === "caseworker");
 }
 
@@ -1026,6 +1062,7 @@ function applyLanguage() {
     : "Apply for housing support, stay connected with your case worker, and get help with documents in one place.";
   document.getElementById("landing-login-btn").textContent = state.lang === "es" ? "Ingresar" : "Login";
   document.getElementById("portal-select-back-btn").textContent = t.goBack;
+  document.getElementById("organization-stats-back-btn").textContent = t.goBack;
   document.getElementById("portal-select-eyebrow").textContent = state.lang === "es" ? "Elija su portal" : "Choose your portal";
   document.getElementById("portal-select-title").textContent = state.lang === "es" ? "Seleccione donde quiere iniciar sesion" : "Select where you want to sign in";
   document.getElementById("portal-select-subtitle").textContent = state.lang === "es"
@@ -1116,8 +1153,12 @@ function applyLanguage() {
   document.getElementById("admin-demo-copy").textContent = state.lang === "es" ? "Acceso demo" : "Demo access";
   document.getElementById("admin-demo-caseworker-label").textContent = state.lang === "es" ? "Seleccione trabajador social demo" : "Select demo case worker";
   document.getElementById("admin-demo-caseworker-btn").textContent = state.lang === "es" ? "Entrar como trabajador" : "Demo Case Worker";
+  document.getElementById("admin-demo-organization-label").textContent = state.lang === "es" ? "Seleccione organizacion demo" : "Select demo organization";
+  document.getElementById("admin-demo-organization-btn").textContent = state.lang === "es" ? "Entrar como organizacion" : "Demo Organization";
   document.getElementById("admin-demo-county-btn").textContent = state.lang === "es" ? "Entrar como condado" : "Demo County";
   renderAdminDemoCaseworkerOptions();
+  renderAdminDemoOrganizationOptions();
+  renderOrganizationIdentity();
 
   const adminPortalBtn = document.getElementById("admin-portal-btn");
   if (adminPortalBtn) {
@@ -1249,44 +1290,108 @@ function applyLanguage() {
     : "This assistant currently uses simple logic. It can be upgraded to a real AI (like ChatGPT) to provide deeper insights if the system is approved.";
   document.getElementById("ai-input").placeholder = t.countyAiPlaceholder;
   document.getElementById("ai-ask-btn").textContent = t.countyAiAsk;
-  document.getElementById("county-hero-eyebrow").textContent = state.lang === "es" ? "Coordinacion de vivienda de Passaic County" : "Passaic County Housing Coordination";
-  document.getElementById("county-hero-title").textContent = state.lang === "es" ? "Administre solicitudes, asignaciones y rendimiento del sistema" : "Manage requests, assignments, and system performance";
-  document.getElementById("county-hero-subtitle").textContent = state.lang === "es"
-    ? "Revise solicitudes de clientes, asigne al mejor trabajador y supervise la actividad del condado."
-    : "Review incoming client requests, assign the best worker, and monitor county-wide activity.";
-  document.getElementById("county-hero-badge-queue").textContent = state.lang === "es" ? "Fila de ingreso en vivo" : "Live intake queue";
-  document.getElementById("county-hero-badge-balance").textContent = state.lang === "es" ? "Balance del personal" : "Worker balancing";
-  document.getElementById("county-hero-badge-transport").textContent = state.lang === "es" ? "Monitoreo de transporte" : "Transportation watch";
+  const organizationCopy = state.adminRole === "organization" ? getOrganizationExperienceCopy() : null;
+  document.getElementById("county-hero-eyebrow").textContent = organizationCopy
+    ? organizationCopy.eyebrow
+    : (state.lang === "es" ? "Coordinacion de vivienda de Passaic County" : "Passaic County Housing Coordination");
+  document.getElementById("county-hero-title").textContent = organizationCopy
+    ? organizationCopy.title
+    : (state.lang === "es" ? "Administre solicitudes, asignaciones y rendimiento del sistema" : "Manage requests, assignments, and system performance");
+  document.getElementById("county-hero-subtitle").textContent = organizationCopy
+    ? organizationCopy.subtitle
+    : (state.lang === "es"
+        ? "Revise solicitudes de clientes, asigne al mejor trabajador y supervise la actividad del condado."
+        : "Review incoming client requests, assign the best worker, and monitor county-wide activity.");
+  document.getElementById("county-hero-badge-queue").textContent = organizationCopy
+    ? organizationCopy.badgeOne
+    : (state.lang === "es" ? "Fila de ingreso en vivo" : "Live intake queue");
+  document.getElementById("county-hero-badge-balance").textContent = organizationCopy
+    ? organizationCopy.badgeTwo
+    : (state.lang === "es" ? "Balance del personal" : "Worker balancing");
+  document.getElementById("county-hero-badge-transport").textContent = organizationCopy
+    ? organizationCopy.badgeThree
+    : (state.lang === "es" ? "Monitoreo de transporte" : "Transportation watch");
   document.getElementById("county-refresh-btn").textContent = state.lang === "es" ? "Actualizar datos" : "Refresh Data";
-  document.getElementById("county-system-reach-kicker").textContent = state.lang === "es" ? "Alcance del sistema" : "System reach";
-  document.getElementById("county-users-note").textContent = state.lang === "es" ? "Actividad en todo el condado en casos abiertos de apoyo de vivienda." : "County-wide activity across open housing support cases.";
-  document.getElementById("county-placement-kicker").textContent = state.lang === "es" ? "Progreso de ubicacion" : "Placement progress";
-  document.getElementById("county-housed-note").textContent = state.lang === "es" ? "Clientes que pasaron de solicitud a ubicacion de vivienda." : "Clients who moved from request to housing placement.";
-  document.getElementById("county-open-workload-kicker").textContent = state.lang === "es" ? "Carga abierta" : "Open workload";
-  document.getElementById("county-apps-note").textContent = state.lang === "es" ? "Solicitudes que siguen en revision, documentos y asignacion." : "Requests still moving through review, documents, and assignment.";
-  document.getElementById("county-ai-kicker").textContent = state.lang === "es" ? "Recomendacion IA" : "AI recommendation";
-  document.getElementById("county-recommended-worker-label").textContent = state.lang === "es" ? "Mejor trabajador sugerido" : "Best Worker Match";
-  document.getElementById("county-recommended-worker-note").textContent = state.lang === "es" ? "Siguiente asignacion sugerida segun carga y balance de fila." : "Suggested next assignment based on workload and queue balance.";
+  document.getElementById("county-system-reach-kicker").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Clientes de la organizacion" : "Organization clients")
+    : (state.lang === "es" ? "Alcance del sistema" : "System reach");
+  document.getElementById("county-users-label").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Clientes activos" : "Active Clients")
+    : t.countyUsers;
+  document.getElementById("county-users-note").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Personas conectadas a esta organizacion y aun en progreso." : "People connected to this organization and still in progress.")
+    : (state.lang === "es" ? "Actividad en todo el condado en casos abiertos de apoyo de vivienda." : "County-wide activity across open housing support cases.");
+  document.getElementById("county-placement-kicker").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Casos activos" : "Active care")
+    : (state.lang === "es" ? "Progreso de ubicacion" : "Placement progress");
+  document.getElementById("county-housed-label").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Asignados y activos" : "Assigned and Active")
+    : t.countyHoused;
+  document.getElementById("county-housed-note").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Clientes que ya tienen trabajador de esta organizacion." : "Clients already connected to one of your workers.")
+    : (state.lang === "es" ? "Clientes que pasaron de solicitud a ubicacion de vivienda." : "Clients who moved from request to housing placement.");
+  document.getElementById("county-open-workload-kicker").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Equipo disponible" : "Team capacity")
+    : (state.lang === "es" ? "Carga abierta" : "Open workload");
+  document.getElementById("county-apps-label").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Trabajadores" : "Case Workers")
+    : t.countyApplications;
+  document.getElementById("county-apps-note").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Trabajadores sociales visibles para esta organizacion." : "Case workers visible inside this organization.")
+    : (state.lang === "es" ? "Solicitudes que siguen en revision, documentos y asignacion." : "Requests still moving through review, documents, and assignment.");
+  document.getElementById("county-ai-kicker").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Linea al condado" : "County line")
+    : (state.lang === "es" ? "Recomendacion IA" : "AI recommendation");
+  document.getElementById("county-recommended-worker-label").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Tickets abiertos" : "Open County Tickets")
+    : (state.lang === "es" ? "Mejor trabajador sugerido" : "Best Worker Match");
+  document.getElementById("county-recommended-worker-note").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Mensajes activos entre su organizacion y Passaic County." : "Active ticket messages between your organization and Passaic County.")
+    : (state.lang === "es" ? "Siguiente asignacion sugerida segun carga y balance de fila." : "Suggested next assignment based on workload and queue balance.");
   document.getElementById("county-queue-kicker").textContent = state.lang === "es" ? "Gestion de fila" : "Queue management";
-  document.getElementById("county-client-requests-title").textContent = state.lang === "es" ? "🏠 Solicitudes de clientes" : "🏠 Client Requests";
-  document.getElementById("county-client-requests-subtitle").textContent = state.lang === "es" ? "Las solicitudes de Passaic County aparecen aqui. Las de otras organizaciones se registran abajo y en notificaciones." : "Passaic County requests appear here. Other organization requests are tracked below and in notifications.";
-  document.getElementById("county-organization-kicker").textContent = state.lang === "es" ? "Ruta por organizacion" : "Organization routing";
-  document.getElementById("county-organization-title").textContent = state.lang === "es" ? "🏢 Organizaciones" : "🏢 Organizations";
-  document.getElementById("county-organization-subtitle").textContent = state.lang === "es" ? "Seleccione una organizacion para ver sus trabajadores sociales, clientes y solicitudes." : "Select an organization to see its case workers, clients, and requests.";
-  document.getElementById("county-organization-filter-label").textContent = state.lang === "es" ? "Filtrar por organizacion" : "Filter by organization";
+  document.getElementById("county-client-requests-title").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "🤝 Solicitudes de su organizacion" : "🤝 Your Organization Requests")
+    : (state.lang === "es" ? "🏠 Solicitudes de clientes" : "🏠 Client Requests");
+  document.getElementById("county-client-requests-subtitle").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Solo se muestran clientes, trabajadores y solicitudes conectadas con su organizacion." : "Only clients, workers, and requests connected to your organization are shown.")
+    : (state.lang === "es" ? "Las solicitudes de Passaic County aparecen aqui. Las de otras organizaciones se registran abajo y en notificaciones." : "Passaic County requests appear here. Other organization requests are tracked below and in notifications.");
+  document.getElementById("county-organization-kicker").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Espacio privado" : "Private workspace")
+    : (state.lang === "es" ? "Ruta por organizacion" : "Organization routing");
+  document.getElementById("county-organization-title").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "🏢 Su organizacion" : "🏢 Your Organization")
+    : (state.lang === "es" ? "🏢 Organizaciones" : "🏢 Organizations");
+  document.getElementById("county-organization-subtitle").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Este portal esta limitado a la actividad interna de su organizacion." : "This portal is limited to activity inside your organization.")
+    : (state.lang === "es" ? "Seleccione una organizacion para ver sus trabajadores sociales, clientes y solicitudes." : "Select an organization to see its case workers, clients, and requests.");
+  document.getElementById("county-organization-filter-label").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Organizacion actual" : "Current organization")
+    : (state.lang === "es" ? "Filtrar por organizacion" : "Filter by organization");
   document.getElementById("county-bottleneck-kicker").textContent = state.lang === "es" ? "Friccion del sistema" : "System friction";
   document.getElementById("county-bottleneck-title").textContent = state.lang === "es" ? "⚠️ Cuellos de botella" : "⚠️ Bottlenecks";
   document.getElementById("county-bottleneck-id").textContent = state.lang === "es" ? "52% atascado en ID estatal" : "52% stuck at State ID";
   document.getElementById("county-bottleneck-ssn").textContent = state.lang === "es" ? "28% atascado en SSN" : "28% stuck at SSN";
   document.getElementById("county-bottleneck-birth").textContent = state.lang === "es" ? "20% atascado en acta de nacimiento" : "20% stuck at Birth Certificate";
-  document.getElementById("county-transport-impact-kicker").textContent = state.lang === "es" ? "Riesgo de movilidad" : "Mobility risk";
-  document.getElementById("county-transport-impact-title").textContent = state.lang === "es" ? "🚗 Impacto del transporte" : "🚗 Transport Impact";
-  document.getElementById("county-transport-impact-note").textContent = state.lang === "es" ? "de los usuarios necesitan apoyo de transporte y es mas probable que pierdan citas." : "of users need transportation support and are more likely to miss appointments.";
   document.getElementById("county-activity-kicker").textContent = state.lang === "es" ? "Flujo de actividad" : "Activity feed";
-  document.getElementById("county-notifications-title").textContent = state.lang === "es" ? "🔔 Notificaciones" : "🔔 Notifications";
-  document.getElementById("county-notifications-subtitle").textContent = state.lang === "es" ? "Actividad reciente de asignaciones y del sistema." : "Recent assignment and system activity.";
+  document.getElementById("county-notifications-title").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "🔔 Alertas internas" : "🔔 Internal Alerts")
+    : (state.lang === "es" ? "🔔 Notificaciones" : "🔔 Notifications");
+  document.getElementById("county-notifications-subtitle").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Solo actividad relacionada con su organizacion." : "Only activity related to your organization.")
+    : (state.lang === "es" ? "Actividad reciente de asignaciones y del sistema." : "Recent assignment and system activity.");
   document.getElementById("county-notifications-live-pill").textContent = state.lang === "es" ? "En vivo" : "Live";
   document.getElementById("county-clear-notifications-btn").textContent = state.lang === "es" ? "Limpiar" : "Clear";
+  document.getElementById("county-worker-search-label").textContent = state.lang === "es" ? "Buscar trabajadores" : "Search case workers";
+  document.getElementById("county-worker-search-input").placeholder = state.lang === "es" ? "Buscar por nombre o numero WK" : "Search by name or WK number";
+  document.getElementById("county-add-worker-title").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Agregar trabajador de organizacion" : "Add Organization Case Worker")
+    : (state.lang === "es" ? "Agregar trabajador social" : "Add Case Worker");
+  document.getElementById("county-add-worker-subtitle").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Cree un trabajador que pertenece solo a esta organizacion. El condado vera su nombre, numero WK y organizacion." : "Create a worker who belongs only to this organization. County will see their name, WK number, and organization.")
+    : (state.lang === "es" ? "Cree una cuenta con nombre, email, contrasena y numero WK." : "Create a new case worker account with a name, email, password, and WK number.");
+  document.getElementById("county-add-worker-submit-btn").textContent = state.adminRole === "organization"
+    ? (state.lang === "es" ? "Crear trabajador de organizacion" : "Create Organization Worker")
+    : (state.lang === "es" ? "Crear trabajador" : "Create Case Worker");
   document.getElementById("county-staffing-kicker").textContent = state.lang === "es" ? "Vista del personal" : "Staffing view";
   document.getElementById("county-workers-title").textContent = state.lang === "es" ? "👥 Trabajadores sociales" : "👥 Case Workers";
   document.getElementById("county-workers-subtitle").textContent = state.lang === "es" ? "Controle la carga y vea el trabajador recomendado para la siguiente asignacion." : "Track workload and see the recommended worker for the next assignment.";
@@ -1330,7 +1435,7 @@ function refreshLocalizedScreens() {
   }
 
   if (!document.getElementById("admin-dashboard-screen").classList.contains("hidden")) {
-    if (state.adminRole === "passaic") {
+    if (state.adminRole === "passaic" || state.adminRole === "organization") {
       renderCountyDashboard();
     } else {
       renderCaseWorkerDashboard();
@@ -1393,10 +1498,14 @@ function syncAuthPortalMode() {
   const adminDemoRow = document.getElementById("admin-demo-row");
   const adminDemoCopy = document.getElementById("admin-demo-copy");
   const adminDemoCaseworkerStack = document.querySelector(".admin-demo-worker-stack");
+  const adminDemoOrganizationStack = document.querySelector(".admin-demo-organization-stack");
   const adminDemoCountyButton = document.getElementById("admin-demo-county-btn");
   const adminDemoCaseworkerButton = document.getElementById("admin-demo-caseworker-btn");
   const adminDemoCaseworkerLabel = document.getElementById("admin-demo-caseworker-label");
   const adminDemoCaseworkerSelect = document.getElementById("admin-demo-caseworker-select");
+  const adminDemoOrganizationButton = document.getElementById("admin-demo-organization-btn");
+  const adminDemoOrganizationLabel = document.getElementById("admin-demo-organization-label");
+  const adminDemoOrganizationSelect = document.getElementById("admin-demo-organization-select");
   const adminMark = document.getElementById("admin-google-mark");
 
   userLoginPanel.classList.toggle("hidden", !isClientPortal);
@@ -1417,20 +1526,25 @@ function syncAuthPortalMode() {
   }
 
   if (adminDemoCopy) {
-    adminDemoCopy.classList.toggle("hidden", isClientPortal || isOrganizationPortal);
-    adminDemoCopy.hidden = isClientPortal || isOrganizationPortal;
-    adminDemoCopy.style.display = isClientPortal || isOrganizationPortal ? "none" : "";
+    adminDemoCopy.classList.toggle("hidden", isClientPortal);
+    adminDemoCopy.hidden = isClientPortal;
+    adminDemoCopy.style.display = isClientPortal ? "none" : "";
   }
 
   if (adminDemoRow) {
-    adminDemoRow.classList.toggle("hidden", isClientPortal || isOrganizationPortal);
-    adminDemoRow.hidden = isClientPortal || isOrganizationPortal;
-    adminDemoRow.style.display = isClientPortal || isOrganizationPortal ? "none" : "";
+    adminDemoRow.classList.toggle("hidden", isClientPortal);
+    adminDemoRow.hidden = isClientPortal;
+    adminDemoRow.style.display = isClientPortal ? "none" : "";
   }
 
   if (adminDemoCaseworkerStack) {
     adminDemoCaseworkerStack.classList.toggle("hidden", isCountyPortal || isOrganizationPortal);
     adminDemoCaseworkerStack.hidden = isCountyPortal || isOrganizationPortal;
+  }
+
+  if (adminDemoOrganizationStack) {
+    adminDemoOrganizationStack.classList.toggle("hidden", !isOrganizationPortal);
+    adminDemoOrganizationStack.hidden = !isOrganizationPortal;
   }
 
   if (adminDemoCountyButton) {
@@ -1451,6 +1565,21 @@ function syncAuthPortalMode() {
   if (adminDemoCaseworkerSelect) {
     adminDemoCaseworkerSelect.classList.toggle("hidden", isCountyPortal || isOrganizationPortal);
     adminDemoCaseworkerSelect.hidden = isCountyPortal || isOrganizationPortal;
+  }
+
+  if (adminDemoOrganizationButton) {
+    adminDemoOrganizationButton.classList.toggle("hidden", !isOrganizationPortal);
+    adminDemoOrganizationButton.hidden = !isOrganizationPortal;
+  }
+
+  if (adminDemoOrganizationLabel) {
+    adminDemoOrganizationLabel.classList.toggle("hidden", !isOrganizationPortal);
+    adminDemoOrganizationLabel.hidden = !isOrganizationPortal;
+  }
+
+  if (adminDemoOrganizationSelect) {
+    adminDemoOrganizationSelect.classList.toggle("hidden", !isOrganizationPortal);
+    adminDemoOrganizationSelect.hidden = !isOrganizationPortal;
   }
 
   if (adminMark) {
@@ -1475,6 +1604,7 @@ function setAdminRole(role) {
   document.getElementById("caseworker-role-btn").classList.toggle("active", role === "caseworker");
   document.getElementById("passaic-role-btn").classList.toggle("active", role === "passaic");
   document.getElementById("admin-demo-caseworker-select").disabled = role !== "caseworker";
+  document.getElementById("admin-demo-organization-select").disabled = role !== "organization";
   document.getElementById("admin-case-view").classList.toggle("hidden", role !== "caseworker");
   document.getElementById("admin-county-view").classList.toggle("hidden", !(role === "passaic" || role === "organization"));
   syncAdminLayoutMode(
@@ -1749,11 +1879,9 @@ function getApiUrl(url) {
     return url;
   }
 
-  const { protocol, hostname, port } = window.location;
-  const isLocalHost = hostname === "127.0.0.1" || hostname === "localhost";
-  const isLocalPreview = protocol === "file:" || (isLocalHost && port && port !== "3000");
+  const { protocol } = window.location;
 
-  if (isLocalPreview) {
+  if (protocol === "file:") {
     return `http://127.0.0.1:3000${url}`;
   }
 
@@ -1871,6 +1999,34 @@ function renderAdminDemoCaseworkerOptions() {
   state.adminSelectedDemoWorkerId = selectedValue;
 }
 
+function renderAdminDemoOrganizationOptions() {
+  const select = document.getElementById("admin-demo-organization-select");
+  if (!select) {
+    return;
+  }
+
+  const placeholder = state.lang === "es" ? "Seleccione organizacion" : "Select organization";
+  const organizations = Array.isArray(state.adminDemoOrganizations) ? state.adminDemoOrganizations : [];
+  const currentValue = state.adminSelectedDemoOrganizationId || select.value;
+  const fallbackValue = organizations[0]?.id || "";
+  const selectedValue = organizations.some((organization) => organization.id === currentValue)
+    ? currentValue
+    : fallbackValue;
+
+  select.innerHTML = `
+    <option value="">${escapeHtml(placeholder)}</option>
+    ${organizations.map((organization) => `
+      <option value="${escapeHtml(organization.id || "")}" ${organization.id === selectedValue ? "selected" : ""}>${escapeHtml(organization.organization_name || organization.name || organization.email || "")}</option>
+    `).join("")}
+  `;
+
+  if (organizations.length && selectedValue) {
+    select.value = selectedValue;
+  }
+
+  state.adminSelectedDemoOrganizationId = selectedValue;
+}
+
 function syncAdminDemoWorkerSelection() {
   const select = document.getElementById("admin-demo-caseworker-select");
   if (!select) {
@@ -1889,6 +2045,24 @@ function syncAdminDemoWorkerSelection() {
   return selectedWorker;
 }
 
+function syncAdminDemoOrganizationSelection() {
+  const select = document.getElementById("admin-demo-organization-select");
+  if (!select) {
+    return null;
+  }
+
+  const selectedOrganizationId = select.value || state.adminSelectedDemoOrganizationId;
+  state.adminSelectedDemoOrganizationId = selectedOrganizationId || "";
+  const selectedOrganization = state.adminDemoOrganizations.find((organization) => organization.id === selectedOrganizationId) || null;
+
+  if (state.adminRole === "organization" && selectedOrganization) {
+    document.getElementById("admin-email-input").value = selectedOrganization.email || "";
+    document.getElementById("admin-password-input").value = "Demo login";
+  }
+
+  return selectedOrganization;
+}
+
 async function loadAdminDemoCaseworkers() {
   try {
     const data = await fetchJson("/api/admin/demo-accounts?role=caseworker");
@@ -1901,6 +2075,18 @@ async function loadAdminDemoCaseworkers() {
 
   renderAdminDemoCaseworkerOptions();
   syncAdminDemoWorkerSelection();
+}
+
+async function loadAdminDemoOrganizations() {
+  try {
+    const data = await fetchJson("/api/admin/demo-accounts?role=organization");
+    state.adminDemoOrganizations = Array.isArray(data.accounts) ? data.accounts : [];
+  } catch (error) {
+    state.adminDemoOrganizations = [];
+  }
+
+  renderAdminDemoOrganizationOptions();
+  syncAdminDemoOrganizationSelection();
 }
 
 async function loadAgencies() {
@@ -1934,13 +2120,23 @@ function renderAgencySelectOptions() {
 
   if (countyFilter) {
     const currentFilter = state.countyData.selectedAgencyId || "all";
-    countyFilter.innerHTML = `
-      <option value="all">${state.lang === "es" ? "Todas las organizaciones" : "All organizations"}</option>
-      ${agencies.map((agency) => `
-        <option value="${escapeHtml(agency.id)}" ${agency.id === currentFilter ? "selected" : ""}>${escapeHtml(agency.name)}</option>
-      `).join("")}
-    `;
-    countyFilter.value = currentFilter;
+    const organizationId = state.adminAccount?.organization_id || "";
+    const visibleAgencies = state.adminRole === "organization"
+      ? agencies.filter((agency) => agency.id === organizationId)
+      : agencies;
+
+    countyFilter.disabled = state.adminRole === "organization";
+    countyFilter.innerHTML = state.adminRole === "organization"
+      ? visibleAgencies.map((agency) => `
+          <option value="${escapeHtml(agency.id)}" selected>${escapeHtml(agency.name)}</option>
+        `).join("")
+      : `
+          <option value="all">${state.lang === "es" ? "Todas las organizaciones" : "All organizations"}</option>
+          ${visibleAgencies.map((agency) => `
+            <option value="${escapeHtml(agency.id)}" ${agency.id === currentFilter ? "selected" : ""}>${escapeHtml(agency.name)}</option>
+          `).join("")}
+        `;
+    countyFilter.value = state.adminRole === "organization" ? organizationId : currentFilter;
   }
 }
 
@@ -1954,7 +2150,12 @@ function getVisibleCountyClients() {
     ));
   }
 
-  return state.countyData.clients;
+  return state.countyData.clients.filter((client) => (
+    !client.requested_agency_id ||
+    client.requested_agency_id === COUNTY_ORGANIZATION_ID ||
+    client.accepted_agency_id === COUNTY_ORGANIZATION_ID ||
+    client.assigned_worker_organization_id === COUNTY_ORGANIZATION_ID
+  ));
 }
 
 function getVisibleCountyWorkers() {
@@ -1963,11 +2164,16 @@ function getVisibleCountyWorkers() {
     return state.countyData.workers.filter((worker) => worker.organization_id === orgId);
   }
 
-  if (state.countyData.selectedAgencyId && state.countyData.selectedAgencyId !== "all") {
-    return state.countyData.workers.filter((worker) => worker.organization_id === state.countyData.selectedAgencyId);
+  return state.countyData.workers;
+}
+
+function getOrganizationScopeQuery() {
+  if (state.adminRole !== "organization") {
+    return "";
   }
 
-  return state.countyData.workers;
+  const organizationId = state.adminAccount?.organization_id || "";
+  return organizationId ? `?organization_id=${encodeURIComponent(organizationId)}` : "";
 }
 
 async function loadClientMessages(clientId, workerId = null) {
@@ -2115,10 +2321,274 @@ function showServerOfflineMessage() {
     : "Server not running. Please start backend.";
 }
 
+function getOrganizationExperienceCopy() {
+  const organizationId = state.adminAccount?.organization_id || "";
+  const organizationName = state.adminAccount?.organization_name || (state.lang === "es" ? "Organizacion" : "Organization");
+
+  if (organizationId === "ORG-SHELTER") {
+    return {
+      eyebrow: state.lang === "es" ? "Portal del refugio" : "Shelter partner portal",
+      title: organizationName,
+      subtitle: state.lang === "es"
+        ? "Espacio privado para solicitudes de refugio, navegacion y coordinacion de trabajadores."
+        : "A private workspace for shelter navigation, request review, and worker coordination.",
+      badgeOne: state.lang === "es" ? "Apoyo de refugio" : "Shelter support",
+      badgeTwo: state.lang === "es" ? "Navegacion" : "Navigation",
+      badgeThree: state.lang === "es" ? "Solo su equipo" : "Your team only"
+    };
+  }
+
+  if (organizationId === "ORG-HOSPITAL") {
+    return {
+      eyebrow: state.lang === "es" ? "Portal del hospital" : "Hospital partner portal",
+      title: organizationName,
+      subtitle: state.lang === "es"
+        ? "Vista clinica-operativa para solicitudes conectadas con alta, documentos y seguimiento."
+        : "A clinical operations view for discharge-linked requests, documents, and follow-up.",
+      badgeOne: state.lang === "es" ? "Alta segura" : "Safe discharge",
+      badgeTwo: state.lang === "es" ? "Seguimiento" : "Follow-up",
+      badgeThree: state.lang === "es" ? "Equipo hospitalario" : "Hospital team"
+    };
+  }
+
+  if (organizationId === "ORG-NONPROFIT") {
+    return {
+      eyebrow: state.lang === "es" ? "Portal comunitario" : "Community partner portal",
+      title: organizationName,
+      subtitle: state.lang === "es"
+        ? "Centro comunitario para solicitudes, alcance, documentos y coordinacion local."
+        : "A community hub for requests, outreach, document support, and local coordination.",
+      badgeOne: state.lang === "es" ? "Alcance" : "Outreach",
+      badgeTwo: state.lang === "es" ? "Apoyo local" : "Local support",
+      badgeThree: state.lang === "es" ? "Red comunitaria" : "Community network"
+    };
+  }
+
+  return {
+    eyebrow: state.lang === "es" ? "Portal de organizacion" : "Organization portal",
+    title: organizationName,
+    subtitle: state.lang === "es"
+      ? "Espacio privado para clientes, trabajadores y alertas de su organizacion."
+      : "A private workspace for your organization's clients, workers, and alerts.",
+    badgeOne: state.lang === "es" ? "Acceso privado" : "Private access",
+    badgeTwo: state.lang === "es" ? "Datos filtrados" : "Scoped data",
+    badgeThree: state.lang === "es" ? "Solo su organizacion" : "Your org only"
+  };
+}
+
+function renderOrganizationIdentity() {
+  const banner = document.getElementById("organization-login-banner");
+  if (!banner) {
+    return;
+  }
+
+  const isOrganization = state.adminRole === "organization";
+  banner.classList.toggle("hidden", !isOrganization);
+  banner.hidden = !isOrganization;
+
+  if (!isOrganization) {
+    return;
+  }
+
+  const copy = getOrganizationExperienceCopy();
+  document.getElementById("organization-login-kicker").textContent = state.lang === "es" ? "Organizacion conectada" : "Logged in organization";
+  document.getElementById("organization-login-name").textContent = copy.title;
+  document.getElementById("organization-login-subtitle").textContent = copy.subtitle;
+  document.getElementById("organization-login-badge").textContent = state.lang === "es" ? "Acceso privado" : "Scoped private access";
+}
+
+function getPriorityText(ticket) {
+  if (ticket.escalated_by_age) {
+    return state.lang === "es" ? "Escalado por espera" : "Aged priority";
+  }
+
+  if (Number(ticket.priority) === 1) return state.lang === "es" ? "Alta" : "High";
+  if (Number(ticket.priority) === 3) return state.lang === "es" ? "Baja" : "Low";
+  return state.lang === "es" ? "Media" : "Medium";
+}
+
+function formatTicketTimestamp(value) {
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) {
+    return state.lang === "es" ? "Ahora" : "Now";
+  }
+
+  return timestamp.toLocaleString(getLocale(), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function renderTicketOrgOptions() {
+  const select = document.getElementById("county-ticket-org-select");
+  if (!select) {
+    return;
+  }
+
+  const organizations = state.countyData.agencies.filter((agency) => agency.id !== COUNTY_ORGANIZATION_ID);
+  select.innerHTML = organizations.map((agency) => (
+    `<option value="${escapeHtml(agency.id)}">${escapeHtml(agency.name)}</option>`
+  )).join("");
+}
+
+function renderAgencyTickets() {
+  const panel = document.getElementById("county-ticket-panel");
+  const list = document.getElementById("county-ticket-list");
+  const detail = document.getElementById("county-ticket-detail");
+  const openButton = document.getElementById("county-ticket-open-btn");
+  const openLabel = document.getElementById("county-ticket-open-label");
+  const openCount = document.getElementById("county-ticket-open-count");
+  const tickets = state.countyData.agencyTickets || [];
+  const openTickets = tickets.filter((ticket) => ticket.status !== "closed");
+  const urgentTickets = openTickets.filter((ticket) => Number(ticket.effective_priority) <= 1);
+  const isCounty = state.adminRole === "passaic";
+  const isOrganization = state.adminRole === "organization";
+
+  if (!panel || (!isCounty && !isOrganization)) {
+    return;
+  }
+
+  panel.classList.toggle("organization-ticket-mode", isOrganization);
+  panel.classList.toggle("county-ticket-mode", isCounty);
+  document.getElementById("county-ticket-alert-kicker").textContent = isOrganization
+    ? (state.lang === "es" ? "Contacto con el condado" : "County contact")
+    : (state.lang === "es" ? "Alertas de tickets" : "Ticket alerts");
+  document.getElementById("county-ticket-alert-title").textContent = isOrganization
+    ? (state.lang === "es" ? "🎫 Tickets con Passaic County" : "🎫 Tickets with Passaic County")
+    : (state.lang === "es" ? "🎫 Cola de tickets de organizaciones" : "🎫 Organization ticket queue");
+  document.getElementById("county-ticket-alert-subtitle").textContent = isOrganization
+    ? (state.lang === "es" ? `${openTickets.length} tickets abiertos con el condado.` : `${openTickets.length} open tickets with the county.`)
+    : (state.lang === "es" ? `${openTickets.length} abiertos, ${urgentTickets.length} urgentes.` : `${openTickets.length} open, ${urgentTickets.length} urgent.`);
+  openLabel.textContent = isOrganization
+    ? (state.lang === "es" ? "Abrir pagina de tickets" : "Open ticket page")
+    : (state.lang === "es" ? "Revisar tickets" : "Review tickets");
+  openCount.textContent = String(isCounty ? urgentTickets.length : openTickets.length);
+  openButton.classList.toggle("has-ticket-alert", (isCounty ? urgentTickets.length : openTickets.length) > 0);
+
+  document.getElementById("county-ticket-kicker").textContent = isOrganization
+    ? (state.lang === "es" ? "Linea directa al condado" : "Direct line to county")
+    : (state.lang === "es" ? "Mesa de tickets del condado" : "County ticket desk");
+  document.getElementById("county-ticket-title").textContent = isOrganization
+    ? (state.lang === "es" ? "🎫 Contactar a Passaic County" : "🎫 Contact Passaic County")
+    : (state.lang === "es" ? "🎫 Tickets de organizaciones" : "🎫 Organization Tickets");
+  document.getElementById("county-ticket-subtitle").textContent = isOrganization
+    ? (state.lang === "es" ? "Abra un ticket con prioridad. El condado responde desde esta misma cola." : "Open a priority ticket. County responses stay in this queue.")
+    : (state.lang === "es" ? `${openTickets.length} abiertos, ${urgentTickets.length} urgentes.` : `${openTickets.length} open, ${urgentTickets.length} urgent.`);
+  document.getElementById("county-ticket-page-badge").textContent = isCounty
+    ? (state.lang === "es" ? `${urgentTickets.length} urgentes` : `${urgentTickets.length} urgent`)
+    : (state.lang === "es" ? `${openTickets.length} abiertos` : `${openTickets.length} open`);
+
+  document.querySelectorAll(".county-only-ticket-field").forEach((item) => {
+    item.classList.toggle("hidden", !isCounty);
+    item.hidden = !isCounty;
+  });
+
+  document.getElementById("county-ticket-priority-label").textContent = state.lang === "es" ? "Urgencia" : "Urgency";
+  document.getElementById("county-ticket-subject-label").textContent = state.lang === "es" ? "Asunto" : "Subject";
+  document.getElementById("county-ticket-message-label").textContent = state.lang === "es" ? "Mensaje" : "Message";
+  document.getElementById("county-ticket-submit-btn").textContent = isOrganization
+    ? (state.lang === "es" ? "Enviar al condado" : "Send to county")
+    : (state.lang === "es" ? "Enviar a organizacion" : "Send to organization");
+  document.getElementById("county-ticket-subject-input").placeholder = isOrganization
+    ? (state.lang === "es" ? "Que necesita revisar el condado?" : "What should the county review?")
+    : (state.lang === "es" ? "Mensaje para la organizacion" : "Message for the organization");
+  document.getElementById("county-ticket-message-input").placeholder = isOrganization
+    ? (state.lang === "es" ? "Explique el problema, bloqueo o pregunta." : "Explain the issue, blocker, or question.")
+    : (state.lang === "es" ? "Escriba el mensaje del condado." : "Write the county message.");
+  renderTicketOrgOptions();
+
+  if (!tickets.length) {
+    list.innerHTML = `<div class="county-empty-state">${state.lang === "es" ? "No hay tickets todavia." : "No tickets yet."}</div>`;
+  } else {
+    list.innerHTML = tickets.map((ticket) => `
+      <button class="county-ticket-card ${ticket.id === state.countyData.selectedTicketId ? "selected" : ""} priority-${escapeHtml(String(ticket.priority))} ${ticket.escalated_by_age ? "aged" : ""}" type="button" data-ticket-id="${escapeHtml(ticket.id)}">
+        <div>
+          <strong>${escapeHtml(ticket.subject)}</strong>
+          <p class="small-text">${escapeHtml(ticket.organization_name)} • ${escapeHtml(formatTicketTimestamp(ticket.last_message_at || ticket.updated_at))}</p>
+        </div>
+        <span class="county-ticket-priority">${escapeHtml(getPriorityText(ticket))}</span>
+      </button>
+    `).join("");
+  }
+
+  list.querySelectorAll(".county-ticket-card").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.countyData.selectedTicketId = button.dataset.ticketId || null;
+      renderAgencyTickets();
+    });
+  });
+
+  const selectedTicket = tickets.find((ticket) => ticket.id === state.countyData.selectedTicketId) || tickets[0] || null;
+  if (selectedTicket && !state.countyData.selectedTicketId) {
+    state.countyData.selectedTicketId = selectedTicket.id;
+  }
+
+  if (!selectedTicket) {
+    detail.innerHTML = `<div class="county-empty-state">${state.lang === "es" ? "Seleccione un ticket para revisar la conversacion." : "Select a ticket to review the conversation."}</div>`;
+    return;
+  }
+
+  detail.innerHTML = `
+    <div class="county-ticket-detail-head">
+      <div>
+        <p class="panel-kicker">${escapeHtml(selectedTicket.organization_name)}</p>
+        <strong>${escapeHtml(selectedTicket.subject)}</strong>
+        <p class="small-text">${escapeHtml(getPriorityText(selectedTicket))} • ${escapeHtml(selectedTicket.status)}</p>
+      </div>
+      ${isCounty && selectedTicket.status !== "closed" ? `<button class="secondary-btn county-clear-btn" type="button" id="county-ticket-close-btn">${state.lang === "es" ? "Cerrar ticket" : "Close ticket"}</button>` : ""}
+    </div>
+    <div class="county-ticket-thread">
+      ${(selectedTicket.messages || []).map((message) => `
+        <div class="county-ticket-message ${message.sender_role === "county" ? "from-county" : "from-org"}">
+          <strong>${escapeHtml(message.sender)}</strong>
+          <p>${escapeHtml(message.text)}</p>
+          <span class="small-text">${escapeHtml(formatTicketTimestamp(message.timestamp))}</span>
+        </div>
+      `).join("")}
+    </div>
+    ${selectedTicket.status !== "closed" ? `
+      <div class="county-ticket-reply">
+        <textarea id="county-ticket-reply-input" rows="3" maxlength="1200" placeholder="${escapeHtml(isCounty ? "Reply to this organization..." : "Add an update for the county...")}"></textarea>
+        <button class="secondary-btn assign-worker-btn" type="button" id="county-ticket-reply-btn">${state.lang === "es" ? "Responder" : "Reply"}</button>
+      </div>
+    ` : `<p class="small-text">${state.lang === "es" ? "Este ticket esta cerrado." : "This ticket is closed."}</p>`}
+  `;
+
+  const replyButton = document.getElementById("county-ticket-reply-btn");
+  if (replyButton) {
+    replyButton.addEventListener("click", () => {
+      sendAgencyTicketReply(selectedTicket.id);
+    });
+  }
+
+  const closeButton = document.getElementById("county-ticket-close-btn");
+  if (closeButton) {
+    closeButton.addEventListener("click", () => {
+      closeAgencyTicket(selectedTicket.id);
+    });
+  }
+}
+
 function renderCountyMetrics() {
   const visibleClients = getVisibleCountyClients();
   const assignedCount = visibleClients.filter((client) => client.queue_state === "assigned_active").length;
   const openCount = visibleClients.filter((client) => !client.is_completed && client.queue_state !== "assigned_active").length;
+
+  if (state.adminRole === "organization") {
+    const teamCount = getVisibleCountyWorkers().length;
+    const requestedCount = visibleClients.filter((client) => (
+      !client.is_completed &&
+      (client.queue_state === "awaiting_assignment" || client.queue_state === "awaiting_agency_response" || client.agency_request_status === "pending_review")
+    )).length;
+    const openTickets = (state.countyData.agencyTickets || []).filter((ticket) => ticket.status !== "closed").length;
+
+    document.getElementById("county-users-number").textContent = String(visibleClients.filter((client) => !client.is_completed).length);
+    document.getElementById("county-housed-number").textContent = String(assignedCount);
+    document.getElementById("county-apps-number").textContent = String(teamCount);
+    document.getElementById("county-recommended-worker").textContent = String(openTickets);
+    document.getElementById("county-recommended-worker-label").textContent = state.lang === "es" ? "Tickets abiertos" : "Open County Tickets";
+    document.getElementById("county-recommended-worker-note").textContent = requestedCount
+      ? `${requestedCount} ${state.lang === "es" ? "solicitudes necesitan revision o asignacion." : "requests need review or assignment."}`
+      : (state.lang === "es" ? "No hay solicitudes esperando revision." : "No requests are waiting for review.");
+    return;
+  }
 
   document.getElementById("county-users-number").textContent = String(systemData.total_users);
   document.getElementById("county-housed-number").textContent = String(assignedCount || systemData.completed);
@@ -2164,7 +2634,22 @@ function getWorkerProfile(workerId) {
 
 function renderWorkers() {
   const list = document.getElementById("worker-load-list");
-  const visibleWorkers = getVisibleCountyWorkers();
+  const searchQuery = String(state.countyData.workerSearchQuery || "").trim().toLowerCase();
+  const visibleWorkers = getVisibleCountyWorkers().filter((worker) => {
+    if (!searchQuery) {
+      return true;
+    }
+
+    return String(worker.name || "").toLowerCase().includes(searchQuery) ||
+      String(worker.id || "").toLowerCase().includes(searchQuery);
+  });
+
+  list.classList.toggle("scroll-after-five", visibleWorkers.length > 5);
+
+  if (!visibleWorkers.length) {
+    list.innerHTML = `<div class="county-empty-state">${state.lang === "es" ? "No se encontraron trabajadores." : "No case workers found."}</div>`;
+    return;
+  }
 
   list.innerHTML = visibleWorkers.map((worker) => {
     const isRecommended = worker.id === state.countyData.recommendedWorkerId;
@@ -2200,6 +2685,36 @@ function renderOrganizations() {
   const agencies = state.adminRole === "organization"
     ? state.countyData.agencies.filter((agency) => agency.id === state.adminAccount?.organization_id)
     : state.countyData.agencies;
+
+  if (state.adminRole === "organization") {
+    const agency = agencies[0] || {
+      id: state.adminAccount?.organization_id || "",
+      name: state.adminAccount?.organization_name || "Organization",
+      type: "organization"
+    };
+    const activeClients = getVisibleCountyClients().filter((client) => !client.is_completed);
+    const assignedClients = activeClients.filter((client) => client.queue_state === "assigned_active");
+    const waitingClients = activeClients.filter((client) => client.queue_state !== "assigned_active");
+    const openTickets = (state.countyData.agencyTickets || []).filter((ticket) => ticket.status !== "closed");
+
+    pill.textContent = state.lang === "es" ? "Privado" : "Private";
+    list.innerHTML = `
+      <article class="org-profile-card">
+        <div>
+          <span class="panel-kicker">${escapeHtml(agency.type || "Partner")}</span>
+          <strong>${escapeHtml(agency.name)}</strong>
+          <p class="small-text">${escapeHtml(agency.contact_email || state.adminAccount?.email || "organization portal")} • ${escapeHtml(agency.contact_phone || "Passaic County partner")}</p>
+        </div>
+        <div class="org-profile-stats">
+          <span><strong>${getVisibleCountyWorkers().length}</strong><small>${state.lang === "es" ? "trabajadores" : "workers"}</small></span>
+          <span><strong>${assignedClients.length}</strong><small>${state.lang === "es" ? "activos" : "active"}</small></span>
+          <span><strong>${waitingClients.length}</strong><small>${state.lang === "es" ? "en espera" : "waiting"}</small></span>
+          <span><strong>${openTickets.length}</strong><small>${state.lang === "es" ? "tickets" : "tickets"}</small></span>
+        </div>
+      </article>
+    `;
+    return;
+  }
 
   pill.textContent = selectedAgencyId === "all"
     ? (state.lang === "es" ? "Todas las organizaciones" : "All organizations")
@@ -2239,13 +2754,246 @@ function renderOrganizations() {
       if (filter) {
         filter.value = state.countyData.selectedAgencyId;
       }
-      renderCountyDashboard();
+      openOrganizationStats(state.countyData.selectedAgencyId);
     });
   });
 }
 
+function getOrganizationClients(organizationId) {
+  return state.countyData.clients.filter((client) => (
+    client.requested_agency_id === organizationId ||
+    client.accepted_agency_id === organizationId ||
+    client.assigned_worker_organization_id === organizationId
+  ));
+}
+
+function buildOrganizationStatsModel(organizationId) {
+  const agency = state.countyData.agencies.find((item) => item.id === organizationId) || null;
+  if (!agency) {
+    return null;
+  }
+
+  const workers = state.countyData.workers
+    .filter((worker) => worker.organization_id === organizationId)
+    .sort((left, right) => String(left.name || "").localeCompare(String(right.name || "")));
+  const clients = getOrganizationClients(organizationId);
+  const activeClients = clients.filter((client) => !client.is_completed);
+  const assignedClients = activeClients.filter((client) => client.queue_state === "assigned_active");
+  const pendingClients = activeClients.filter((client) => client.queue_state !== "assigned_active");
+  const completedClients = clients.filter((client) => client.is_completed);
+  const progressBase = activeClients.length ? activeClients : clients;
+  const averageProgress = progressBase.length
+    ? Math.round(progressBase.reduce((total, client) => total + getClientProgress(client), 0) / progressBase.length)
+    : 0;
+  const transportCount = state.countyData.transportRequests.filter((request) => {
+    const worker = state.countyData.workers.find((item) => item.id === request.worker_id);
+    const client = state.countyData.clients.find((item) => item.id === request.client_id);
+    return worker?.organization_id === organizationId || getOrganizationClients(organizationId).some((item) => item.id === client?.id);
+  }).length;
+  const openTickets = (state.countyData.agencyTickets || []).filter((ticket) => (
+    ticket.organization_id === organizationId && ticket.status !== "closed"
+  )).length;
+  const trafficCount = pendingClients.length + transportCount + openTickets;
+
+  return {
+    agency,
+    workers,
+    clients,
+    activeClients,
+    assignedClients,
+    pendingClients,
+    completedClients,
+    averageProgress,
+    transportCount,
+    openTickets,
+    trafficCount
+  };
+}
+
+function renderOrganizationStatsPage() {
+  const container = document.getElementById("organization-stats-page");
+  const organizationId = state.countyData.selectedOrganizationStatsId
+    || state.adminAccount?.organization_id
+    || state.countyData.selectedAgencyId;
+  const model = buildOrganizationStatsModel(organizationId);
+
+  if (!model) {
+    container.innerHTML = `<div class="county-empty-state">${localizeText("No organization stats available yet.")}</div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="organization-stats-shell">
+      <div class="organization-stats-hero">
+        <div>
+          <p class="eyebrow">${state.adminRole === "organization" ? localizeText("Organization workspace") : localizeText("Organization stats")}</p>
+          <h1>${escapeHtml(model.agency.name)}</h1>
+          <p class="small-text">${escapeHtml(model.agency.type || "organization")} • ${escapeHtml(model.agency.contact_email || "")}</p>
+        </div>
+        <span class="county-count-pill">${model.trafficCount} ${localizeText("active signals")}</span>
+      </div>
+
+      <div class="county-metric-grid organization-stats-metrics">
+        <div class="metric-card metric-blue">
+          <span class="metric-kicker">${localizeText("Workers")}</span>
+          <strong>${model.workers.length}</strong>
+          <p class="metric-note">${localizeText("Total case workers in this organization.")}</p>
+        </div>
+        <div class="metric-card metric-green">
+          <span class="metric-kicker">${localizeText("Clients")}</span>
+          <strong>${model.clients.length}</strong>
+          <p class="metric-note">${localizeText("Linked clients across open and completed cases.")}</p>
+        </div>
+        <div class="metric-card metric-orange">
+          <span class="metric-kicker">${localizeText("Progress")}</span>
+          <strong>${model.averageProgress}%</strong>
+          <p class="metric-note">${localizeText("Average case progress for this organization.")}</p>
+        </div>
+        <div class="metric-card metric-purple">
+          <span class="metric-kicker">${localizeText("Requests / traffic")}</span>
+          <strong>${model.trafficCount}</strong>
+          <p class="metric-note">${localizeText("Pending requests, transport asks, and open county tickets.")}</p>
+        </div>
+      </div>
+
+      <div class="organization-stats-grid">
+        <section class="county-panel organization-stats-panel">
+          <div class="county-section-head">
+            <div>
+              <p class="panel-kicker">${localizeText("Worker roster")}</p>
+              <strong>${localizeText("Who the workers are")}</strong>
+              <p class="small-text">${localizeText("Scroll to review every case worker in this organization.")}</p>
+            </div>
+            <span class="county-count-pill">${model.workers.length} ${localizeText("workers")}</span>
+          </div>
+          <div class="organization-worker-scroll ${model.workers.length > 5 ? "scrollable" : ""}">
+            ${model.workers.length ? model.workers.map((worker) => `
+              <button class="org-worker-mini-card county-worker-trigger" type="button" data-worker-id="${escapeHtml(worker.id)}">
+                <strong>${escapeHtml(worker.name)}</strong>
+                <span>${escapeHtml(worker.id)} • ${escapeHtml(String(worker.active_cases || 0))} ${localizeText("active")}</span>
+              </button>
+            `).join("") : `<div class="county-empty-state">${localizeText("No case workers for this organization yet.")}</div>`}
+          </div>
+        </section>
+
+        <section class="county-panel organization-stats-panel">
+          <div class="county-section-head">
+            <div>
+              <p class="panel-kicker">${localizeText("Case stats")}</p>
+              <strong>${localizeText("Client and progress snapshot")}</strong>
+              <p class="small-text">${localizeText("A quick look at active, waiting, and completed work.")}</p>
+            </div>
+          </div>
+          <div class="organization-stats-breakdown">
+            <article class="organization-stats-breakdown-card">
+              <span class="metric-kicker">${localizeText("Active clients")}</span>
+              <strong>${model.assignedClients.length}</strong>
+            </article>
+            <article class="organization-stats-breakdown-card">
+              <span class="metric-kicker">${localizeText("Waiting clients")}</span>
+              <strong>${model.pendingClients.length}</strong>
+            </article>
+            <article class="organization-stats-breakdown-card">
+              <span class="metric-kicker">${localizeText("Completed clients")}</span>
+              <strong>${model.completedClients.length}</strong>
+            </article>
+          </div>
+          <div class="organization-client-scroll ${model.activeClients.length > 5 ? "scrollable" : ""}">
+            ${model.activeClients.length ? model.activeClients.map((client) => `
+              <article class="county-worker-client-card">
+                <div class="county-worker-client-top">
+                  <div>
+                    <strong>${escapeHtml(client.name)}</strong>
+                    <p class="small-text">${escapeHtml(client.city)} • ${escapeHtml(client.id)}</p>
+                  </div>
+                  <span class="client-status-pill ${escapeHtml(client.queue_state || client.status)}">${escapeHtml(getStatusText(client.queue_state || client.status))}</span>
+                </div>
+                <div class="county-worker-progress-row">
+                  <span class="small-text">${getClientProgress(client)}% ${localizeText("complete")}</span>
+                  <span class="small-text">${Math.max(0, Array.isArray(client.missing_documents) ? client.missing_documents.length : 0)} ${localizeText("steps left")}</span>
+                </div>
+                <div class="county-worker-progress-bar">
+                  <span style="width: ${getClientProgress(client)}%"></span>
+                </div>
+              </article>
+            `).join("") : `<div class="county-empty-state">${localizeText("No active clients for this organization right now.")}</div>`}
+          </div>
+        </section>
+
+        <section class="county-panel organization-stats-panel">
+          <div class="county-section-head">
+            <div>
+              <p class="panel-kicker">${localizeText("Traffic")}</p>
+              <strong>${localizeText("Requests coming in")}</strong>
+              <p class="small-text">${localizeText("Open requests and coordination load for this organization.")}</p>
+            </div>
+          </div>
+          <div class="organization-stats-breakdown">
+            <article class="organization-stats-breakdown-card">
+              <span class="metric-kicker">${localizeText("Pending requests")}</span>
+              <strong>${model.pendingClients.length}</strong>
+            </article>
+            <article class="organization-stats-breakdown-card">
+              <span class="metric-kicker">${localizeText("Transport requests")}</span>
+              <strong>${model.transportCount}</strong>
+            </article>
+            <article class="organization-stats-breakdown-card">
+              <span class="metric-kicker">${localizeText("Open county tickets")}</span>
+              <strong>${model.openTickets}</strong>
+            </article>
+          </div>
+        </section>
+      </div>
+    </div>
+  `;
+
+  container.querySelectorAll(".county-worker-trigger").forEach((button) => {
+    button.addEventListener("click", () => {
+      openWorkerProfile(button.dataset.workerId);
+    });
+  });
+}
+
+function openOrganizationStats(organizationId) {
+  state.countyData.selectedOrganizationStatsId = organizationId;
+  renderOrganizationStatsPage();
+  openScreen("organization-stats-screen");
+}
+
 function setCountyAddWorkerMessage(message = "", tone = "") {
   const messageNode = document.getElementById("county-add-worker-message");
+  if (!messageNode) {
+    return;
+  }
+
+  messageNode.textContent = message;
+  messageNode.classList.remove("success", "error");
+
+  if (tone) {
+    messageNode.classList.add(tone);
+  }
+}
+
+function setCountyActionStatus(message = "", tone = "") {
+  state.countyData.actionStatusMessage = message;
+  state.countyData.actionStatusTone = tone;
+  const messageNode = document.getElementById("county-action-status");
+  if (!messageNode) {
+    return;
+  }
+
+  messageNode.textContent = message;
+  messageNode.classList.remove("success", "error");
+
+  if (tone) {
+    messageNode.classList.add(tone);
+  }
+}
+
+function setWorkerActionStatus(message = "", tone = "") {
+  state.caseWorkerData.actionStatusMessage = message;
+  state.caseWorkerData.actionStatusTone = tone;
+  const messageNode = document.getElementById("worker-action-status");
   if (!messageNode) {
     return;
   }
@@ -2280,7 +3028,10 @@ async function createCountyCaseWorker() {
     name: nameInput.value.trim(),
     email: emailInput.value.trim(),
     password: passwordInput.value.trim(),
-    workerId: workerIdInput.value.trim()
+    workerId: workerIdInput.value.trim(),
+    organization_id: state.adminRole === "organization"
+      ? (state.adminAccount?.organization_id || COUNTY_ORGANIZATION_ID)
+      : COUNTY_ORGANIZATION_ID
   };
 
   if (!payload.name || !payload.email || !payload.password || !payload.workerId) {
@@ -2290,7 +3041,10 @@ async function createCountyCaseWorker() {
 
   state.countyData.isCreatingWorker = true;
   submitButton.disabled = true;
-  setCountyAddWorkerMessage("Creating case worker account...", "");
+  setCountyAddWorkerMessage(
+    state.adminRole === "organization" ? "Creating organization case worker..." : "Creating case worker account...",
+    ""
+  );
 
   try {
     const data = await fetchJson("/api/admin/caseworkers", {
@@ -2312,7 +3066,12 @@ async function createCountyCaseWorker() {
       loadCountyDashboard(),
       loadAdminDemoCaseworkers()
     ]);
-    setCountyAddWorkerMessage(`${data.worker.name} (${data.worker.id}) is now in the case worker list.`, "success");
+    setCountyAddWorkerMessage(
+      state.adminRole === "organization"
+        ? `${data.worker.name} (${data.worker.id}) was added to ${data.worker.organization_name || "your organization"}. County can now see this worker.`
+        : `${data.worker.name} (${data.worker.id}) is now in the case worker list.`,
+      "success"
+    );
   } catch (error) {
     setCountyAddWorkerMessage(error.message || "Unable to create the case worker account.", "error");
   } finally {
@@ -2563,13 +3322,12 @@ function renderCountyHousingAvailability() {
 
 function renderClients() {
   const list = document.getElementById("client-request-list");
+  const orgId = state.adminAccount?.organization_id || "";
   const baseClients = getVisibleCountyClients().filter((client) => !client.is_completed);
-  const visibleClients = state.adminRole === "passaic"
-    ? baseClients.filter((client) => !client.requested_agency_id || client.requested_agency_id === COUNTY_ORGANIZATION_ID)
-    : baseClients;
+  const visibleClients = baseClients;
   const pendingCount = visibleClients.filter((client) => client.queue_state !== "assigned_active").length;
   document.getElementById("county-client-count").textContent = formatCountLabel(pendingCount, "open", "open", "abierto", "abiertos");
-  const workerNameById = Object.fromEntries(getVisibleCountyWorkers().map((worker) => [worker.id, worker.name]));
+  const workerNameById = Object.fromEntries(state.countyData.workers.map((worker) => [worker.id, worker.name]));
   const sortedClients = [...visibleClients].sort((left, right) => {
     const getPriority = (client) => {
       const priorities = {
@@ -2590,7 +3348,13 @@ function renderClients() {
 
   list.innerHTML = sortedClients.map((client) => {
     const selectedWorkerId = client.assigned_worker || state.countyData.recommendedWorkerId || "";
-    const workerOptions = state.countyData.workers.map((worker) => (
+    const assignableWorkers = state.adminRole === "organization"
+      ? state.countyData.workers.filter((worker) => worker.organization_id === orgId)
+      : state.countyData.workers.filter((worker) => (
+          (!client.requested_agency_id || client.requested_agency_id === COUNTY_ORGANIZATION_ID) &&
+          (!client.accepted_agency_id || worker.organization_id === client.accepted_agency_id)
+        ));
+    const workerOptions = assignableWorkers.map((worker) => (
       `<option value="${escapeHtml(worker.id)}" ${worker.id === selectedWorkerId ? "selected" : ""}>${escapeHtml(worker.name)} (${worker.active_cases})</option>`
     )).join("");
     const tags = client.missing_documents.map((doc) => (
@@ -2602,12 +3366,26 @@ function renderClients() {
     const organizationLabel = client.requested_agency_name || (state.lang === "es" ? "Passaic County" : "Passaic County");
     const workflowLabel = client.queue_state === "assigned_active"
       ? (state.lang === "es" ? "Caso activo con trabajador social" : "Case active with case worker")
+      : client.queue_state === "awaiting_agency_response"
+        ? (state.lang === "es" ? "Esperando aceptacion de la agencia antes de asignar trabajador" : "Waiting for agency acceptance before caseworker assignment")
       : client.queue_state === "awaiting_caseworker_response"
         ? (state.lang === "es" ? "Esperando aceptacion o rechazo del trabajador social" : "Waiting for case worker accept or reject")
+        : client.queue_state === "agency_declined"
+          ? (state.lang === "es" ? "La agencia rechazo la solicitud. Se necesita una nueva solicitud." : "The agency declined this request. A new request is needed.")
         : client.case_worker_requested
           ? (state.lang === "es" ? "Esperando asignacion del condado" : "Waiting for county assignment")
           : (state.lang === "es" ? "Trabajando individualmente" : "Working individually");
     const statusClass = client.queue_state || client.status;
+    const canOrganizationReview = state.adminRole === "organization" &&
+      client.requested_agency_id === orgId &&
+      client.agency_request_status === "pending_review";
+    const isAcceptedInsideOrganization = client.agency_request_status === "accepted" &&
+      client.accepted_agency_id === orgId;
+    const canAssignNow = workerOptions && (
+      state.adminRole === "organization"
+        ? isAcceptedInsideOrganization
+        : (!client.requested_agency_id || client.requested_agency_id === COUNTY_ORGANIZATION_ID)
+    );
 
     return `
       <article class="client-request-card">
@@ -2639,7 +3417,18 @@ function renderClients() {
         </div>
         <p class="small-text">${escapeHtml(workflowLabel)}</p>
 
-        ${(!client.requested_agency_id || client.requested_agency_id === COUNTY_ORGANIZATION_ID || state.adminRole === "organization") ? `
+        ${canOrganizationReview ? `
+          <div class="worker-client-actions">
+            <button class="secondary-btn worker-approve-btn accept" type="button" data-agency-action="accept" data-client-id="${escapeHtml(client.id)}" data-organization-id="${escapeHtml(client.requested_agency_id || "")}">
+              ${state.lang === "es" ? "Aceptar solicitud" : "Accept request"}
+            </button>
+            <button class="secondary-btn worker-approve-btn reject" type="button" data-agency-action="reject" data-client-id="${escapeHtml(client.id)}" data-organization-id="${escapeHtml(client.requested_agency_id || "")}">
+              ${state.lang === "es" ? "Rechazar solicitud" : "Reject request"}
+            </button>
+          </div>
+        ` : ""}
+
+        ${canAssignNow && workerOptions ? `
           <div class="assign-row">
             <select class="assign-worker-select" data-client-id="${escapeHtml(client.id)}">
               ${workerOptions}
@@ -2648,7 +3437,13 @@ function renderClients() {
               ${state.lang === "es" ? "Asignar" : "Assign"}
             </button>
           </div>
-        ` : `<p class="small-text">${state.lang === "es" ? "Esta solicitud fue dirigida a otra organizacion y se rastrea como notificacion." : "This request was routed to another organization and is tracked as a notification."}</p>`}
+        ` : !canOrganizationReview ? `<p class="small-text">${
+          client.agency_request_status === "pending_review"
+            ? (state.lang === "es" ? "La agencia debe aceptar esta solicitud antes de asignar un trabajador." : "The agency must accept this request before a caseworker can be assigned.")
+            : client.agency_request_status === "rejected"
+              ? (state.lang === "es" ? "Esta solicitud fue rechazada por la agencia seleccionada." : "This request was declined by the selected agency.")
+              : (state.lang === "es" ? "Esta solicitud fue dirigida a otra organizacion. El condado aun la monitorea aqui." : "This request was routed to another organization. County still monitors it here.")
+        }</p>` : ""}
       </article>
     `;
   }).join("");
@@ -2658,9 +3453,20 @@ function renderClients() {
       assignClient(button.dataset.clientId);
     });
   });
+
+  list.querySelectorAll("[data-agency-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      updateAgencyRequestStatus(
+        button.dataset.clientId,
+        button.dataset.organizationId,
+        button.dataset.agencyAction
+      );
+    });
+  });
 }
 
 function renderCountyDashboard() {
+  renderAgencyTickets();
   renderCountyMetrics();
   renderOrganizations();
   renderWorkers();
@@ -2668,6 +3474,10 @@ function renderCountyDashboard() {
   renderTransportRequests();
   renderCountyHousingAvailability();
   renderClients();
+  setCountyActionStatus(state.countyData.actionStatusMessage, state.countyData.actionStatusTone);
+  if (activeScreenId === "organization-stats-screen") {
+    renderOrganizationStatsPage();
+  }
 }
 
 async function loadCountyDashboard() {
@@ -2677,24 +3487,33 @@ async function loadCountyDashboard() {
 
   state.countyData.isLoading = true;
   const previousLatestNotificationId = state.countyData.notifications[0]?.id || null;
+  const organizationScopeQuery = getOrganizationScopeQuery();
 
   try {
-    const [clientsData, workersData, notificationsData, transportRequestsData, agenciesData] = await Promise.all([
-      fetchJson("/api/clients"),
-      fetchJson("/api/workers"),
-      fetchJson("/api/notifications"),
-      fetchJson("/api/transport-requests"),
-      fetchJson("/api/agencies")
+    const [clientsData, workersData, notificationsData, transportRequestsData, agenciesData, ticketsData] = await Promise.all([
+      fetchJson(`/api/clients${organizationScopeQuery}`),
+      fetchJson(`/api/workers${organizationScopeQuery}`),
+      fetchJson(`/api/notifications${organizationScopeQuery}`),
+      fetchJson(`/api/transport-requests${organizationScopeQuery}`),
+      fetchJson(`/api/agencies${organizationScopeQuery}`),
+      fetchJson(`/api/agency-tickets${organizationScopeQuery}`)
     ]);
 
-    state.countyData.clients = clientsData.clients;
-    state.countyData.workers = workersData.workers;
+    state.countyData.clients = clientsData.clients || [];
+    state.countyData.workers = workersData.workers || [];
     state.countyData.agencies = agenciesData.agencies || [];
     state.countyData.notifications = filterNotificationsByCutoff(
       notificationsData.notifications || [],
       state.countyData.clearedNotificationCutoff
     );
     state.countyData.transportRequests = transportRequestsData.transport_requests;
+    state.countyData.agencyTickets = ticketsData.tickets || [];
+  if (
+    state.countyData.selectedTicketId &&
+    !state.countyData.agencyTickets.some((ticket) => ticket.id === state.countyData.selectedTicketId)
+  ) {
+    state.countyData.selectedTicketId = null;
+  }
     state.countyData.recommendedWorkerId =
       clientsData.recommended_worker_id || workersData.recommended_worker_id || null;
     state.countyData.highlightNotificationId =
@@ -2721,9 +3540,90 @@ async function loadCountyDashboard() {
     document.getElementById("county-housing-availability").innerHTML = `
       <div class="county-empty-state">${showServerOfflineMessage()}</div>
     `;
+    document.getElementById("organization-stats-page").innerHTML = `
+      <div class="county-empty-state">${showServerOfflineMessage()}</div>
+    `;
+    setCountyActionStatus(showServerOfflineMessage(), "error");
     document.getElementById("ai-response").innerText = showServerOfflineMessage();
   } finally {
     state.countyData.isLoading = false;
+  }
+}
+
+async function createAgencyTicket() {
+  const status = document.getElementById("county-ticket-message-status");
+  const subjectInput = document.getElementById("county-ticket-subject-input");
+  const messageInput = document.getElementById("county-ticket-message-input");
+  const prioritySelect = document.getElementById("county-ticket-priority-select");
+  const orgSelect = document.getElementById("county-ticket-org-select");
+  const organizationId = state.adminRole === "organization"
+    ? (state.adminAccount?.organization_id || "")
+    : (orgSelect.value || "");
+  const subject = subjectInput.value.trim();
+  const message = messageInput.value.trim();
+
+  status.textContent = "";
+
+  try {
+    const data = await fetchJson("/api/agency-tickets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: organizationId,
+        priority: prioritySelect.value,
+        subject,
+        message,
+        sender_role: state.adminRole === "passaic" ? "county" : "organization"
+      })
+    });
+
+    subjectInput.value = "";
+    messageInput.value = "";
+    state.countyData.selectedTicketId = data.ticket?.id || null;
+    status.textContent = state.lang === "es" ? "Ticket enviado." : "Ticket sent.";
+    if (data.ticket?.id) {
+      status.innerHTML = `${state.lang === "es" ? "Ticket enviado. Numero de ticket:" : "Ticket sent. Ticket number:"} <strong>${escapeHtml(data.ticket.id)}</strong>`;
+    }
+    await loadCountyDashboard();
+  } catch (error) {
+    status.textContent = error.message || (state.lang === "es" ? "No se pudo enviar el ticket." : "Unable to send ticket.");
+  }
+}
+
+async function sendAgencyTicketReply(ticketId) {
+  const input = document.getElementById("county-ticket-reply-input");
+  const message = String(input?.value || "").trim();
+  if (!message) {
+    return;
+  }
+
+  try {
+    await fetchJson(`/api/agency-tickets/${encodeURIComponent(ticketId)}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message,
+        sender_role: state.adminRole === "passaic" ? "county" : "organization"
+      })
+    });
+
+    await loadCountyDashboard();
+  } catch (error) {
+    document.getElementById("county-ticket-message-status").textContent = error.message || "Unable to reply.";
+  }
+}
+
+async function closeAgencyTicket(ticketId) {
+  try {
+    await fetchJson(`/api/agency-tickets/${encodeURIComponent(ticketId)}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "closed" })
+    });
+
+    await loadCountyDashboard();
+  } catch (error) {
+    document.getElementById("county-ticket-message-status").textContent = error.message || "Unable to close ticket.";
   }
 }
 
@@ -2866,22 +3766,65 @@ async function assignClient(clientId) {
   const select = document.querySelector(`.assign-worker-select[data-client-id="${clientId}"]`);
   if (!select) return;
 
+  setCountyActionStatus("", "");
+
   try {
+    const selectedWorker = state.countyData.workers.find((worker) => worker.id === select.value) || null;
     await fetchJson("/api/assign", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         client_id: clientId,
-        worker_id: select.value
+        worker_id: select.value,
+        organization_id: state.adminRole === "organization" ? (state.adminAccount?.organization_id || "") : ""
       })
     });
 
+    setCountyActionStatus(
+      selectedWorker
+        ? `${selectedWorker.name} was assigned. The case worker must accept or reject the case next.`
+        : "Case worker assigned. The worker must accept or reject the case next.",
+      "success"
+    );
     await loadCountyDashboard();
   } catch (error) {
-    document.getElementById("ai-response").innerText =
+    setCountyActionStatus(
       error.message === "SERVER_OFFLINE"
         ? showServerOfflineMessage()
-        : "Assignment could not be completed. Please try again.";
+        : (error.message || "Assignment could not be completed. Please try again."),
+      "error"
+    );
+  }
+}
+
+async function updateAgencyRequestStatus(clientId, organizationId, action) {
+  setCountyActionStatus("", "");
+
+  try {
+    await fetchJson("/api/agency-request-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: clientId,
+        organization_id: organizationId,
+        action
+      })
+    });
+
+    setCountyActionStatus(
+      action === "accept"
+        ? "Request accepted. You can now assign a case worker from this organization."
+        : "Request rejected. The client must choose another organization or return to county review.",
+      "success"
+    );
+    await loadCountyDashboard();
+  } catch (error) {
+    setCountyActionStatus(
+      error.message === "SERVER_OFFLINE"
+        ? showServerOfflineMessage()
+        : (error.message || "Request status could not be updated."),
+      "error"
+    );
   }
 }
 
@@ -5217,19 +6160,22 @@ function renderCaseWorkerDashboard() {
 
   if (currentWorker) {
     document.getElementById("admin-role-title").textContent = currentWorker.name;
-    document.getElementById("admin-role-subtitle").textContent = `${activeCases.length} active cases`;
+    document.getElementById("admin-role-subtitle").textContent = `${currentWorker.organization_name || "Organization"} • ${activeCases.length} active cases`;
   }
 
   renderWorkerClientList(visibleCases);
   renderWorkerNotifications();
+  setWorkerActionStatus(state.caseWorkerData.actionStatusMessage, state.caseWorkerData.actionStatusTone);
 }
 
 async function loadCaseWorkerDashboard() {
   try {
     syncWorkerNotificationCutoff();
+    const organizationId = state.adminAccount?.organization_id || "";
+    const organizationScopeQuery = organizationId ? `?organization_id=${encodeURIComponent(organizationId)}` : "";
     const [clientsData, workersData, notificationsData] = await Promise.all([
-      fetchJson("/api/clients"),
-      fetchJson("/api/workers"),
+      fetchJson(`/api/clients${organizationScopeQuery}`),
+      fetchJson(`/api/workers${organizationScopeQuery}`),
       fetchJson(`/api/worker-notifications?worker_id=${encodeURIComponent(state.caseWorkerData.currentWorkerId)}`)
     ]);
 
@@ -5239,6 +6185,10 @@ async function loadCaseWorkerDashboard() {
       notificationsData.notifications || [],
       state.caseWorkerData.clearedNotificationCutoff
     );
+
+    if (!state.caseWorkerData.workers.some((worker) => worker.id === state.caseWorkerData.currentWorkerId)) {
+      throw new Error("This case worker is not available inside the current portal scope.");
+    }
 
     const selectedStillExists = state.caseWorkerData.clients.some((client) => client.id === state.caseWorkerData.selectedClientId);
     if (!selectedStillExists) {
@@ -5258,12 +6208,21 @@ async function loadCaseWorkerDashboard() {
     applyLanguage();
     renderCaseWorkerDashboard();
   } catch (error) {
-    document.getElementById("worker-case-list").innerHTML = `<div class="county-empty-state">${showServerOfflineMessage()}</div>`;
-    document.getElementById("worker-notification-list").innerHTML = `<div class="county-empty-state">${showServerOfflineMessage()}</div>`;
+    const workerPortalMessage = error.message === "SERVER_OFFLINE"
+      ? showServerOfflineMessage()
+      : (error.message || "Unable to load this case worker portal.");
+    setWorkerActionStatus(
+      workerPortalMessage,
+      "error"
+    );
+    document.getElementById("worker-case-list").innerHTML = `<div class="county-empty-state">${escapeHtml(workerPortalMessage)}</div>`;
+    document.getElementById("worker-notification-list").innerHTML = `<div class="county-empty-state">${escapeHtml(workerPortalMessage)}</div>`;
   }
 }
 
 async function updateCaseApproval(clientId, action) {
+  setWorkerActionStatus("", "");
+
   try {
     await fetchJson("/api/case-status", {
       method: "POST",
@@ -5274,6 +6233,15 @@ async function updateCaseApproval(clientId, action) {
         action
       })
     });
+
+    setWorkerActionStatus(
+      action === "accept"
+        ? "Case accepted. You can now work the case from this portal."
+        : action === "reject"
+          ? "Case declined. It is now back in queue for reassignment."
+          : "Case marked completed.",
+      "success"
+    );
 
     if (action === "complete") {
       state.caseWorkerData.messagesByClient[clientId] = [];
@@ -5291,7 +6259,12 @@ async function updateCaseApproval(clientId, action) {
 
     await loadCaseWorkerDashboard();
   } catch (error) {
-    document.getElementById("worker-notification-list").innerHTML = `<div class="county-empty-state">${showServerOfflineMessage()}</div>`;
+    setWorkerActionStatus(
+      error.message === "SERVER_OFFLINE"
+        ? showServerOfflineMessage()
+        : (error.message || "Case status could not be updated."),
+      "error"
+    );
   }
 }
 
@@ -5593,6 +6566,12 @@ async function loginAdminWithRole(role, options = {}) {
   state.countyData.selectedAgencyId = role === "organization"
     ? (data.account?.organization_id || "all")
     : "all";
+  state.countyData.selectedOrganizationStatsId = role === "organization"
+    ? (data.account?.organization_id || null)
+    : null;
+  syncAdminLayoutMode("admin-dashboard-screen");
+  renderOrganizationIdentity();
+  applyLanguage();
 
   if (role === "caseworker") {
     state.caseWorkerData.currentWorkerId = preferredWorkerId || data.workerId || state.caseWorkerData.currentWorkerId;
@@ -5734,6 +6713,7 @@ function bindEvents() {
     setAuthView("admin");
     setAdminRole("organization");
     applyLanguage();
+    syncAdminDemoOrganizationSelection();
     openScreen("auth-screen");
     document.getElementById("admin-email-input").focus();
   });
@@ -5755,6 +6735,14 @@ function bindEvents() {
       setAdminRole("caseworker");
     }
     syncAdminDemoWorkerSelection();
+  });
+
+  document.getElementById("admin-demo-organization-select").addEventListener("change", () => {
+    state.adminSelectedDemoOrganizationId = document.getElementById("admin-demo-organization-select").value;
+    if (state.adminRole !== "organization") {
+      setAdminRole("organization");
+    }
+    syncAdminDemoOrganizationSelection();
   });
 
   document.getElementById("county-organization-filter").addEventListener("change", (event) => {
@@ -5887,6 +6875,24 @@ function bindEvents() {
           workerId: matchingDemoWorker.workerId,
           preferredWorkerId: matchingDemoWorker.workerId
         });
+      } else if (state.adminRole === "organization" && password === "Demo login") {
+        const matchingDemoOrganization = state.adminDemoOrganizations.find((organization) => (
+          organization.id === state.adminSelectedDemoOrganizationId
+        )) || state.adminDemoOrganizations.find((organization) => (
+          String(organization.email || "").trim().toLowerCase() === email.toLowerCase()
+        )) || null;
+
+        if (!matchingDemoOrganization?.email) {
+          throw new Error(state.lang === "es" ? "Seleccione una organizacion demo valida." : "Select a valid demo organization.");
+        }
+
+        state.adminSelectedDemoOrganizationId = matchingDemoOrganization.id || "";
+        document.getElementById("admin-demo-organization-select").value = matchingDemoOrganization.id || "";
+        document.getElementById("admin-email-input").value = matchingDemoOrganization.email;
+        await loginAdminWithRole("organization", {
+          email: matchingDemoOrganization.email,
+          password: "Demo login"
+        });
       } else if (state.adminRole === "passaic" && password === "Demo login" && email.toLowerCase() === "county@idhelp.org") {
         await loginAdminWithRole("passaic", { demo: true });
       } else {
@@ -5915,6 +6921,25 @@ function bindEvents() {
     document.getElementById("admin-demo-caseworker-select").value = selectedWorker.workerId || "";
     state.adminSelectedDemoWorkerId = selectedWorker.workerId || "";
     document.getElementById("admin-email-input").value = selectedWorker.email || "";
+    document.getElementById("admin-password-input").value = "Demo login";
+    document.getElementById("admin-login-form").requestSubmit();
+  });
+
+  document.getElementById("admin-demo-organization-btn").addEventListener("click", async () => {
+    setAdminRole("organization");
+    state.adminSelectedDemoOrganizationId = document.getElementById("admin-demo-organization-select").value || state.adminSelectedDemoOrganizationId;
+    const selectedOrganization = syncAdminDemoOrganizationSelection() || state.adminDemoOrganizations[0] || null;
+
+    if (!selectedOrganization) {
+      document.getElementById("login-error").textContent = state.lang === "es"
+        ? "No hay organizaciones demo disponibles."
+        : "No demo organizations are available.";
+      return;
+    }
+
+    document.getElementById("admin-demo-organization-select").value = selectedOrganization.id || "";
+    state.adminSelectedDemoOrganizationId = selectedOrganization.id || "";
+    document.getElementById("admin-email-input").value = selectedOrganization.email || "";
     document.getElementById("admin-password-input").value = "Demo login";
     document.getElementById("admin-login-form").requestSubmit();
   });
@@ -6053,6 +7078,23 @@ function bindEvents() {
   document.getElementById("county-refresh-btn").addEventListener("click", () => {
     loadCountyDashboard();
   });
+  document.getElementById("county-worker-search-input").addEventListener("input", (event) => {
+    state.countyData.workerSearchQuery = event.target.value || "";
+    renderWorkers();
+  });
+  document.getElementById("county-ticket-open-btn").addEventListener("click", async () => {
+    await loadCountyDashboard();
+    openScreen("county-ticket-screen");
+  });
+  document.getElementById("county-ticket-back-btn").addEventListener("click", () => {
+    openScreen("admin-dashboard-screen");
+  });
+  document.getElementById("organization-stats-back-btn").addEventListener("click", () => {
+    openScreen("admin-dashboard-screen");
+  });
+  document.getElementById("county-ticket-submit-btn").addEventListener("click", () => {
+    createAgencyTicket();
+  });
   document.getElementById("county-clear-notifications-btn").addEventListener("click", clearCountyNotifications);
   document.getElementById("worker-clear-notifications-btn").addEventListener("click", clearWorkerNotifications);
   document.getElementById("county-add-worker-form").addEventListener("submit", (event) => {
@@ -6100,6 +7142,7 @@ async function initializeApp() {
   syncWorkerNotificationCutoff();
   await loadAgencies();
   await loadAdminDemoCaseworkers();
+  await loadAdminDemoOrganizations();
   applyLanguage();
   const restored = await restoreClientSession();
   if (!restored) {

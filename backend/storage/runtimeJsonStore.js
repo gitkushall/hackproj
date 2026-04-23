@@ -1,11 +1,13 @@
 const fs = require("fs");
 const path = require("path");
-const { DatabaseSync } = require("node:sqlite");
 
 const TMP_ROOT = path.join("/tmp", "passaic-county-housing-portal");
 const cache = new Map();
 const warnedMessages = new Set();
 const dbCache = new Map();
+let DatabaseSync = null;
+let databaseSupportChecked = false;
+let databaseSupportError = null;
 
 function cloneValue(value) {
   return JSON.parse(JSON.stringify(value));
@@ -23,6 +25,23 @@ function warnOnce(message, error = null) {
   }
 
   console.warn(message);
+}
+
+function getDatabaseSync() {
+  if (databaseSupportChecked) {
+    return DatabaseSync;
+  }
+
+  databaseSupportChecked = true;
+
+  try {
+    ({ DatabaseSync } = require("node:sqlite"));
+  } catch (error) {
+    databaseSupportError = error;
+    DatabaseSync = null;
+  }
+
+  return DatabaseSync;
 }
 
 function getStorageMode() {
@@ -71,6 +90,12 @@ function getDatabasePath(mode, filePath) {
 }
 
 function getDatabase(mode, filePath) {
+  const Database = getDatabaseSync();
+
+  if (!Database) {
+    throw new Error(`SQLite runtime storage is unavailable: ${databaseSupportError ? databaseSupportError.message : "node:sqlite could not be loaded"}`);
+  }
+
   const dbPath = getDatabasePath(mode, filePath);
 
   if (dbCache.has(dbPath)) {
@@ -78,7 +103,7 @@ function getDatabase(mode, filePath) {
   }
 
   ensureDirectoryForFile(dbPath);
-  const db = new DatabaseSync(dbPath);
+  const db = new Database(dbPath);
   db.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA synchronous = NORMAL;
@@ -140,9 +165,8 @@ function loadJsonArray(filePath, fallbackValue, options = {}) {
   const fallbackClone = cloneValue(fallbackValue);
 
   if (mode === "filesystem" || mode === "tmp") {
-    const db = getDatabase(mode, filePath);
-
     try {
+      const db = getDatabase(mode, filePath);
       const persisted = loadArrayFromDatabase(db, key);
       if (persisted) {
         cache.set(key, persisted);
@@ -202,14 +226,18 @@ function saveJsonArray(filePath, value, options = {}) {
 
 function getRuntimeStorageInfo() {
   const mode = getStorageMode();
-  const writableRoot = mode === "filesystem"
+  const sqliteAvailable = (mode === "filesystem" || mode === "tmp") && Boolean(getDatabaseSync());
+  const sqliteTarget = mode === "filesystem"
     ? "SQLite database in project data/runtime.sqlite"
-    : (mode === "tmp" ? path.join(TMP_ROOT, "runtime.sqlite") : "memory only");
+    : path.join(TMP_ROOT, "runtime.sqlite");
+  const writableRoot = (mode === "filesystem" || mode === "tmp") && sqliteAvailable
+    ? sqliteTarget
+    : "memory only";
 
   return {
     mode,
     writableRoot,
-    persistent: mode === "filesystem"
+    persistent: mode === "filesystem" && sqliteAvailable
   };
 }
 
