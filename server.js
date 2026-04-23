@@ -1065,9 +1065,73 @@ function appendSetCookie(res, cookieValue) {
   res.setHeader("Set-Cookie", cookies);
 }
 
+function getSessionSigningSecret() {
+  return process.env.SESSION_SECRET || process.env.OPENAI_API_KEY || "passaic-session-secret";
+}
+
+function base64UrlEncode(value) {
+  return Buffer.from(String(value))
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function base64UrlDecode(value) {
+  const normalized = String(value || "")
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+  const padding = normalized.length % 4;
+  const padded = padding ? normalized + "=".repeat(4 - padding) : normalized;
+  return Buffer.from(padded, "base64").toString("utf8");
+}
+
+function signSessionPayload(payload) {
+  return crypto
+    .createHmac("sha256", getSessionSigningSecret())
+    .update(payload)
+    .digest("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function createSignedSessionToken(account, expiresAt) {
+  const payload = base64UrlEncode(JSON.stringify({
+    clientId: account.clientId,
+    expiresAt
+  }));
+  const signature = signSessionPayload(payload);
+  return `${payload}.${signature}`;
+}
+
+function readSignedSessionToken(sessionToken) {
+  const [payload = "", signature = ""] = String(sessionToken || "").split(".");
+  if (!payload || !signature) {
+    return null;
+  }
+
+  const expectedSignature = signSessionPayload(payload);
+  const providedBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+  if (providedBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(providedBuffer, expectedBuffer)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(base64UrlDecode(payload));
+    if (!parsed?.clientId || !parsed?.expiresAt || parsed.expiresAt < Date.now()) {
+      return null;
+    }
+    return parsed;
+  } catch (error) {
+    return null;
+  }
+}
+
 function createAuthSession(res, account) {
-  const sessionId = crypto.randomBytes(24).toString("hex");
   const expiresAt = Date.now() + (1000 * 60 * 60 * 24 * 7);
+  const sessionId = createSignedSessionToken(account, expiresAt);
 
   authSessions.set(sessionId, {
     clientId: account.clientId,
@@ -1098,6 +1162,11 @@ function getAuthenticatedAccount(req) {
 
   if (!sessionId) {
     return null;
+  }
+
+  const signedSession = readSignedSessionToken(sessionId);
+  if (signedSession) {
+    return clientAccounts.find((account) => account.clientId === signedSession.clientId) || null;
   }
 
   const session = authSessions.get(sessionId);
