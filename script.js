@@ -94,6 +94,10 @@ const state = {
 let activeScreenId = "login-screen";
 const COUNTY_ORGANIZATION_ID = "ORG-COUNTY";
 const ORG_REQUEST_SHADOW_STORAGE_KEY = "org_request_shadow_v1";
+const SHADOW_WORKER_STORAGE_KEY = "shadow_workers_v1";
+const SHADOW_ADMIN_ACCOUNT_STORAGE_KEY = "shadow_admin_accounts_v1";
+const SHADOW_CLIENT_ACCOUNT_STORAGE_KEY = "shadow_client_accounts_v1";
+const SHADOW_CLIENT_USER_STORAGE_KEY = "shadow_client_user_v1";
 
 const adminCases = {
   caseworker: [
@@ -1693,6 +1697,10 @@ function normalizePhone(phone) {
   return String(phone || "").replace(/\D/g, "");
 }
 
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
 function hasAuthenticatedClientUser() {
   return Boolean(state.clientPortalData.currentUser?.clientId);
 }
@@ -1772,6 +1780,7 @@ function routeClientEntry() {
 function handleLoggedInUser(user) {
   state.clientPortalData.currentClientId = user.clientId;
   state.clientPortalData.currentUser = user;
+  storeShadowClientUser(user);
   routeClientEntry();
 }
 
@@ -1806,11 +1815,20 @@ async function restoreClientSession() {
     if (data && data.authenticated && data.user) {
       state.clientPortalData.currentClientId = data.user.clientId;
       state.clientPortalData.currentUser = data.user;
+      storeShadowClientUser(data.user);
       routeClientEntry();
       return true;
     }
   } catch (error) {
     // Ignore session restore failures and keep the user on the login screen.
+  }
+
+  const shadowUser = getStoredShadowClientUser();
+  if (shadowUser?.clientId) {
+    state.clientPortalData.currentClientId = shadowUser.clientId;
+    state.clientPortalData.currentUser = shadowUser;
+    routeClientEntry();
+    return true;
   }
 
   return false;
@@ -1826,6 +1844,7 @@ async function logoutClientUser() {
   state.clientPortalData.currentClientId = null;
   state.clientPortalData.currentUser = null;
   storeClientSessionToken("");
+  storeShadowClientUser(null);
   state.clientPortalData.serviceRecommendations = {};
   state.clientPortalData.notifications = [];
   state.clientPortalData.unreadNotificationCount = 0;
@@ -1876,6 +1895,13 @@ async function createClientAccount() {
       upsertShadowOrgRequest(buildShadowClientFromSignup(data.user, requestedAgencyId));
     }
 
+    upsertShadowClientAccount({
+      ...data.user,
+      phone: state.createAccountMode === "phone" ? normalizePhone(phone) : "",
+      email: state.createAccountMode === "email" ? normalizeEmail(email) : "",
+      password: state.createAccountMode === "email" ? password : ""
+    });
+
     document.getElementById("create-account-name-input").value = "";
     document.getElementById("create-account-phone-input").value = "";
     document.getElementById("create-account-email-input").value = "";
@@ -1887,8 +1913,37 @@ async function createClientAccount() {
     document.getElementById("login-error").textContent = "";
     handleLoggedInUser(data.user);
   } catch (error) {
-    errorBox.textContent =
-      error.message === "SERVER_OFFLINE" ? showServerOfflineMessage() : error.message;
+    if (error.message === "SERVER_OFFLINE") {
+      const shadowUser = buildShadowClientUserFromForm({
+        name,
+        phone,
+        email,
+        password,
+        requestedAgencyId,
+        requestCaseWorker
+      });
+
+      upsertShadowClientAccount(shadowUser);
+      if (requestCaseWorker) {
+        upsertShadowOrgRequest(buildShadowClientFromSignup(shadowUser, requestedAgencyId || COUNTY_ORGANIZATION_ID));
+      }
+
+      document.getElementById("create-account-name-input").value = "";
+      document.getElementById("create-account-phone-input").value = "";
+      document.getElementById("create-account-email-input").value = "";
+      document.getElementById("create-account-password-input").value = "";
+      document.getElementById("create-account-request-worker-input").checked = false;
+      document.getElementById("create-account-organization-select").value = COUNTY_ORGANIZATION_ID;
+      errorBox.textContent = state.lang === "es"
+        ? "Cuenta guardada en este dispositivo para continuar la demostracion."
+        : "Account saved on this device so you can continue the demo.";
+      storeClientSessionToken("");
+      document.getElementById("login-error").textContent = "";
+      handleLoggedInUser(shadowUser);
+      return;
+    }
+
+    errorBox.textContent = error.message;
   }
 }
 
@@ -1906,9 +1961,9 @@ function getApiUrl(url) {
   return url;
 }
 
-function loadShadowOrgRequests() {
+function loadShadowItems(storageKey) {
   try {
-    const raw = window.localStorage.getItem(ORG_REQUEST_SHADOW_STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey);
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
@@ -1916,12 +1971,213 @@ function loadShadowOrgRequests() {
   }
 }
 
-function saveShadowOrgRequests(items) {
+function saveShadowItems(storageKey, items) {
   try {
-    window.localStorage.setItem(ORG_REQUEST_SHADOW_STORAGE_KEY, JSON.stringify(items));
+    window.localStorage.setItem(storageKey, JSON.stringify(items));
   } catch (error) {
     // Ignore storage failures and preserve live app behavior.
   }
+}
+
+function loadShadowOrgRequests() {
+  return loadShadowItems(ORG_REQUEST_SHADOW_STORAGE_KEY);
+}
+
+function saveShadowOrgRequests(items) {
+  saveShadowItems(ORG_REQUEST_SHADOW_STORAGE_KEY, items);
+}
+
+function loadShadowWorkers() {
+  return loadShadowItems(SHADOW_WORKER_STORAGE_KEY);
+}
+
+function saveShadowWorkers(items) {
+  saveShadowItems(SHADOW_WORKER_STORAGE_KEY, items);
+}
+
+function mergeShadowWorkers(apiWorkers = []) {
+  const shadowWorkers = loadShadowWorkers();
+  if (!shadowWorkers.length) {
+    return apiWorkers;
+  }
+
+  const apiIds = new Set(apiWorkers.map((worker) => worker.id));
+  const missingShadowWorkers = shadowWorkers.filter((worker) => !apiIds.has(worker.id));
+  return [...missingShadowWorkers, ...apiWorkers];
+}
+
+function upsertShadowWorker(worker) {
+  if (!worker?.id) {
+    return;
+  }
+
+  const next = loadShadowWorkers().filter((item) => item.id !== worker.id);
+  next.unshift({
+    ...worker,
+    is_shadow_local: true
+  });
+  saveShadowWorkers(next);
+}
+
+function loadShadowAdminAccounts() {
+  return loadShadowItems(SHADOW_ADMIN_ACCOUNT_STORAGE_KEY);
+}
+
+function saveShadowAdminAccounts(items) {
+  saveShadowItems(SHADOW_ADMIN_ACCOUNT_STORAGE_KEY, items);
+}
+
+function upsertShadowAdminAccount(account) {
+  if (!account?.email) {
+    return;
+  }
+
+  const email = normalizeEmail(account.email);
+  const existing = loadShadowAdminAccounts().find((item) => normalizeEmail(item.email) === email) || null;
+  const next = loadShadowAdminAccounts().filter((item) => normalizeEmail(item.email) !== email);
+  next.unshift({
+    ...existing,
+    ...account,
+    password: account.password || existing?.password || "",
+    email,
+    is_shadow_local: true
+  });
+  saveShadowAdminAccounts(next);
+}
+
+function findShadowAdminAccountByCredentials({ role, email, password, workerId }) {
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedWorkerId = String(workerId || "").trim().toUpperCase();
+
+  return loadShadowAdminAccounts().find((account) => (
+    account.role === role &&
+    (!normalizedEmail || normalizeEmail(account.email) === normalizedEmail || String(account.workerId || "").trim().toUpperCase() === normalizedWorkerId) &&
+    String(account.password || "") === String(password || "")
+  )) || null;
+}
+
+function loadShadowClientAccounts() {
+  return loadShadowItems(SHADOW_CLIENT_ACCOUNT_STORAGE_KEY);
+}
+
+function saveShadowClientAccounts(items) {
+  saveShadowItems(SHADOW_CLIENT_ACCOUNT_STORAGE_KEY, items);
+}
+
+function upsertShadowClientAccount(account) {
+  if (!account?.clientId) {
+    return;
+  }
+
+  const existing = getShadowClientAccountById(account.clientId);
+  const next = loadShadowClientAccounts().filter((item) => item.clientId !== account.clientId);
+  next.unshift({
+    ...existing,
+    ...account,
+    password: account.password || existing?.password || "",
+    phone: account.phone ?? existing?.phone ?? "",
+    email: account.email ?? existing?.email ?? "",
+    is_shadow_local: true
+  });
+  saveShadowClientAccounts(next);
+}
+
+function getShadowClientAccountByPhone(phone) {
+  const normalizedPhone = normalizePhone(phone);
+  return loadShadowClientAccounts().find((account) => normalizePhone(account.phone) === normalizedPhone) || null;
+}
+
+function getShadowClientAccountByEmail(email) {
+  const normalizedEmail = normalizeEmail(email);
+  return loadShadowClientAccounts().find((account) => normalizeEmail(account.email) === normalizedEmail) || null;
+}
+
+function getShadowClientAccountById(clientId) {
+  return loadShadowClientAccounts().find((account) => account.clientId === clientId) || null;
+}
+
+function storeShadowClientUser(user) {
+  try {
+    if (user?.clientId) {
+      window.localStorage.setItem(SHADOW_CLIENT_USER_STORAGE_KEY, JSON.stringify(user));
+      upsertShadowClientAccount(user);
+    } else {
+      window.localStorage.removeItem(SHADOW_CLIENT_USER_STORAGE_KEY);
+    }
+  } catch (error) {
+    // Ignore storage failures and preserve live app behavior.
+  }
+}
+
+function getStoredShadowClientUser() {
+  try {
+    const raw = window.localStorage.getItem(SHADOW_CLIENT_USER_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function buildShadowWorkerRecord(payload) {
+  const organizationId = payload.organization_id || COUNTY_ORGANIZATION_ID;
+  const organization = state.countyData.agencies.find((agency) => agency.id === organizationId) || null;
+  const organizationName = organization?.name || state.adminAccount?.organization_name || "Passaic County";
+
+  return {
+    id: String(payload.workerId || "").trim().toUpperCase(),
+    name: payload.name,
+    email: normalizeEmail(payload.email),
+    active_cases: 0,
+    title: "Case Worker",
+    phone: "",
+    office: "Passaic County Main Office",
+    languages: ["English"],
+    specialties: ["Case management"],
+    bio: `${payload.name} supports ${organizationName} clients and case follow-up.`,
+    availability: "Mon-Fri, 9:00 AM - 5:00 PM",
+    pronouns: "",
+    completed_cases: [],
+    completed_cases_count: 0,
+    handled_cases_count: 0,
+    organization_id: organizationId,
+    organization_name: organizationName
+  };
+}
+
+function buildShadowCaseworkerAdminAccount(payload, worker) {
+  return {
+    id: `LOCAL-${worker.id}`,
+    role: "caseworker",
+    workerId: worker.id,
+    name: worker.name,
+    email: worker.email,
+    organization_id: worker.organization_id,
+    organization_name: worker.organization_name,
+    password: payload.password
+  };
+}
+
+function buildShadowClientUserFromForm({ name, phone, email, password, requestedAgencyId, requestCaseWorker }) {
+  const normalizedPhone = normalizePhone(phone);
+  const normalizedEmail = normalizeEmail(email);
+  const organization = state.countyData.agencies.find((agency) => agency.id === requestedAgencyId) || null;
+  const clientId = `CL-LOCAL-${Date.now().toString(36).toUpperCase()}`;
+
+  return {
+    clientId,
+    name,
+    phone: normalizedPhone || "",
+    email: normalizedEmail || "",
+    password: password || "",
+    requestedCaseWorker: Boolean(requestCaseWorker),
+    requestedAgencyId: requestedAgencyId || "",
+    requestedAgencyName: organization?.name || "",
+    hasCompletedIntake: false,
+    documentAnswers: null,
+    intakeLocations: null,
+    roadmapPlan: null,
+    intakeCompletedAt: null
+  };
 }
 
 function getShadowClientById(clientId) {
@@ -2181,6 +2437,20 @@ async function loadAdminDemoCaseworkers() {
   } catch (error) {
     state.adminDemoWorkers = DEFAULT_DEMO_CASEWORKERS.slice();
   }
+
+  const shadowWorkers = loadShadowAdminAccounts()
+    .filter((account) => account.role === "caseworker" && account.workerId)
+    .map((account) => ({
+      workerId: account.workerId,
+      name: account.name,
+      email: account.email,
+      organization_id: account.organization_id,
+      organization_name: account.organization_name
+    }));
+
+  state.adminDemoWorkers = [...shadowWorkers, ...state.adminDemoWorkers].filter((worker, index, items) => (
+    items.findIndex((item) => String(item.workerId || "") === String(worker.workerId || "")) === index
+  ));
 
   renderAdminDemoCaseworkerOptions();
   syncAdminDemoWorkerSelection();
@@ -3164,6 +3434,8 @@ async function createCountyCaseWorker() {
       ...state.countyData.workers.filter((worker) => worker.id !== data.worker.id),
       data.worker
     ].sort((left, right) => String(left.id).localeCompare(String(right.id)));
+    upsertShadowWorker(data.worker);
+    upsertShadowAdminAccount(buildShadowCaseworkerAdminAccount(payload, data.worker));
     state.countyData.recommendedWorkerId = data.worker.id;
     renderCountyDashboard();
     resetCountyAddWorkerForm();
@@ -3178,6 +3450,27 @@ async function createCountyCaseWorker() {
       "success"
     );
   } catch (error) {
+    if (error.message === "SERVER_OFFLINE") {
+      const shadowWorker = buildShadowWorkerRecord(payload);
+      upsertShadowWorker(shadowWorker);
+      upsertShadowAdminAccount(buildShadowCaseworkerAdminAccount(payload, shadowWorker));
+      state.countyData.workers = [
+        ...state.countyData.workers.filter((worker) => worker.id !== shadowWorker.id),
+        shadowWorker
+      ].sort((left, right) => String(left.id).localeCompare(String(right.id)));
+      state.countyData.recommendedWorkerId = shadowWorker.id;
+      renderCountyDashboard();
+      resetCountyAddWorkerForm();
+      await loadAdminDemoCaseworkers();
+      setCountyAddWorkerMessage(
+        state.adminRole === "organization"
+          ? `${shadowWorker.name} (${shadowWorker.id}) was saved on this device for ${shadowWorker.organization_name}.`
+          : `${shadowWorker.name} (${shadowWorker.id}) was saved on this device and is ready to assign.`,
+        "success"
+      );
+      return;
+    }
+
     setCountyAddWorkerMessage(error.message || "Unable to create the case worker account.", "error");
   } finally {
     state.countyData.isCreatingWorker = false;
@@ -3664,7 +3957,7 @@ async function loadCountyDashboard() {
     ]);
 
     state.countyData.clients = mergeShadowClients(clientsData.clients || []);
-    state.countyData.workers = workersData.workers || [];
+    state.countyData.workers = mergeShadowWorkers(workersData.workers || []);
     state.countyData.agencies = agenciesData.agencies || [];
     state.countyData.notifications = filterNotificationsByCutoff(
       notificationsData.notifications || [],
@@ -3687,26 +3980,9 @@ async function loadCountyDashboard() {
 
     renderCountyDashboard();
   } catch (error) {
-    document.getElementById("client-request-list").innerHTML = `
-      <div class="county-empty-state">
-        ${showServerOfflineMessage()}
-      </div>
-    `;
-    document.getElementById("worker-load-list").innerHTML = `
-      <div class="county-empty-state">${showServerOfflineMessage()}</div>
-    `;
-    document.getElementById("county-notification-list").innerHTML = `
-      <div class="county-empty-state">${showServerOfflineMessage()}</div>
-    `;
-    document.getElementById("county-transport-request-list").innerHTML = `
-      <div class="county-empty-state">${showServerOfflineMessage()}</div>
-    `;
-    document.getElementById("county-housing-availability").innerHTML = `
-      <div class="county-empty-state">${showServerOfflineMessage()}</div>
-    `;
-    document.getElementById("organization-stats-page").innerHTML = `
-      <div class="county-empty-state">${showServerOfflineMessage()}</div>
-    `;
+    state.countyData.clients = mergeShadowClients(state.countyData.clients || []);
+    state.countyData.workers = mergeShadowWorkers(state.countyData.workers || []);
+    renderCountyDashboard();
     setCountyActionStatus(showServerOfflineMessage(), "error");
     state.countyData.aiMessages = [{
       role: "assistant",
@@ -3996,14 +4272,23 @@ async function assignClient(clientId) {
     );
     await loadCountyDashboard();
   } catch (error) {
-    const shadowClient = getShadowClientById(clientId);
-    if (shadowClient && state.adminRole === "organization") {
+    const liveClient = state.countyData.clients.find((client) => client.id === clientId) || null;
+    const shadowClient = getShadowClientById(clientId) || (liveClient ? { ...liveClient, is_shadow_local: true } : null);
+    if (shadowClient) {
+      const acceptedOrganizationId = state.adminRole === "organization"
+        ? (state.adminAccount?.organization_id || shadowClient.accepted_agency_id)
+        : (selectedWorker?.organization_id || shadowClient.accepted_agency_id);
+      const acceptedOrganizationName = state.adminRole === "organization"
+        ? (state.adminAccount?.organization_name || shadowClient.accepted_agency_name)
+        : (selectedWorker?.organization_name || shadowClient.accepted_agency_name);
+
       shadowClient.assigned_worker = select.value;
       shadowClient.worker_status = "pending_approval";
       shadowClient.status = "pending";
+      shadowClient.case_worker_requested = true;
       shadowClient.agency_request_status = "accepted";
-      shadowClient.accepted_agency_id = state.adminAccount?.organization_id || shadowClient.accepted_agency_id;
-      shadowClient.accepted_agency_name = state.adminAccount?.organization_name || shadowClient.accepted_agency_name;
+      shadowClient.accepted_agency_id = acceptedOrganizationId || null;
+      shadowClient.accepted_agency_name = acceptedOrganizationName || "";
       shadowClient.assigned_worker_name = selectedWorker?.name || "";
       shadowClient.assigned_worker_email = selectedWorker?.email || "";
       shadowClient.assigned_worker_organization_id = selectedWorker?.organization_id || null;
@@ -5566,8 +5851,8 @@ async function loadClientPortalChat() {
       fetchJson("/api/workers")
     ]);
     state.caseWorkerData.clients = mergeShadowClients(clientsData.clients);
-    state.caseWorkerData.workers = workersData.workers || [];
-    state.countyData.workers = workersData.workers || state.countyData.workers;
+    state.caseWorkerData.workers = mergeShadowWorkers(workersData.workers || []);
+    state.countyData.workers = mergeShadowWorkers(workersData.workers || state.countyData.workers);
     const currentClient = state.caseWorkerData.clients.find((item) => item.id === state.clientPortalData.currentClientId);
 
     await loadClientMessages(state.clientPortalData.currentClientId, currentClient?.assigned_worker || null);
@@ -5579,6 +5864,9 @@ async function loadClientPortalChat() {
       renderClientPortalChat();
     }
   } catch (error) {
+    state.caseWorkerData.clients = mergeShadowClients(state.caseWorkerData.clients || []);
+    state.caseWorkerData.workers = mergeShadowWorkers(state.caseWorkerData.workers || []);
+    state.countyData.workers = mergeShadowWorkers(state.countyData.workers || []);
     if (!document.getElementById("client-progress-screen").classList.contains("hidden")) {
       renderClientProgressDashboard();
     }
@@ -6396,8 +6684,8 @@ async function loadCaseWorkerDashboard() {
       fetchJson(`/api/worker-notifications?worker_id=${encodeURIComponent(state.caseWorkerData.currentWorkerId)}`)
     ]);
 
-    state.caseWorkerData.clients = clientsData.clients;
-    state.caseWorkerData.workers = workersData.workers;
+    state.caseWorkerData.clients = mergeShadowClients(clientsData.clients || []);
+    state.caseWorkerData.workers = mergeShadowWorkers(workersData.workers || []);
     state.caseWorkerData.notifications = filterNotificationsByCutoff(
       notificationsData.notifications || [],
       state.caseWorkerData.clearedNotificationCutoff
@@ -6425,6 +6713,21 @@ async function loadCaseWorkerDashboard() {
     applyLanguage();
     renderCaseWorkerDashboard();
   } catch (error) {
+    const shadowWorkers = mergeShadowWorkers(state.caseWorkerData.workers || []);
+    const currentWorkerExists = shadowWorkers.some((worker) => worker.id === state.caseWorkerData.currentWorkerId);
+    if (currentWorkerExists) {
+      state.caseWorkerData.workers = shadowWorkers;
+      state.caseWorkerData.clients = mergeShadowClients(state.caseWorkerData.clients || []);
+      state.caseWorkerData.notifications = state.caseWorkerData.notifications || [];
+      const visibleCases = getVisibleWorkerCases();
+      if (!state.caseWorkerData.selectedClientId && visibleCases.length) {
+        state.caseWorkerData.selectedClientId = visibleCases[0].id;
+      }
+      renderCaseWorkerDashboard();
+      setWorkerActionStatus(showServerOfflineMessage(), "error");
+      return;
+    }
+
     const workerPortalMessage = error.message === "SERVER_OFFLINE"
       ? showServerOfflineMessage()
       : (error.message || "Unable to load this case worker portal.");
@@ -6745,9 +7048,32 @@ async function showPlan() {
     });
 
     state.clientPortalData.currentUser = data.user;
+    storeShadowClientUser(data.user);
   } catch (error) {
-    errorBox.textContent =
-      error.message === "SERVER_OFFLINE" ? showServerOfflineMessage() : error.message;
+    if (error.message === "SERVER_OFFLINE" && state.clientPortalData.currentUser?.clientId) {
+      const nextUser = {
+        ...state.clientPortalData.currentUser,
+        hasCompletedIntake: true,
+        documentAnswers: {
+          hasBirth: state.answers.hasBirth,
+          hasSSN: state.answers.hasSSN,
+          hasID: state.answers.hasID
+        },
+        intakeLocations: {
+          birth: birthLocation,
+          current: currentLocation
+        },
+        roadmapPlan: plan,
+        intakeCompletedAt: new Date().toISOString()
+      };
+      state.clientPortalData.currentUser = nextUser;
+      upsertShadowClientAccount(nextUser);
+      storeShadowClientUser(nextUser);
+      showResultScreen();
+      return;
+    }
+
+    errorBox.textContent = error.message;
     return;
   }
 
@@ -6833,12 +7159,35 @@ async function loginAdminWithRole(role, options = {}) {
   const { demo = false, email = "", password = "", workerId = "", preferredWorkerId = "" } = options;
   const endpoint = demo ? "/api/admin/demo-login" : "/api/admin/login";
   const payload = demo ? { role, workerId } : { role, email, password };
+  let data;
 
-  const data = await fetchJson(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
+  try {
+    data = await fetchJson(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    if (role === "caseworker" && !demo) {
+      const shadowAccount = findShadowAdminAccountByCredentials({
+        role,
+        email,
+        password,
+        workerId: preferredWorkerId || workerId
+      });
+
+      if (shadowAccount) {
+        data = {
+          account: shadowAccount,
+          workerId: shadowAccount.workerId
+        };
+      } else {
+        throw error;
+      }
+    } else {
+      throw error;
+    }
+  }
 
   state.adminRole = role;
   state.adminAccount = data.account || null;
@@ -7052,8 +7401,19 @@ function bindEvents() {
         document.getElementById("login-error").textContent = t.codeSent;
         document.getElementById("code-input").focus();
       } catch (error) {
-        document.getElementById("login-error").textContent =
-          error.message === "SERVER_OFFLINE" ? showServerOfflineMessage() : error.message;
+        const shadowAccount = getShadowClientAccountByPhone(phone);
+        if (error.message === "SERVER_OFFLINE" && shadowAccount) {
+          state.otpSent = true;
+          state.pendingPhoneNumber = phone;
+          document.getElementById("code-entry-block").classList.remove("hidden");
+          document.getElementById("login-error").textContent = state.lang === "es"
+            ? "Servidor OTP no disponible. Ingrese 0000 para continuar en este dispositivo."
+            : "OTP server unavailable. Enter 0000 to continue on this device.";
+          document.getElementById("code-input").focus();
+        } else {
+          document.getElementById("login-error").textContent =
+            error.message === "SERVER_OFFLINE" ? showServerOfflineMessage() : error.message;
+        }
       }
     })();
   });
@@ -7086,6 +7446,15 @@ function bindEvents() {
         storeClientSessionToken(data.sessionToken || "");
         handleLoggedInUser(data.user);
       } catch (error) {
+        const shadowAccount = getShadowClientAccountByPhone(state.pendingPhoneNumber);
+        if (error.message === "SERVER_OFFLINE" && shadowAccount && code === "0000") {
+          resetCodeEntry();
+          document.getElementById("login-error").textContent = "";
+          storeClientSessionToken("");
+          handleLoggedInUser(shadowAccount);
+          return;
+        }
+
         document.getElementById("login-error").textContent =
           error.message === "SERVER_OFFLINE" ? showServerOfflineMessage() : error.message;
       }
@@ -7116,6 +7485,14 @@ function bindEvents() {
         storeClientSessionToken(data.sessionToken || "");
         handleLoggedInUser(data.user);
       } catch (error) {
+        const shadowAccount = getShadowClientAccountByEmail(email);
+        if (shadowAccount && String(shadowAccount.password || "") === password) {
+          document.getElementById("login-error").textContent = "";
+          storeClientSessionToken("");
+          handleLoggedInUser(shadowAccount);
+          return;
+        }
+
         document.getElementById("login-error").textContent =
           error.message === "SERVER_OFFLINE" ? showServerOfflineMessage() : error.message;
       }
